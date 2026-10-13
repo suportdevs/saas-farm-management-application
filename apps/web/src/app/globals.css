@@ -1,0 +1,182 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Flag emoji for Windows, which ships without flag glyphs. Only regional-indicator
+   characters use this font. Twemoji graphics © Twitter, CC-BY 4.0; font from
+   country-flag-emoji-polyfill (MIT). */
+@font-face {
+  font-family: 'Twemoji Country Flags';
+  unicode-range: U+1F1E6-1F1FF, U+1F3F4, U+E0062-E0063, U+E0065, U+E0067, U+E006C, U+E006E, U+E0073-E0074, U+E0077, U+E007F;
+  src: url('/fonts/TwemojiCountryFlags.woff2') format('woff2');
+  font-display: swap;
+}
+
+:root {
+  --background: oklch(0.986 0.004 140);
+  --foreground: oklch(0.22 0.025 160);
+  --card: oklch(1 0 0);
+  --muted: oklch(0.962 0.008 140);
+  --muted-foreground: oklch(0.5 0.02 160);
+  --border: oklch(0.915 0.01 140);
+  --input: oklch(0.875 0.014 140);
+  --primary: oklch(0.53 0.14 152);
+  --primary-foreground: oklch(0.99 0.01 140);
+  --accent: oklch(0.8 0.15 78);
+  --accent-foreground: oklch(0.3 0.06 60);
+  --destructive: oklch(0.58 0.21 27);
+  --success: oklch(0.6 0.15 152);
+  --warning: oklch(0.72 0.16 65);
+  --info: oklch(0.6 0.13 240);
+  --ring: oklch(0.53 0.14 152 / 0.35);
+
+  /* The sidebar is "forest" in both themes. */
+  --sidebar: oklch(0.235 0.035 162);
+  --sidebar-foreground: oklch(0.93 0.015 150);
+  --sidebar-muted: oklch(0.72 0.03 155);
+  --sidebar-accent: oklch(0.3 0.045 160);
+  --sidebar-border: oklch(0.32 0.035 160);
+  --sidebar-primary: oklch(0.8 0.16 140);
+}
+
+.dark {
+  --background: oklch(0.165 0.014 165);
+  --foreground: oklch(0.955 0.008 140);
+  --card: oklch(0.205 0.017 165);
+  --muted: oklch(0.255 0.018 165);
+  --muted-foreground: oklch(0.71 0.02 155);
+  --border: oklch(0.295 0.02 165);
+  --input: oklch(0.34 0.02 165);
+  --primary: oklch(0.7 0.16 150);
+  --primary-foreground: oklch(0.18 0.03 160);
+  --accent: oklch(0.8 0.15 78);
+  --accent-foreground: oklch(0.25 0.05 60);
+  --destructive: oklch(0.66 0.2 25);
+  --success: oklch(0.72 0.15 150);
+  --warning: oklch(0.78 0.15 70);
+  --info: oklch(0.7 0.12 240);
+  --ring: oklch(0.7 0.16 150 / 0.4);
+
+  --sidebar: oklch(0.14 0.014 165);
+  --sidebar-foreground: oklch(0.93 0.012 150);
+  --sidebar-muted: oklch(0.68 0.02 155);
+  --sidebar-accent: oklch(0.22 0.022 165);
+  --sidebar-border: oklch(0.24 0.018 165);
+  --sidebar-primary: oklch(0.8 0.16 140);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --font-sans: 'Twemoji Country Flags', var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --animate-fade-up: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-float: float 6s ease-in-out infinite;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+  .scrollbar-sidebar {
+    scrollbar-width: thin;
+    scrollbar-color: var(--sidebar-border) transparent;
+  }
+  ::selection {
+    background: oklch(0.53 0.14 152 / 0.2);
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+/* Soft dotted texture for hero sections and empty states. */
+.bg-dots {
+  background-image: radial-gradient(color-mix(in oklch, var(--foreground) 12%, transparent) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+.text-gradient {
+  background-image: linear-gradient(100deg, var(--primary) 10%, oklch(0.7 0.16 120) 50%, var(--accent) 90%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ─── Auth layout animations ───────────────────────────── */
+@keyframes aurora-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+  }
+  33% {
+    transform: translate3d(8%, -6%, 0) scale(1.15) rotate(20deg);
+  }
+  66% {
+    transform: translate3d(-6%, 8%, 0) scale(0.9) rotate(-15deg);
+  }
+}
+
+@keyframes tide {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-aurora {
+  animation: aurora-drift 18s ease-in-out infinite;
+}
+.animate-tide {
+  animation: tide linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-aurora,
+  .animate-tide,
+  .animate-fade-up,
+  .animate-float {
+    animation: none;
+  }
+}

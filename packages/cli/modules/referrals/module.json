@@ -1,0 +1,15 @@
+{
+  "name": "referrals",
+  "title": "Invitations & Referrals",
+  "description": "Personal invitation links for every user, with automatic sign-up tracking",
+  "version": "1.0.0",
+  "requires": [],
+  "migration": true,
+  "dependencies": {},
+  "env": [],
+  "notes": [
+    "Each user gets a link like /register?ref=abcd2345 under Settings → Referrals (also shown on the dashboard).",
+    "The web app remembers ?ref= for 30 days, so sign-ups via password, social login or magic link are all credited.",
+    "Build rewards on top with `referrerOf(userId)` from src/modules/referrals."
+  ]
+}

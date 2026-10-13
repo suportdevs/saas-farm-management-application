@@ -1,0 +1,21 @@
+{
+  "name": "passkeys",
+  "title": "Passkeys (WebAuthn)",
+  "description": "Passwordless sign-in with Face ID, Touch ID, Windows Hello and security keys",
+  "version": "1.0.0",
+  "requires": [],
+  "migration": true,
+  "dependencies": {
+    "api": { "@simplewebauthn/server": "^14.0.3" },
+    "web": { "@simplewebauthn/browser": "^14.0.0" }
+  },
+  "env": [
+    { "key": "PASSKEY_RP_ID", "example": "", "description": "Relying party id (your domain, e.g. example.com). Defaults to the WEB_URL host — passkeys are bound to it" },
+    { "key": "PASSKEY_RP_NAME", "example": "", "description": "Name shown by the authenticator (defaults to APP_NAME)" }
+  ],
+  "notes": [
+    "Users add passkeys under Settings → Security; the sign-in page gets a \"Sign in with a passkey\" button.",
+    "WebAuthn requires HTTPS (or http://localhost). Changing the domain invalidates existing passkeys.",
+    "A user-verified passkey sign-in skips the TOTP/email-code step, since it already proves two factors."
+  ]
+}

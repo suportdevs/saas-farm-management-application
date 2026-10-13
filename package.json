@@ -1,0 +1,39 @@
+{
+  "name": "saas-starter-kit",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Production-ready SaaS starter kit: Express + Next.js + Tailwind + PostgreSQL with installable feature modules.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "dev": "concurrently --kill-others-on-fail -n api,web -c blue,magenta \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "npm run dev -w @kit/api",
+    "dev:web": "npm run dev -w @kit/web",
+    "dev:worker": "npm run dev:worker -w @kit/api",
+    "build": "npm run build -w @kit/api && npm run build -w @kit/web",
+    "start": "concurrently -n api,web \"npm run start -w @kit/api\" \"npm run start -w @kit/web\"",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:up": "docker compose up -d postgres mailpit",
+    "db:down": "docker compose down",
+    "db:generate": "npm run db:generate -w @kit/api --",
+    "db:migrate": "npm run db:migrate -w @kit/api",
+    "db:studio": "npm run db:studio -w @kit/api",
+    "db:seed": "npm run db:seed -w @kit/api",
+    "setup": "node scripts/setup.mjs",
+    "kit": "node packages/cli/bin/kit.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0",
+    "prettier": "^3.6.0",
+    "typescript": "~5.9.3"
+  }
+}

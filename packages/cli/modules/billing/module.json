@@ -1,0 +1,27 @@
+{
+  "name": "billing",
+  "title": "Billing (Stripe)",
+  "description": "Stripe subscriptions: pricing page, checkout, customer portal, webhooks and plan gating",
+  "version": "1.0.0",
+  "requires": [],
+  "migration": true,
+  "dependencies": {
+    "api": { "stripe": "^23.0.0" }
+  },
+  "env": [
+    { "key": "STRIPE_SECRET_KEY", "example": "", "description": "Stripe secret key — https://dashboard.stripe.com/apikeys (billing stays disabled until set)" },
+    { "key": "STRIPE_WEBHOOK_SECRET", "example": "", "description": "Webhook signing secret. Locally: `stripe listen --forward-to localhost:3000/api/billing/webhook`" },
+    { "key": "STRIPE_PRICE_PRO_MONTHLY", "example": "", "description": "Stripe Price ids for each paid plan/interval (see src/modules/billing/plans.ts)" },
+    { "key": "STRIPE_PRICE_PRO_YEARLY", "example": "" },
+    { "key": "STRIPE_PRICE_TEAM_MONTHLY", "example": "" },
+    { "key": "STRIPE_PRICE_TEAM_YEARLY", "example": "" },
+    { "key": "BILLING_TRIAL_DAYS", "example": "0", "description": "Free trial length for new subscriptions (0 = no trial)" }
+  ],
+  "notes": [
+    "Edit plan names, prices and features in apps/api/src/modules/billing/plans.ts.",
+    "Create matching Products/Prices in Stripe and put the price ids in apps/api/.env.",
+    "Webhook endpoint: <WEB_URL>/api/billing/webhook — events: checkout.session.completed, customer.subscription.*",
+    "Enable the Customer Portal in Stripe (Settings → Billing → Customer portal).",
+    "Gate features with `requirePlan('pro', 'team')` from src/modules/billing."
+  ]
+}

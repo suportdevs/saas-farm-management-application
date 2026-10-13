@@ -1,0 +1,26 @@
+// Public surface for modules: import from '@/core' (or relative '../../core').
+export * from './accounts';
+export * from './audit';
+export * from './captcha';
+export * from './context';
+export * from './lockout';
+export * from './auth-flow';
+export * from './hooks';
+export * from './jobs';
+export * from './module';
+export * from './session';
+export * from './user';
+export { AppError, badRequest, conflict, forbidden, notFound, unauthorized, validationError } from '../lib/errors';
+export { forbidImpersonation, requireAuth, requireChallenge, requireRole } from '../middleware/auth';
+export { validate } from '../middleware/validate';
+export { sendMail, renderEmail } from '../lib/mailer';
+export { encrypt, decrypt, randomToken, sha256, safeEqual, sign } from '../lib/crypto';
+export { hashPassword, verifyPassword } from '../lib/password';
+export { db } from '../db/client';
+export { users, sessions } from '../db/schema';
+export type { User, Session } from '../db/schema';
+export { env, isProd, parseModuleEnv } from '../config/env';
+export { logger } from '../lib/logger';
+export * from './tokens';
+export { authLimiter, limiter } from '../middleware/rate-limit';
+export { requireVerifiedEmail } from '../middleware/auth';

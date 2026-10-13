@@ -1,0 +1,15 @@
+{
+  "name": "organizations",
+  "title": "Organizations & Teams",
+  "description": "Multi-tenant organizations with owner/admin/member roles and email invitations",
+  "version": "1.0.0",
+  "requires": [],
+  "migration": true,
+  "dependencies": {},
+  "env": [],
+  "notes": [
+    "Users manage teams under the new \"Organizations\" sidebar item (/orgs).",
+    "Invitations are emailed links to /invite?token=… and expire after 7 days.",
+    "Scope your own routes with `requireOrgRole('admin')` and `getOrg(res)` from src/modules/organizations (path param `:org` = id or slug)."
+  ]
+}

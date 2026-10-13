@@ -1,0 +1,14 @@
+{
+  "name": "@kit/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Install, remove and inspect starter-kit feature modules.",
+  "bin": {
+    "kit": "./bin/kit.mjs"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.0.0",
+    "picocolors": "^1.1.1"
+  }
+}

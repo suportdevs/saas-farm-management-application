@@ -1,0 +1,34 @@
+{
+  "name": "social-auth",
+  "title": "Social Login",
+  "description": "Sign in with Google, Facebook, GitHub, X, LinkedIn, Bitbucket, GitLab & Slack (OAuth 2 + PKCE), with account linking",
+  "version": "2.0.0",
+  "requires": [],
+  "migration": true,
+  "dependencies": {},
+  "env": [
+    { "key": "GOOGLE_CLIENT_ID", "example": "", "description": "Google — https://console.cloud.google.com/apis/credentials" },
+    { "key": "GOOGLE_CLIENT_SECRET", "example": "" },
+    { "key": "FACEBOOK_CLIENT_ID", "example": "", "description": "Facebook — https://developers.facebook.com/apps (Facebook Login product)" },
+    { "key": "FACEBOOK_CLIENT_SECRET", "example": "" },
+    { "key": "GITHUB_CLIENT_ID", "example": "", "description": "GitHub — https://github.com/settings/developers" },
+    { "key": "GITHUB_CLIENT_SECRET", "example": "" },
+    { "key": "TWITTER_CLIENT_ID", "example": "", "description": "X — https://developer.x.com (OAuth 2.0, confidential client, enable \"Request email\")" },
+    { "key": "TWITTER_CLIENT_SECRET", "example": "" },
+    { "key": "LINKEDIN_CLIENT_ID", "example": "", "description": "LinkedIn — https://www.linkedin.com/developers (Sign In with LinkedIn using OpenID Connect)" },
+    { "key": "LINKEDIN_CLIENT_SECRET", "example": "" },
+    { "key": "BITBUCKET_CLIENT_ID", "example": "", "description": "Bitbucket — Workspace settings → OAuth consumers (Account: Email + Read)" },
+    { "key": "BITBUCKET_CLIENT_SECRET", "example": "" },
+    { "key": "GITLAB_CLIENT_ID", "example": "", "description": "GitLab — User settings → Applications (scopes: openid profile email)" },
+    { "key": "GITLAB_CLIENT_SECRET", "example": "" },
+    { "key": "GITLAB_BASE_URL", "example": "", "description": "Self-hosted GitLab URL (defaults to https://gitlab.com)" },
+    { "key": "SLACK_CLIENT_ID", "example": "", "description": "Slack — https://api.slack.com/apps (Sign in with Slack, OpenID scopes)" },
+    { "key": "SLACK_CLIENT_SECRET", "example": "" },
+    { "key": "OAUTH_REDIRECT_BASE_URL", "example": "", "description": "Public base URL for OAuth callbacks (defaults to WEB_URL). Callback: <base>/api/oauth/<provider>/callback" }
+  ],
+  "notes": [
+    "Set <PROVIDER>_CLIENT_ID/_SECRET in apps/api/.env — providers without credentials stay hidden.",
+    "Redirect URI for each provider: http://localhost:3000/api/oauth/<provider>/callback (provider ids: google, facebook, github, twitter, linkedin, bitbucket, gitlab, slack).",
+    "Users can link/unlink providers under Settings → Security."
+  ]
+}

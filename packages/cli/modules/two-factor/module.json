@@ -1,0 +1,19 @@
+{
+  "name": "two-factor",
+  "title": "Two-Factor Authentication",
+  "description": "TOTP authenticator-app 2FA with one-time backup codes",
+  "version": "1.0.0",
+  "requires": [],
+  "migration": true,
+  "dependencies": {
+    "api": { "otplib": "^13.0.0", "qrcode": "^1.5.4" }
+  },
+  "devDependencies": {
+    "api": { "@types/qrcode": "^1.5.5" }
+  },
+  "env": [],
+  "notes": [
+    "Users can enable 2FA under Settings → Security.",
+    "Login (password or social) asks for a code once 2FA is enabled."
+  ]
+}

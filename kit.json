@@ -1,0 +1,4 @@
+{
+  "$schema": "./packages/cli/kit.schema.json",
+  "modules": {}
+}

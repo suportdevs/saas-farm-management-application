@@ -1,0 +1,18 @@
+{
+  "name": "email-otp",
+  "title": "Email Codes (2-step)",
+  "description": "Two-step sign-in with a 6-digit code sent by email, with resend cooldown and attempt limits",
+  "version": "1.0.0",
+  "requires": [],
+  "migration": true,
+  "dependencies": {},
+  "env": [
+    { "key": "EMAIL_OTP_TTL_MINUTES", "example": "10", "description": "How long a sign-in code stays valid" },
+    { "key": "EMAIL_OTP_RESEND_SECONDS", "example": "60", "description": "Cooldown before another code can be requested" },
+    { "key": "EMAIL_OTP_MAX_ATTEMPTS", "example": "5", "description": "Wrong guesses before the code is invalidated" }
+  ],
+  "notes": [
+    "Users turn on email codes under Settings → Security (requires a verified email).",
+    "Works with every sign-in method; user-verified passkeys skip it."
+  ]
+}

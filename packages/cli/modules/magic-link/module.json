@@ -1,0 +1,17 @@
+{
+  "name": "magic-link",
+  "title": "Magic Links",
+  "description": "Passwordless sign-in with single-use links sent by email (optionally sign-up too)",
+  "version": "1.0.0",
+  "requires": [],
+  "migration": true,
+  "dependencies": {},
+  "env": [
+    { "key": "MAGIC_LINK_TTL_MINUTES", "example": "15", "description": "How long a sign-in link stays valid" },
+    { "key": "MAGIC_LINK_SIGNUP", "example": "false", "description": "true = unknown emails get an account when they click the link" }
+  ],
+  "notes": [
+    "The sign-in page gets an \"Email me a sign-in link\" option.",
+    "Two-step verification (TOTP / email codes) still applies after the link is clicked."
+  ]
+}
