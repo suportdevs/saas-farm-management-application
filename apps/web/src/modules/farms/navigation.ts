@@ -7,13 +7,14 @@ import {
   History,
   LayoutDashboard,
   Milk,
+  Package,
   Settings,
   Stethoscope,
   Users,
   Wallet,
   Wheat,
 } from 'lucide-react';
-import type { Capability, Permission } from '@kit/shared';
+import { CATALOG, CATALOG_RESOURCES, catalogPath, type Capability, type Permission } from '@kit/shared';
 import { CowMark } from '@/components/logo';
 
 type Icon = ComponentType<{ className?: string }>;
@@ -28,6 +29,8 @@ export interface FarmModule {
   capability?: Capability;
   status: 'live' | 'soon';
   highlights: string[];
+  /** Sub-pages shown nested under the module in the sidebar (slugs under /farms/[farm]/). */
+  children?: { slug: string; label: string }[];
 }
 
 /**
@@ -92,6 +95,15 @@ export const OPERATION_MODULES: FarmModule[] = [
 
 export const BUSINESS_MODULES: FarmModule[] = [
   {
+    slug: 'products',
+    label: 'Products',
+    icon: Package,
+    status: 'live',
+    children: CATALOG_RESOURCES.map((r) => ({ slug: catalogPath(r), label: CATALOG[r].plural })),
+    summary: 'Your product catalog — feed, medicine, milk and supplies with categories, brands, units, sizes and colors.',
+    highlights: ['Products with category and unit', 'Categories, brands, units, sizes and colors', 'CSV import with a ready-made template', 'Export and print any list', 'Bulk delete'],
+  },
+  {
     slug: 'finance',
     label: 'Finance',
     icon: Wallet,
@@ -121,6 +133,8 @@ export interface NavLink {
   permission?: Permission;
   soon?: boolean;
   exact?: boolean;
+  /** Nested links; the parent opens a collapsible group instead of navigating. */
+  children?: { href: string; label: string }[];
 }
 
 export interface NavSection {
@@ -130,7 +144,13 @@ export interface NavSection {
 
 export function farmNav(slug: string): NavSection[] {
   const base = `/farms/${slug}`;
-  const toLink = (m: FarmModule): NavLink => ({ href: `${base}/${m.slug}`, label: m.label, icon: m.icon, soon: m.status === 'soon' });
+  const toLink = (m: FarmModule): NavLink => ({
+    href: `${base}/${m.slug}`,
+    label: m.label,
+    icon: m.icon,
+    soon: m.status === 'soon',
+    children: m.children?.map((c) => ({ href: `${base}/${c.slug}`, label: c.label })),
+  });
   return [
     { links: [{ href: base, label: 'Overview', icon: LayoutDashboard, exact: true }] },
     { title: 'Operations', links: OPERATION_MODULES.map(toLink) },
@@ -158,6 +178,11 @@ export const ACTIVITY_LABELS: Record<string, string> = {
   'farm.member_role_changed': "changed a member's role",
   'farm.invitation_revoked': 'revoked an invitation',
   'farm.checkout_started': 'started a plan upgrade',
+  'products.created': 'added to the product catalog',
+  'products.updated': 'updated the product catalog',
+  'products.deleted': 'deleted from the product catalog',
+  'products.imported': 'imported into the product catalog',
+  'products.status_changed': 'changed status in the product catalog',
   'admin.farm.plan_changed': 'changed the plan (support)',
   'admin.farm.trial_extended': 'extended the trial (support)',
   'admin.farm.suspended': 'suspended the farm (support)',

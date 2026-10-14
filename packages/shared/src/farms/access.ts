@@ -27,6 +27,7 @@ export const PERMISSIONS = [
   'health.manage',
   'breeding.manage',
   'feed.manage',
+  'products.manage',
   'finance.view',
   'finance.manage',
   'reports.view',

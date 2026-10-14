@@ -17,23 +17,34 @@ type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 /**
  * Browser-side API client. Requests go to same-origin `/api/*`, which Next.js
  * rewrites to the Express API, so the session cookie is sent automatically.
+ * A Blob body (e.g. an image) is sent as-is with its own type; anything else as JSON.
  */
 async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
+  const raw = body instanceof Blob;
   const res = await fetch(`/api${path}`, {
     method,
     credentials: 'include',
     headers: {
       'X-Requested-With': 'fetch', // required by the API's CSRF guard
-      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      ...(raw
+        ? { 'Content-Type': body.type }
+        : body !== undefined
+          ? { 'Content-Type': 'application/json' }
+          : {}),
     },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: raw ? body : body !== undefined ? JSON.stringify(body) : undefined,
   });
 
   if (res.status === 204) return undefined as T;
   const data = await res.json().catch(() => null);
   if (!res.ok) {
     const err = (data as ApiErrorBody | null)?.error;
-    throw new ApiError(res.status, err?.code ?? 'UNKNOWN', err?.message ?? res.statusText, err?.details);
+    throw new ApiError(
+      res.status,
+      err?.code ?? 'UNKNOWN',
+      err?.message ?? res.statusText,
+      err?.details,
+    );
   }
   return data as T;
 }
@@ -44,6 +55,8 @@ export const api = {
   put: <T>(path: string, body?: unknown) => request<T>('PUT', path, body ?? {}),
   patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, body ?? {}),
   delete: <T>(path: string, body?: unknown) => request<T>('DELETE', path, body),
+  /** Uploads a file as the raw request body. */
+  upload: <T>(path: string, file: Blob) => request<T>('PUT', path, file),
 };
 
 export function errorMessage(err: unknown): string {

@@ -7,3 +7,5 @@
 .git
 **/*.log
 **/coverage
+
+**/uploads

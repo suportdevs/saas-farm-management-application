@@ -44,6 +44,7 @@ const PERMISSION_LABELS: Record<Permission, string> = {
   'health.manage': 'Record health & treatments',
   'breeding.manage': 'Record breeding',
   'feed.manage': 'Manage feed',
+  'products.manage': 'Manage the product catalog',
   'finance.view': 'See finances',
   'finance.manage': 'Record income & expenses',
   'reports.view': 'See reports',

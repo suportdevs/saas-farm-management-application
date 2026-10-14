@@ -70,6 +70,22 @@ Rules that keep modules independent:
    `useCan('herd.manage')` and `useHasCapability('herd')` from `@/modules/farms/context`.
 4. `apps/api/test/herd.test.ts`.
 
+### Products module (catalog engine)
+
+Products, product sizes, categories, brands, units, sizes and colors share one engine: list/search/paginate,
+advanced filters, create & edit (modal, searchable and dependent selects), soft delete, bulk delete, status toggle, product images, CSV import
+(all-or-nothing, row-level errors), export, print and an import template.
+
+- Columns (table, modal, filters, CSV headers, template examples): `packages/shared/src/products/catalog.ts`
+- Validation (body, import row, filters): `packages/shared/src/products/schemas.ts`
+- Tables: `apps/api/src/modules/products/schema.ts` — every table has `tenant_id` (the farm); `id` is internal, `key` (uuid) is public; rows are soft-deleted; `status` is 1 = active, 0 = inactive
+- One `new Catalog({...})` per resource in `apps/api/src/modules/products/catalogs.ts` — `fields` is exactly what a list row returns; `references` and `usedBy` declare foreign keys and delete protection
+- Each new product gets a default product size (no size); deleting a product deletes its sizes. Images are stored under `UPLOAD_DIR` (`apps/api/src/lib/storage.ts`) — mount a volume there in production
+- Endpoints per catalog under `/api/farms/:farm/products[/<resource>]`: `GET /`, `/export`, `/options`, `POST /`, `/import`, `/bulk-delete`, `/toggle-status`, `PUT|DELETE /:key`, `GET|PUT|DELETE /:key/image`
+
+To add a catalog: add it to `CATALOG_RESOURCES`/`CATALOG` and `catalogSchemas`, add a table, a `Catalog` definition, then
+`npm run db:generate -- --name <name>`. The web page and sidebar link pick it up automatically.
+
 ---
 
 # SaaS Starter Kit

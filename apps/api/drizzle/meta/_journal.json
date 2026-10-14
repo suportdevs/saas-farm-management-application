@@ -43,6 +43,13 @@
       "when": 1791896982852,
       "tag": "0005_farm_subscriptions",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791983306762,
+      "tag": "0006_products",
+      "breakpoints": true
     }
   ]
 }

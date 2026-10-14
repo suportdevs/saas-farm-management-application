@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useState } from 'react';
-import { LogOut, Moon, Settings, Shield, ShieldCheck, Sun, UserRound } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ChevronDown, LogOut, Moon, Settings, Shield, ShieldCheck, Sun, UserRound } from 'lucide-react';
 import { can, type FarmSummary, type PublicUser } from '@kit/shared';
 import { Avatar } from '@/components/app/user-menu';
 import { LogoBadge } from '@/components/logo';
@@ -60,7 +60,11 @@ export function SidebarContent({ user, farms, onNavigate }: ShellProps & { onNav
               <ul className="space-y-0.5">
                 {links.map((link) => (
                   <li key={link.href}>
-                    <SidebarLink link={link} active={isActive(link)} onNavigate={onNavigate} />
+                    {link.children ? (
+                      <SidebarGroup link={link} pathname={pathname} onNavigate={onNavigate} />
+                    ) : (
+                      <SidebarLink link={link} active={isActive(link)} onNavigate={onNavigate} />
+                    )}
                   </li>
                 ))}
               </ul>
@@ -103,6 +107,56 @@ function SidebarLink({ link, active, onNavigate }: { link: NavLink; active: bool
       <span className="flex-1 truncate">{link.label}</span>
       {link.soon && <span className="rounded-full bg-white/10 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-sidebar-muted">Soon</span>}
     </Link>
+  );
+}
+
+/** A module with sub-pages: toggles open, and stays open while one of them is in view. */
+function SidebarGroup({ link, pathname, onNavigate }: { link: NavLink; pathname: string; onNavigate?: () => void }) {
+  const Icon = link.icon;
+  const inside = pathname === link.href || pathname.startsWith(`${link.href}/`);
+  const [open, setOpen] = useState(inside);
+  useEffect(() => {
+    if (inside) setOpen(true);
+  }, [inside]);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className={cn(
+          'group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+          inside ? 'text-white' : 'text-sidebar-muted hover:bg-sidebar-accent/60 hover:text-sidebar-foreground',
+        )}
+      >
+        <Icon className={cn('h-[18px] w-[18px] shrink-0', inside ? 'text-sidebar-primary' : 'opacity-80 group-hover:opacity-100')} />
+        <span className="flex-1 truncate text-left">{link.label}</span>
+        <ChevronDown className={cn('h-4 w-4 opacity-70 transition-transform', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <ul className="ml-[21px] mt-0.5 space-y-0.5 border-l border-sidebar-border pl-3">
+          {link.children!.map((child) => {
+            const active = pathname === child.href;
+            return (
+              <li key={child.href}>
+                <Link
+                  href={child.href}
+                  onClick={onNavigate}
+                  aria-current={active ? 'page' : undefined}
+                  className={cn(
+                    'block truncate rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors',
+                    active ? 'bg-sidebar-accent text-white' : 'text-sidebar-muted hover:bg-sidebar-accent/60 hover:text-sidebar-foreground',
+                  )}
+                >
+                  {child.label}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </>
   );
 }
 

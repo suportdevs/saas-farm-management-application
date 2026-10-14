@@ -66,6 +66,9 @@ const schema = z.object({
   JOB_POLL_INTERVAL_MS: z.coerce.number().int().min(100).default(1000),
   JOB_CONCURRENCY: z.coerce.number().int().min(1).max(50).default(5),
   AUDIT_LOG_RETENTION_DAYS: z.coerce.number().int().min(1).default(365),
+
+  // Uploaded files (e.g. product images). Relative paths resolve from the API's working directory.
+  UPLOAD_DIR: z.string().default('uploads'),
 });
 
 const parsed = schema.safeParse(process.env);

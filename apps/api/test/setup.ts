@@ -1,3 +1,6 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 // Tests run against TEST_DATABASE_URL (falls back to DATABASE_URL). Point it at a
 // throwaway database — tests create users with random emails but never clean up
 // other data.
@@ -9,3 +12,5 @@ try {
 }
 if (process.env.TEST_DATABASE_URL) process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
 process.env.SMTP_HOST = '';
+// Uploaded files go to a throwaway directory.
+process.env.UPLOAD_DIR = join(tmpdir(), 'herdsphere-test-uploads');

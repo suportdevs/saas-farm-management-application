@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { History } from 'lucide-react';
-import { ROLE_INFO, type FarmActivityEntry, type FarmRole, type Pagination as PaginationInfo } from '@kit/shared';
+import { CATALOG, isCatalogResource, ROLE_INFO, type FarmActivityEntry, type FarmRole, type Pagination as PaginationInfo } from '@kit/shared';
 import { PageHeader } from '@/components/app/page-header';
 import { Pagination } from '@/components/app/pagination';
 import { Avatar } from '@/components/app/user-menu';
@@ -22,6 +22,10 @@ function detail(e: FarmActivityEntry): string | null {
   if (e.action === 'farm.updated' && Array.isArray(m.fields)) return `Changed ${m.fields.join(', ')}`;
   if (e.action === 'admin.farm.plan_changed' && typeof m.to === 'string') return `${m.from} → ${m.to}`;
   if (e.action === 'admin.farm.suspended' && typeof m.reason === 'string') return m.reason;
+  if (e.action.startsWith('products.') && isCatalogResource(m.resource)) {
+    const what = typeof m.name === 'string' ? m.name : `${m.count} ${m.count === 1 ? 'row' : 'rows'}`;
+    return `${CATALOG[m.resource].label} · ${what}`;
+  }
   return null;
 }
 

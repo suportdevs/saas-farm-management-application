@@ -21,6 +21,7 @@ export { users, sessions } from '../db/schema';
 export type { User, Session } from '../db/schema';
 export { env, isProd, parseModuleEnv } from '../config/env';
 export { logger } from '../lib/logger';
+export { storage } from '../lib/storage';
 export * from './tokens';
 export { authLimiter, limiter } from '../middleware/rate-limit';
 export { requireVerifiedEmail } from '../middleware/auth';
