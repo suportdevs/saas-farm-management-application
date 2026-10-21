@@ -2,7 +2,7 @@ import 'server-only';
 import { cache } from 'react';
 import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
-import type { AppFeatures, Impersonator, PublicUser } from '@kit/shared';
+import type { AppFeatures, Impersonator, PlatformPermission, PublicUser } from '@kit/shared';
 import { challengePath } from '@/modules/registry';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:4000';
@@ -50,10 +50,11 @@ export const getSession = cache(async (): Promise<SessionState & { unavailable?:
   return { user: null, challenge: null, unavailable: true };
 });
 
-/** Use in admin pages. Unknown to non-admins (404). */
-export async function requireAdmin(): Promise<PublicUser> {
+/** Use in admin pages. Unknown (404) to non-staff and to staff whose role lacks `permission`. */
+export async function requireAdmin(permission?: PlatformPermission): Promise<PublicUser> {
   const user = await requireUser();
   if (user.role !== 'admin') notFound();
+  if (permission && !user.platformPermissions?.includes(permission)) notFound();
   return user;
 }
 

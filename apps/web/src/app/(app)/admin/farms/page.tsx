@@ -17,7 +17,7 @@ export const metadata: Metadata = { title: 'Farms · Admin' };
 type Search = { q?: string; plan?: string; status?: string; country?: string; page?: string };
 
 export default async function AdminFarmsPage({ searchParams }: { searchParams: Promise<Search> }) {
-  await requireAdmin();
+  await requireAdmin('platform.tenants.view');
   const params = await searchParams;
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]);
   const data = await serverFetch<{ farms: PlatformFarm[]; pagination: PaginationInfo }>(`/admin/farms?${qs}`);

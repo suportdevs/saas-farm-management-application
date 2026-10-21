@@ -1,8 +1,9 @@
 import type Stripe from 'stripe';
 import { eq } from 'drizzle-orm';
-import { PLAN_LIST, PLANS, type BillingOverview, type FarmInvoice, type PlanId, type PublicPlan } from '@kit/shared';
-import { AppError, badRequest, db, defineJob, env, logger, type User } from '../../core';
-import { farms, usageOf, type Farm, type Tx } from '../farms';
+import { PLAN_LIST, PLANS, type BillingOverview, type FarmInvoice, type FarmSubscription, type PlanId, type PublicPlan } from '@kit/shared';
+import { AppError, audit, badRequest, db, defineJob, env, logger, type User } from '../../core';
+import { farms, findFarm, listMembers, usageOf, type Farm, type Tx } from '../farms';
+import { sendPaymentFailedEmail } from './emails';
 import { billingEnabled, config, planForPrice, stripe, stripePrices } from './config';
 import { ENTITLED_STATUSES, findSubscription, subscriptionOf } from './entitlements';
 import { billingEvents, farmSubscriptions, type FarmSubscriptionRow } from './schema';
@@ -182,6 +183,7 @@ export async function applySubscription(sub: Stripe.Subscription): Promise<void>
   }
   const item = sub.items.data[0];
   const match = planForPrice(item?.price.id ?? '');
+  const before = subscriptionOf(row);
   await upsert(farm.id, {
     plan: match?.planId ?? sub.metadata?.planId ?? row?.plan ?? 'free',
     status: sub.status,
@@ -193,7 +195,53 @@ export async function applySubscription(sub: Stripe.Subscription): Promise<void>
     stripeSubscriptionId: sub.id,
     stripeCustomerId: row?.stripeCustomerId ?? customerId,
   });
+  await recordChange(farm.id, before, subscriptionOf(await findSubscription(farm.id)));
 }
+
+/** Writes plan, state and cancellation changes to the farm's activity log (no actor: Stripe did it). */
+async function recordChange(farmId: string, before: FarmSubscription, after: FarmSubscription) {
+  const target = { actorId: null, targetType: 'farm', targetId: farmId };
+  if (before.planId !== after.planId || before.state !== after.state) {
+    await audit(null, {
+      action: 'farm.subscription_changed',
+      ...target,
+      metadata: { from: before.planId, to: after.planId, fromState: before.state, toState: after.state },
+    });
+  }
+  if (before.cancelAtPeriodEnd !== after.cancelAtPeriodEnd) {
+    await audit(null, {
+      action: after.cancelAtPeriodEnd ? 'farm.subscription_cancel_scheduled' : 'farm.subscription_resumed',
+      ...target,
+      metadata: { planId: after.planId, currentPeriodEnd: after.currentPeriodEnd },
+    });
+  }
+}
+
+const formatAmount = (cents: number, currency: string) =>
+  new Intl.NumberFormat('en', { style: 'currency', currency: currency.toUpperCase() }).format(cents / 100);
+
+/** Payment results: logged on the farm, and owners hear about failures straight away. */
+export const invoiceEventJob = defineJob<{ customerId: string; outcome: 'paid' | 'failed'; amount: number; currency: string; invoiceUrl: string | null; attempt: number }>(
+  'subscriptions.invoice',
+  async ({ customerId, outcome, amount, currency, invoiceUrl, attempt }) => {
+    const [row] = await db.select().from(farmSubscriptions).where(eq(farmSubscriptions.stripeCustomerId, customerId)).limit(1);
+    const farm = row && (await findFarm(row.farmId));
+    if (!farm) return;
+    const formatted = formatAmount(amount, currency);
+    await audit(null, {
+      action: outcome === 'paid' ? 'farm.payment_succeeded' : 'farm.payment_failed',
+      actorId: null,
+      targetType: 'farm',
+      targetId: farm.id,
+      metadata: { amount: formatted, attempt },
+    });
+    if (outcome === 'failed') {
+      const owners = (await listMembers(farm.id)).filter((m) => m.role === 'owner');
+      await Promise.all(owners.map((o) => sendPaymentFailedEmail(o.email, o.name, farm, { amount: formatted, invoiceUrl })));
+    }
+  },
+  { maxAttempts: 5 },
+);
 
 /** Re-fetches the subscription so out-of-order webhooks can't leave stale data. */
 export const syncSubscriptionJob = defineJob<{ subscriptionId: string }>(
@@ -233,6 +281,23 @@ export async function handleEvent(event: Stripe.Event): Promise<boolean> {
     case 'customer.subscription.resumed':
       await syncSubscriptionJob.enqueue({ subscriptionId: event.data.object.id });
       break;
+    case 'invoice.paid':
+    case 'invoice.payment_failed': {
+      const invoice = event.data.object;
+      const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id;
+      // $0 invoices (trials, 100% coupons) aren't worth a log line.
+      if (customerId && (invoice.amount_due > 0 || event.type === 'invoice.payment_failed')) {
+        await invoiceEventJob.enqueue({
+          customerId,
+          outcome: event.type === 'invoice.paid' ? 'paid' : 'failed',
+          amount: event.type === 'invoice.paid' ? invoice.amount_paid : invoice.amount_due,
+          currency: invoice.currency,
+          invoiceUrl: invoice.hosted_invoice_url ?? null,
+          attempt: invoice.attempt_count ?? 1,
+        });
+      }
+      break;
+    }
     default:
       break;
   }

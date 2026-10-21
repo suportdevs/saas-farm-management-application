@@ -57,6 +57,13 @@
       "when": 1792563500116,
       "tag": "0007_farm_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792577847764,
+      "tag": "0008_tenant_modules_staff_roles",
+      "breakpoints": true
     }
   ]
 }

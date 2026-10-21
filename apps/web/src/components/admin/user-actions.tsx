@@ -3,17 +3,19 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import type { AdminUser } from '@kit/shared';
+import { STAFF_ROLE_INFO, STAFF_ROLES, type AdminUser, type PlatformPermission, type StaffRole } from '@kit/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { api, errorMessage } from '@/lib/api';
 
 type Pending = null | 'ban' | 'delete';
 
-export function UserActions({ user, isSelf }: { user: AdminUser; isSelf: boolean }) {
+export function UserActions({ user, isSelf, permissions }: { user: AdminUser; isSelf: boolean; permissions: PlatformPermission[] }) {
   const router = useRouter();
+  const can = (p: PlatformPermission) => permissions.includes(p);
   const [busy, setBusy] = useState<string | null>(null);
   const [pending, setPending] = useState<Pending>(null);
   const [reason, setReason] = useState('');
@@ -53,46 +55,73 @@ export function UserActions({ user, isSelf }: { user: AdminUser; isSelf: boolean
           <CardTitle>Account</CardTitle>
           <CardDescription>Change this user&apos;s role, verification and sessions.</CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            disabled={isSelf}
-            loading={busy === 'role'}
-            onClick={() =>
-              run('role', () => api.patch(`/admin/users/${user.id}`, { role: user.role === 'admin' ? 'user' : 'admin' }), 'Role updated')
-            }
-          >
-            {user.role === 'admin' ? 'Remove admin' : 'Make admin'}
-          </Button>
-          <Button
-            variant="outline"
-            loading={busy === 'verify'}
-            onClick={() =>
-              run('verify', () => api.patch(`/admin/users/${user.id}`, { emailVerified: !user.emailVerified }), 'Verification updated')
-            }
-          >
-            {user.emailVerified ? 'Mark email unverified' : 'Mark email verified'}
-          </Button>
-          <Button
-            variant="outline"
-            disabled={isSelf}
-            loading={busy === 'sessions'}
-            onClick={() => run('sessions', () => api.delete(`/admin/users/${user.id}/sessions`), 'All sessions revoked')}
-          >
-            Sign out everywhere
-          </Button>
-          <Button
-            variant="outline"
-            disabled={isSelf || user.role === 'admin' || Boolean(user.bannedAt)}
-            loading={busy === 'impersonate'}
-            onClick={impersonate}
-            title={user.role === 'admin' ? "Admins can't be impersonated" : undefined}
-          >
-            Impersonate
-          </Button>
+        <CardContent className="flex flex-wrap items-center gap-2">
+          {can('platform.staff.manage') && (
+            <Button
+              variant="outline"
+              disabled={isSelf}
+              loading={busy === 'role'}
+              onClick={() =>
+                run('role', () => api.patch(`/admin/users/${user.id}`, { role: user.role === 'admin' ? 'user' : 'admin' }), 'Role updated')
+              }
+            >
+              {user.role === 'admin' ? 'Remove from staff' : 'Make platform staff'}
+            </Button>
+          )}
+          {can('platform.staff.manage') && user.role === 'admin' && (
+            <Select
+              aria-label="Staff role"
+              className="h-10 w-44"
+              disabled={isSelf || busy === 'staff'}
+              value={user.staffRole ?? 'super_admin'}
+              onChange={(e) => run('staff', () => api.patch(`/admin/users/${user.id}`, { staffRole: e.target.value as StaffRole }), 'Staff role updated')}
+            >
+              {STAFF_ROLES.map((r) => (
+                <option key={r} value={r}>
+                  {STAFF_ROLE_INFO[r].label}
+                </option>
+              ))}
+            </Select>
+          )}
+          {can('platform.users.update') && (
+            <Button
+              variant="outline"
+              loading={busy === 'verify'}
+              onClick={() =>
+                run('verify', () => api.patch(`/admin/users/${user.id}`, { emailVerified: !user.emailVerified }), 'Verification updated')
+              }
+            >
+              {user.emailVerified ? 'Mark email unverified' : 'Mark email verified'}
+            </Button>
+          )}
+          {can('platform.users.suspend') && (
+            <Button
+              variant="outline"
+              disabled={isSelf}
+              loading={busy === 'sessions'}
+              onClick={() => run('sessions', () => api.delete(`/admin/users/${user.id}/sessions`), 'All sessions revoked')}
+            >
+              Sign out everywhere
+            </Button>
+          )}
+          {can('platform.users.impersonate') && (
+            <Button
+              variant="outline"
+              disabled={isSelf || user.role === 'admin' || Boolean(user.bannedAt)}
+              loading={busy === 'impersonate'}
+              onClick={impersonate}
+              title={user.role === 'admin' ? "Admins can't be impersonated" : undefined}
+            >
+              Impersonate
+            </Button>
+          )}
         </CardContent>
+        {user.role === 'admin' && user.staffRole && (
+          <p className="px-6 pb-5 text-xs text-muted-foreground">{STAFF_ROLE_INFO[user.staffRole].description}</p>
+        )}
       </Card>
 
+      {(can('platform.users.suspend') || can('platform.users.delete')) && (
       <Card className="border-destructive/40">
         <CardHeader>
           <CardTitle className="text-destructive">Danger zone</CardTitle>
@@ -145,26 +174,30 @@ export function UserActions({ user, isSelf }: { user: AdminUser; isSelf: boolean
           )}
           {pending === null && (
             <div className="flex flex-wrap gap-2">
-              {user.bannedAt ? (
-                <Button
-                  variant="outline"
-                  loading={busy === 'unban'}
-                  onClick={() => run('unban', () => api.post(`/admin/users/${user.id}/unban`), 'User unsuspended')}
-                >
-                  Unsuspend
-                </Button>
-              ) : (
-                <Button variant="destructive" disabled={isSelf} onClick={() => setPending('ban')}>
-                  Suspend
+              {can('platform.users.suspend') &&
+                (user.bannedAt ? (
+                  <Button
+                    variant="outline"
+                    loading={busy === 'unban'}
+                    onClick={() => run('unban', () => api.post(`/admin/users/${user.id}/unban`), 'User unsuspended')}
+                  >
+                    Unsuspend
+                  </Button>
+                ) : (
+                  <Button variant="destructive" disabled={isSelf} onClick={() => setPending('ban')}>
+                    Suspend
+                  </Button>
+                ))}
+              {can('platform.users.delete') && (
+                <Button variant="destructive" disabled={isSelf} onClick={() => setPending('delete')}>
+                  Delete user
                 </Button>
               )}
-              <Button variant="destructive" disabled={isSelf} onClick={() => setPending('delete')}>
-                Delete user
-              </Button>
             </div>
           )}
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }

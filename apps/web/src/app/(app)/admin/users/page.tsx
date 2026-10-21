@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import type { AdminUser, Pagination as PaginationInfo } from '@kit/shared';
+import { STAFF_ROLE_INFO, type AdminUser, type Pagination as PaginationInfo } from '@kit/shared';
 import { Pagination } from '@/components/app/pagination';
 import { UserStatus } from '@/components/admin/user-status';
 import { Avatar } from '@/components/app/user-menu';
@@ -21,7 +21,7 @@ interface UsersResponse {
 type Search = { q?: string; page?: string; role?: string; status?: string };
 
 export default async function AdminUsersPage({ searchParams }: { searchParams: Promise<Search> }) {
-  await requireAdmin();
+  await requireAdmin('platform.users.view');
   const { q = '', page = '1', role = '', status = '' } = await searchParams;
   const filters = { q, role, status };
   const qs = new URLSearchParams({ page });
@@ -74,7 +74,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
                   </Link>
                 </td>
                 <td className="px-4 py-3">
-                  <Badge variant={u.role === 'admin' ? 'primary' : 'default'}>{u.role}</Badge>
+                  <Badge variant={u.role === 'admin' ? 'primary' : 'default'}>{u.staffRole ? STAFF_ROLE_INFO[u.staffRole].label : u.role}</Badge>
                 </td>
                 <td className="px-4 py-3">
                   <UserStatus user={u} />

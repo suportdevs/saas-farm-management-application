@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { FARM_ROLES, PERMISSIONS, type Permission } from './access';
+import { FARM_ROLES, PERMISSIONS, TOGGLEABLE_MODULES, type Permission } from './access';
 import { AREA_UNITS, COUNTRY_CODES, isValidCurrency, isValidLocale, isValidTimeZone, MILK_UNITS, UNIT_SYSTEMS, WEIGHT_UNITS } from './geo';
 
 export const FARM_TYPES = ['dairy', 'beef', 'mixed', 'breeding', 'calf_rearing'] as const;
@@ -105,6 +105,7 @@ export const updateFarmSchema = z
     totalArea: amount(10_000_000),
     herdSize: amount(1_000_000),
     fiscalYearStartMonth: z.coerce.number().int().min(1).max(12),
+    disabledModules: z.array(z.enum(TOGGLEABLE_MODULES)).max(TOGGLEABLE_MODULES.length),
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0, 'Nothing to update');

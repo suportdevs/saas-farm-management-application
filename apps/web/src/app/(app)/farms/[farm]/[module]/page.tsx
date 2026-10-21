@@ -26,6 +26,7 @@ export default async function ModulePage({ params }: Props) {
   const ctx = await getFarmContext(slug);
   const Icon = mod.icon;
   const included = !mod.capability || ctx.capabilities.includes(mod.capability);
+  const disabled = (ctx.modules as Record<string, string>)[mod.slug] === 'disabled';
   const cheapest = mod.capability ? PLAN_LIST.find((p) => p.capabilities.includes(mod.capability!)) : undefined;
 
   return (
@@ -57,7 +58,18 @@ export default async function ModulePage({ params }: Props) {
           </ul>
 
           <div className="mt-8 flex flex-wrap items-center gap-3 border-t pt-6 text-sm">
-            {included ? (
+            {disabled ? (
+              <>
+                <p className="flex items-center gap-2 text-muted-foreground">
+                  <Lock className="h-4 w-4" /> {mod.label} is switched off for this farm.
+                </p>
+                {ctx.membership.permissions.includes('farm.update') && (
+                  <Link href={`/farms/${slug}/settings#modules`} className={buttonClasses('outline', 'sm')}>
+                    Manage modules
+                  </Link>
+                )}
+              </>
+            ) : included ? (
               <p className="text-muted-foreground">
                 <span className="font-medium text-foreground">Included in your {ctx.subscription.planName} plan.</span> It will appear here automatically when it launches.
               </p>

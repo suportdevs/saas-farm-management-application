@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
-import type { AdminUser, AuditLogEntry } from '@kit/shared';
+import { STAFF_ROLE_INFO, type AdminUser, type AuditLogEntry } from '@kit/shared';
 import { UserActions } from '@/components/admin/user-actions';
 import { UserStatus } from '@/components/admin/user-status';
 import { Avatar } from '@/components/app/user-menu';
@@ -20,7 +20,7 @@ interface UserDetail {
 }
 
 export default async function AdminUserPage({ params }: { params: Promise<{ id: string }> }) {
-  const me = await requireAdmin();
+  const me = await requireAdmin('platform.users.view');
   const { id } = await params;
   const [detail, activity] = await Promise.all([
     serverFetch<UserDetail>(`/admin/users/${id}`),
@@ -40,7 +40,7 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
         <Avatar user={user} size={48} />
         <div>
           <h2 className="flex items-center gap-2 text-xl font-semibold">
-            {user.name} <Badge variant={user.role === 'admin' ? 'primary' : 'default'}>{user.role}</Badge> <UserStatus user={user} />
+            {user.name} <Badge variant={user.role === 'admin' ? 'primary' : 'default'}>{user.staffRole ? STAFF_ROLE_INFO[user.staffRole].label : user.role}</Badge> <UserStatus user={user} />
           </h2>
           <p className="text-sm text-muted-foreground">{user.email}</p>
         </div>
@@ -62,7 +62,7 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
         </CardContent>
       </Card>
 
-      <UserActions user={user} isSelf={user.id === me.id} />
+      <UserActions user={user} isSelf={user.id === me.id} permissions={me.platformPermissions ?? []} />
 
       <Card>
         <CardHeader>

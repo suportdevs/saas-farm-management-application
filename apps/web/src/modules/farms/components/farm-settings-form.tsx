@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import { AlertTriangle, Building2, Globe2, Landmark, MapPin, Trash2 } from 'lucide-react';
+import { AlertTriangle, Blocks, Building2, Globe2, Landmark, Lock, MapPin, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   AREA_UNITS,
@@ -11,6 +11,11 @@ import {
   MILK_UNITS,
   UNIT_LABELS,
   WEIGHT_UNITS,
+  MODULE_CAPABILITIES,
+  PERMISSION_MODULES,
+  PLAN_LIST,
+  TOGGLEABLE_MODULES,
+  type ToggleableModule,
   type FarmContext,
   type FarmProfile,
 } from '@kit/shared';
@@ -27,13 +32,13 @@ import { formatMoney } from '@/lib/format';
 import { siteUrl } from '@/lib/utils';
 import { CountryOptions, CurrencyOptions, LocaleOptions, TimeZoneOptions } from '@/modules/farms/components/locale-options';
 
-type Editable = Omit<FarmProfile, 'id' | 'goals' | 'suspendedAt' | 'suspendedReason' | 'createdAt' | 'totalArea' | 'herdSize'> & {
+type Editable = Omit<FarmProfile, 'id' | 'goals' | 'disabledModules' | 'suspendedAt' | 'suspendedReason' | 'createdAt' | 'totalArea' | 'herdSize'> & {
   totalArea: string;
   herdSize: string;
 };
 
 const toForm = (f: FarmProfile): Editable => {
-  const { id: _id, goals: _g, suspendedAt: _s, suspendedReason: _r, createdAt: _c, ...rest } = f;
+  const { id: _id, goals: _g, disabledModules: _m, suspendedAt: _s, suspendedReason: _r, createdAt: _c, ...rest } = f;
   return { ...rest, totalArea: f.totalArea?.toString() ?? '', herdSize: f.herdSize?.toString() ?? '' };
 };
 
@@ -231,6 +236,8 @@ export function FarmSettingsForm() {
           </div>
         </Section>
 
+        <ModulesSection />
+
         {membership.permissions.includes('farm.delete') && <DangerZone />}
       </div>
 
@@ -276,6 +283,70 @@ function Section({ icon: Icon, title, description, children }: { icon: typeof Gl
       </div>
       <div>{children}</div>
     </section>
+  );
+}
+
+/**
+ * Module switches: business modules this farm doesn't use can be turned off
+ * for everyone (their permissions and menu items disappear). Saves on toggle.
+ */
+function ModulesSection() {
+  const router = useRouter();
+  const { farm, modules } = useFarm();
+  const [busy, setBusy] = useState<ToggleableModule | null>(null);
+
+  const toggle = async (module: ToggleableModule, on: boolean) => {
+    setBusy(module);
+    try {
+      const disabledModules = on ? farm.disabledModules.filter((m) => m !== module) : [...farm.disabledModules, module];
+      await api.patch<FarmContext>(`/farms/${farm.slug}`, { disabledModules });
+      toast.success(`${PERMISSION_MODULES[module].label} ${on ? 'switched on' : 'switched off'}`);
+      router.refresh();
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div id="modules">
+      <Section icon={Blocks} title="Modules" description="Switch off what your farm doesn't use. Data is kept and comes back when you switch a module on again.">
+        <ul className="divide-y rounded-xl border">
+          {TOGGLEABLE_MODULES.map((m) => {
+            const on = !farm.disabledModules.includes(m);
+            const capability = MODULE_CAPABILITIES[m];
+            const inPlan = modules[m] !== 'plan';
+            const cheapest = capability ? PLAN_LIST.find((p) => p.capabilities.includes(capability)) : undefined;
+            return (
+              <li key={m} className="flex items-center gap-4 px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">{PERMISSION_MODULES[m].label}</p>
+                  {!inPlan && (
+                    <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Lock className="h-3 w-3" /> Needs the {cheapest?.name ?? 'a higher'} plan
+                    </p>
+                  )}
+                </div>
+                <label className="relative inline-flex cursor-pointer items-center">
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    className="peer sr-only"
+                    checked={on}
+                    disabled={busy !== null}
+                    onChange={(e) => toggle(m, e.target.checked)}
+                    aria-label={`${PERMISSION_MODULES[m].label} module`}
+                  />
+                  <span className="h-6 w-11 rounded-full bg-muted transition-colors peer-checked:bg-primary peer-focus-visible:ring-4 peer-focus-visible:ring-ring peer-disabled:opacity-50" />
+                  <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+      </Section>
+    </div>
   );
 }
 

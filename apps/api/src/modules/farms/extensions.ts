@@ -1,3 +1,4 @@
+import { CAPABILITIES, type Capability } from '@kit/shared';
 import type { db } from '../../core';
 import type { Farm } from './schema';
 
@@ -8,6 +9,7 @@ type SummaryExtender = (farmIds: string[]) => Promise<Map<string, object>>;
 type SeatGuard = (farm: Farm, seatsInUse: number) => Promise<void> | void;
 type FarmListener = (farm: Farm, tx: Tx) => Promise<void> | void;
 type DeletingListener = (farm: Farm) => Promise<void> | void;
+type CapabilityProvider = (farmIds: string[]) => Promise<Map<string, Capability[]>>;
 
 /**
  * Extension points of the farms (tenant) module. Other modules plug in here
@@ -21,6 +23,7 @@ class FarmExtensions {
   private readonly seatGuards: SeatGuard[] = [];
   private readonly createdListeners: FarmListener[] = [];
   private readonly deletingListeners: DeletingListener[] = [];
+  private capabilityProvider: CapabilityProvider | null = null;
 
   /** Adds fields to GET /farms/:farm. */
   extendContext(fn: ContextExtender) {
@@ -42,6 +45,13 @@ class FarmExtensions {
   onDeleting(fn: DeletingListener) {
     this.deletingListeners.push(fn);
   }
+  /**
+   * Supplies the plan capabilities of each farm (batched). Module permissions
+   * are gated by them; without a provider every capability is on.
+   */
+  provideCapabilities(fn: CapabilityProvider) {
+    this.capabilityProvider = fn;
+  }
 
   async context(farm: Farm) {
     const parts = await Promise.all(this.contextExtenders.map((fn) => fn(farm)));
@@ -59,6 +69,10 @@ class FarmExtensions {
   }
   async deleting(farm: Farm) {
     for (const fn of this.deletingListeners) await fn(farm);
+  }
+  async capabilities(farmIds: string[]): Promise<(farmId: string) => Capability[]> {
+    const map = this.capabilityProvider ? await this.capabilityProvider(farmIds) : null;
+    return (id) => (map ? (map.get(id) ?? []) : [...CAPABILITIES]);
   }
 }
 

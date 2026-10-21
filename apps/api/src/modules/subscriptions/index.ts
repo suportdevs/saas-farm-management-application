@@ -1,3 +1,4 @@
+import { PLANS } from '@kit/shared';
 import { defineModule } from '../../core';
 import { farmExtensions } from '../farms';
 import { billingEnabled, config, trialPlan } from './config';
@@ -29,6 +30,11 @@ export default defineModule({
     farmExtensions.onCreated((farm, tx) => startTrial(farm, tx));
     farmExtensions.onDeleting((farm) => cancelFarmSubscription(farm));
     farmExtensions.extendContext(async (farm) => snapshotOf(await findSubscription(farm.id)));
+    // Module permissions follow the plan: a farm only gets the keys of modules its plan includes.
+    farmExtensions.provideCapabilities(async (farmIds) => {
+      const rows = await findSubscriptions(farmIds);
+      return new Map(farmIds.map((id) => [id, [...PLANS[subscriptionOf(rows.get(id)).planId].capabilities]]));
+    });
     farmExtensions.extendSummaries(async (farmIds) => {
       const rows = await findSubscriptions(farmIds);
       return new Map(farmIds.map((id) => [id, { planId: subscriptionOf(rows.get(id)).planId }]));

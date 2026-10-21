@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: 'Audit log' };
 type Search = { page?: string; action?: string; userId?: string };
 
 export default async function AuditLogPage({ searchParams }: { searchParams: Promise<Search> }) {
-  await requireAdmin();
+  await requireAdmin('platform.audit.view');
   const { page = '1', action = '', userId = '' } = await searchParams;
   const filters = { action, userId };
   const qs = new URLSearchParams({ page });

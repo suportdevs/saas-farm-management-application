@@ -11,7 +11,7 @@ export * from './module';
 export * from './session';
 export * from './user';
 export { AppError, badRequest, conflict, forbidden, notFound, unauthorized, validationError } from '../lib/errors';
-export { forbidImpersonation, requireAuth, requireChallenge, requireRole } from '../middleware/auth';
+export { forbidImpersonation, requireAuth, requireChallenge, requirePlatform, requireRole } from '../middleware/auth';
 export { validate } from '../middleware/validate';
 export { sendMail, renderEmail } from '../lib/mailer';
 export { encrypt, decrypt, randomToken, sha256, safeEqual, sign } from '../lib/crypto';

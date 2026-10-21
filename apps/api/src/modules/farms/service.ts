@@ -3,10 +3,13 @@ import {
   cleanOverrides,
   diffFromDefaults,
   FARM_ROLES,
+  gatePermissions,
   isOwnerOnly,
+  moduleStatuses,
   PERMISSIONS,
   resolvePermissions,
   rolePermissions,
+  TOGGLEABLE_MODULES,
   type CreateFarmData,
   type FarmContext,
   type FarmPermissions,
@@ -14,6 +17,7 @@ import {
   type FarmRole,
   type FarmSummary,
   type FarmUsage,
+  type ModuleGate,
   type Permission,
   type PermissionOverrides,
   type UnitSystem,
@@ -61,6 +65,7 @@ export const serializeFarm = (farm: Farm): FarmProfile => ({
   taxId: farm.taxId,
   fiscalYearStartMonth: farm.fiscalYearStartMonth,
   goals: farm.goals,
+  disabledModules: TOGGLEABLE_MODULES.filter((m) => farm.disabledModules.includes(m)),
   suspendedAt: farm.suspendedAt?.toISOString() ?? null,
   suspendedReason: farm.suspendedReason,
   createdAt: farm.createdAt.toISOString(),
@@ -98,7 +103,12 @@ export async function usageOf(farmId: string): Promise<FarmUsage> {
 
 /** The farm workspace: the core fields plus whatever other modules contribute (e.g. the plan). */
 export async function contextOf(farm: Farm, member: Pick<FarmMemberRow, 'role' | 'title' | 'permissionOverrides'>): Promise<FarmContext> {
-  const [usage, extra, roleOverrides] = await Promise.all([usageOf(farm.id), farmExtensions.context(farm), roleOverridesOf(farm.id)]);
+  const [usage, extra, roleOverrides, gate] = await Promise.all([
+    usageOf(farm.id),
+    farmExtensions.context(farm),
+    roleOverridesOf(farm.id),
+    gateOf(farm),
+  ]);
   const permissions = resolvePermissions(member.role, {
     roleOverrides: roleOverrides[member.role],
     memberOverrides: cleanOverrides(member.permissionOverrides),
@@ -106,13 +116,21 @@ export async function contextOf(farm: Farm, member: Pick<FarmMemberRow, 'role' |
   return {
     ...extra,
     farm: serializeFarm(farm),
-    membership: { role: member.role, title: member.title, permissions },
+    membership: { role: member.role, title: member.title, permissions: gatePermissions(permissions, gate) },
+    // Role settings as configured (not plan-gated), so they survive plan changes.
     rolePermissions: Object.fromEntries(FARM_ROLES.map((r) => [r, rolePermissions(r, roleOverrides[r])])),
+    modules: moduleStatuses(gate),
     usage,
   } as FarmContext;
 }
 
 // ─── Permissions ─────────────────────────────────────────────────
+
+/** What the farm itself allows: its plan capabilities and its module switches. */
+export async function gateOf(farm: Farm): Promise<ModuleGate> {
+  const capabilities = await farmExtensions.capabilities([farm.id]);
+  return { capabilities: capabilities(farm.id), disabledModules: farm.disabledModules };
+}
 
 /** The farm's role overrides, per role ({} for roles on their defaults). */
 export async function roleOverridesOf(farmId: string): Promise<Record<FarmRole, PermissionOverrides>> {
@@ -255,8 +273,12 @@ export async function listUserFarms(userId: string): Promise<FarmSummary[]> {
     .leftJoin(farmRolePermissions, and(eq(farmRolePermissions.farmId, farmMembers.farmId), eq(farmRolePermissions.role, farmMembers.role)))
     .where(eq(farmMembers.userId, userId))
     .orderBy(sql`${farmMembers.lastAccessedAt} desc nulls last`, asc(farms.name));
-  const extra = await farmExtensions.summaries(rows.map((r) => r.farm.id));
-  return rows.map(({ farm, role, members, memberOverrides, roleOverrides }) => ({
+  const ids = rows.map((r) => r.farm.id);
+  const [extra, capabilities] = await Promise.all([farmExtensions.summaries(ids), farmExtensions.capabilities(ids)]);
+  return rows.map(({ farm, role, members, memberOverrides, roleOverrides }) => {
+    const gate = { capabilities: capabilities(farm.id), disabledModules: farm.disabledModules };
+    const permissions = resolvePermissions(role, { roleOverrides: cleanOverrides(roleOverrides), memberOverrides: cleanOverrides(memberOverrides) });
+    return {
     ...extra(farm.id),
     id: farm.id,
     name: farm.name,
@@ -266,8 +288,10 @@ export async function listUserFarms(userId: string): Promise<FarmSummary[]> {
     role,
     memberCount: Number(members),
     suspended: Boolean(farm.suspendedAt),
-    permissions: resolvePermissions(role, { roleOverrides: cleanOverrides(roleOverrides), memberOverrides: cleanOverrides(memberOverrides) }),
-  })) as FarmSummary[];
+    permissions: gatePermissions(permissions, gate),
+    modules: moduleStatuses(gate),
+    };
+  }) as FarmSummary[];
 }
 
 export async function createFarm(user: User, input: CreateFarmData) {
@@ -318,11 +342,13 @@ export async function findMembership(key: string, userId: string) {
     .where(uuidPattern.test(key) ? eq(farms.id, key) : eq(farms.slug, key.toLowerCase()))
     .limit(1);
   if (!row) return undefined;
-  const permissions = resolvePermissions(row.member.role, {
+  /** What the member's role and overrides grant, before the farm's plan and module switches. */
+  const granted = resolvePermissions(row.member.role, {
     roleOverrides: cleanOverrides(row.roleOverrides),
     memberOverrides: cleanOverrides(row.member.permissionOverrides),
   });
-  return { farm: row.farm, member: row.member, permissions };
+  const gate = await gateOf(row.farm);
+  return { farm: row.farm, member: row.member, granted, gate, permissions: gatePermissions(granted, gate) };
 }
 
 export async function findFarm(id: string) {

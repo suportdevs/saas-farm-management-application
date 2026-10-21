@@ -40,6 +40,8 @@ export const farms = pgTable(
     taxId: varchar('tax_id', { length: 100 }),
     fiscalYearStartMonth: integer('fiscal_year_start_month').notNull().default(1),
     goals: jsonb('goals').$type<string[]>().notNull().default([]),
+    /** Business modules the farm switched off (see TOGGLEABLE_MODULES). */
+    disabledModules: jsonb('disabled_modules').$type<string[]>().notNull().default([]),
 
     // Platform admin can suspend a tenant (e.g. fraud, unpaid invoices).
     suspendedAt: timestamp('suspended_at', { withTimezone: true }),

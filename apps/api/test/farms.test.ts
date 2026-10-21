@@ -197,6 +197,29 @@ describe('farm permissions', () => {
     expect((await viewer.c.post(`${base}/products/sizes`, { name: 'Huge', weight: 20 })).status).toBe(403);
   });
 
+  it('lets a farm switch modules off', async () => {
+    const owner = await signUp(app);
+    const { farm } = await createFarm(owner.c);
+    const worker = await inviteAndJoin(app, owner, farm.slug, 'worker');
+    const base = `/api/farms/${farm.slug}`;
+
+    expect((await worker.c.patch(base, { disabledModules: ['products'] })).status).toBe(403);
+    const off = await owner.c.patch(base, { disabledModules: ['products', 'milk'] });
+    expect(off.status).toBe(200);
+    expect(off.body.farm.disabledModules).toEqual(['milk', 'products']);
+    expect(off.body.modules).toMatchObject({ products: 'disabled', milk: 'disabled', herd: 'enabled' });
+    expect(off.body.membership.permissions.some((p: string) => p.startsWith('products.'))).toBe(false);
+
+    const blocked = await worker.c.get(`${base}/products/sizes`);
+    expect(blocked.status).toBe(403);
+    expect(blocked.body.error.code).toBe('MODULE_DISABLED');
+    // Core modules can't be switched off.
+    expect((await owner.c.patch(base, { disabledModules: ['members'] })).status).toBe(422);
+
+    await owner.c.patch(base, { disabledModules: [] });
+    expect((await worker.c.get(`${base}/products/sizes`)).status).toBe(200);
+  });
+
   it('blocks escalation and locked keys', async () => {
     const owner = await signUp(app);
     const { farm } = await createFarm(owner.c);

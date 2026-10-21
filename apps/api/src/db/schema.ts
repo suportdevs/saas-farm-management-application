@@ -32,6 +32,8 @@ export const users = pgTable('users', {
   passwordHash: text('password_hash'),
   image: text('image'),
   role: userRole('role').notNull().default('user'),
+  // Platform staff role for admins (super_admin, support, billing, analyst); null = super admin.
+  staffRole: varchar('staff_role', { length: 20 }),
   emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
   // Suspended accounts cannot sign in and all their sessions are revoked.
   bannedAt: timestamp('banned_at', { withTimezone: true }),

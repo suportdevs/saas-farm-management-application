@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Ban, CalendarPlus, Crown, PlayCircle, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { PLAN_LIST, type PlanId, type PlatformFarm } from '@kit/shared';
+import { PLAN_LIST, type PlanId, type PlatformFarm, type PlatformPermission } from '@kit/shared';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
@@ -15,7 +15,9 @@ import { api, errorMessage } from '@/lib/api';
 type Action = 'plan' | 'trial' | 'suspend' | 'delete' | null;
 
 /** Support actions for a tenant: manual plans, trial extensions, suspension, deletion. */
-export function FarmAdminActions({ farm }: { farm: PlatformFarm }) {
+/** Tenant actions, each shown only to staff whose role allows it. */
+export function FarmAdminActions({ farm, permissions }: { farm: PlatformFarm; permissions: PlatformPermission[] }) {
+  const can = (p: PlatformPermission) => permissions.includes(p);
   const router = useRouter();
   const [open, setOpen] = useState<Action>(null);
   const [busy, setBusy] = useState(false);
@@ -42,24 +44,31 @@ export function FarmAdminActions({ farm }: { farm: PlatformFarm }) {
   const close = () => setOpen(null);
   return (
     <div className="flex flex-wrap gap-2">
-      <Button variant="outline" size="sm" onClick={() => setOpen('plan')}>
-        <Crown className="h-4 w-4" /> Set plan
-      </Button>
-      <Button variant="outline" size="sm" onClick={() => setOpen('trial')}>
-        <CalendarPlus className="h-4 w-4" /> Extend trial
-      </Button>
-      {farm.suspendedAt ? (
-        <Button variant="outline" size="sm" loading={busy} onClick={() => run(() => api.post(`/admin/farms/${farm.id}/unsuspend`), 'Farm restored')}>
-          <PlayCircle className="h-4 w-4" /> Restore
-        </Button>
-      ) : (
-        <Button variant="outline" size="sm" className="text-destructive" onClick={() => setOpen('suspend')}>
-          <Ban className="h-4 w-4" /> Suspend
+      {can('platform.billing.manage') && (
+        <>
+          <Button variant="outline" size="sm" onClick={() => setOpen('plan')}>
+            <Crown className="h-4 w-4" /> Set plan
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setOpen('trial')}>
+            <CalendarPlus className="h-4 w-4" /> Extend trial
+          </Button>
+        </>
+      )}
+      {can('platform.tenants.suspend') &&
+        (farm.suspendedAt ? (
+          <Button variant="outline" size="sm" loading={busy} onClick={() => run(() => api.post(`/admin/farms/${farm.id}/unsuspend`), 'Farm restored')}>
+            <PlayCircle className="h-4 w-4" /> Restore
+          </Button>
+        ) : (
+          <Button variant="outline" size="sm" className="text-destructive" onClick={() => setOpen('suspend')}>
+            <Ban className="h-4 w-4" /> Suspend
+          </Button>
+        ))}
+      {can('platform.tenants.delete') && (
+        <Button variant="destructive" size="sm" onClick={() => setOpen('delete')}>
+          <Trash2 className="h-4 w-4" /> Delete
         </Button>
       )}
-      <Button variant="destructive" size="sm" onClick={() => setOpen('delete')}>
-        <Trash2 className="h-4 w-4" /> Delete
-      </Button>
 
       <Dialog
         open={open === 'plan'}

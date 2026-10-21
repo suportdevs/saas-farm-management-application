@@ -33,3 +33,19 @@ export function sendTrialEndedEmail(to: string, name: string, farm: Farm) {
     }),
   });
 }
+
+export function sendPaymentFailedEmail(to: string, name: string, farm: Farm, opts: { amount: string; invoiceUrl: string | null }) {
+  return sendMail({
+    to,
+    subject: `Payment failed for ${farm.name}`,
+    ...renderEmail({
+      heading: "We couldn't take your payment",
+      body: [
+        `Hi ${name},`,
+        `The payment of ${opts.amount} for ${farm.name} didn't go through. We'll retry automatically over the next few days — update your payment method to avoid losing access to paid features.`,
+      ],
+      action: { label: 'Update payment method', url: opts.invoiceUrl ?? billingUrl(farm) },
+      note: 'Your records are safe. If payment keeps failing, the farm moves to the free Starter plan.',
+    }),
+  });
+}

@@ -1,4 +1,4 @@
-import type { FarmRole, Permission, PermissionOverrides } from './access';
+import type { FarmRole, ModuleStatus, Permission, PermissionModule, PermissionOverrides, ToggleableModule } from './access';
 import type { AreaUnit, MilkUnit, UnitSystem, WeightUnit } from './geo';
 import type { FarmType } from './schemas';
 import type { PlanId } from '../subscriptions/plans';
@@ -16,6 +16,8 @@ export interface FarmSummary {
   suspended: boolean;
   /** The user's effective permissions on this farm. */
   permissions: Permission[];
+  /** Per module: on, not in the plan, or switched off by the farm. */
+  modules: Record<PermissionModule, ModuleStatus>;
 }
 
 export interface FarmProfile {
@@ -45,6 +47,8 @@ export interface FarmProfile {
   taxId: string | null;
   fiscalYearStartMonth: number;
   goals: string[];
+  /** Modules the farm switched off. */
+  disabledModules: ToggleableModule[];
   suspendedAt: string | null;
   suspendedReason: string | null;
   createdAt: string;
@@ -59,6 +63,8 @@ export interface FarmContext extends SubscriptionSnapshot {
   membership: { role: FarmRole; title: string | null; permissions: Permission[] };
   /** What each role can do on this farm (defaults plus the farm's role overrides). */
   rolePermissions: Record<FarmRole, Permission[]>;
+  /** Per module: on, not in the plan, or switched off by the farm. */
+  modules: Record<PermissionModule, ModuleStatus>;
   usage: FarmUsage;
 }
 

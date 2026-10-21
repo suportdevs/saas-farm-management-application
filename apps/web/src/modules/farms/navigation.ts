@@ -15,7 +15,7 @@ import {
   Wallet,
   Wheat,
 } from 'lucide-react';
-import { CATALOG, CATALOG_RESOURCES, catalogPath, PERMISSION_MODULES, type Capability, type Permission } from '@kit/shared';
+import { CATALOG, CATALOG_RESOURCES, catalogPath, PERMISSION_MODULES, type Capability, type Permission, type PermissionModule } from '@kit/shared';
 import { CowMark } from '@/components/logo';
 
 type Icon = ComponentType<{ className?: string }>;
@@ -132,6 +132,10 @@ export interface NavLink {
   label: string;
   icon: Icon;
   permission?: Permission;
+  /** The permission module behind the link: switched-off modules are hidden, plan-locked ones show a lock. */
+  module?: PermissionModule;
+  /** Set by the sidebar: the module isn't in the farm's plan. */
+  locked?: boolean;
   soon?: boolean;
   exact?: boolean;
   /** Nested links; the parent opens a collapsible group instead of navigating. */
@@ -151,6 +155,7 @@ export function farmNav(slug: string): NavSection[] {
     icon: m.icon,
     // Modules with permission keys need their view key, e.g. products.view.
     permission: m.slug in PERMISSION_MODULES ? (`${m.slug}.view` as Permission) : undefined,
+    module: m.slug in PERMISSION_MODULES ? (m.slug as PermissionModule) : undefined,
     soon: m.status === 'soon',
     children: m.children?.map((c) => ({ href: `${base}/${c.slug}`, label: c.label })),
   });
@@ -184,6 +189,11 @@ export const ACTIVITY_LABELS: Record<string, string> = {
   'farm.role_permissions_changed': "changed a role's permissions",
   'farm.role_permissions_reset': "reset a role's permissions",
   'farm.member_permissions_changed': "changed a member's permissions",
+  'farm.subscription_changed': 'subscription changed',
+  'farm.subscription_cancel_scheduled': 'subscription set to cancel',
+  'farm.subscription_resumed': 'subscription resumed',
+  'farm.payment_succeeded': 'payment received',
+  'farm.payment_failed': 'payment failed',
   'farm.checkout_started': 'started a plan upgrade',
   'products.created': 'added to the product catalog',
   'products.updated': 'updated the product catalog',

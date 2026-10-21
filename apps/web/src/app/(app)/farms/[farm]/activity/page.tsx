@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { History } from 'lucide-react';
-import { CATALOG, isCatalogResource, ROLE_INFO, type FarmActivityEntry, type FarmRole, type Pagination as PaginationInfo } from '@kit/shared';
+import { CATALOG, isCatalogResource, isPlanId, PLANS, ROLE_INFO, type FarmActivityEntry, type FarmRole, type Pagination as PaginationInfo } from '@kit/shared';
 import { PageHeader } from '@/components/app/page-header';
 import { Pagination } from '@/components/app/pagination';
 import { Avatar } from '@/components/app/user-menu';
@@ -22,6 +22,10 @@ function detail(e: FarmActivityEntry): string | null {
   if (e.action === 'farm.updated' && Array.isArray(m.fields)) return `Changed ${m.fields.join(', ')}`;
   if (e.action.startsWith('farm.role_permissions_') && Array.isArray(m.changed)) return `${ROLE_INFO[m.role as FarmRole]?.label ?? m.role} · ${m.changed.join(', ')}`;
   if (e.action === 'farm.member_permissions_changed' && Array.isArray(m.changed)) return m.changed.join(', ');
+  if (e.action === 'farm.subscription_changed' && isPlanId(m.to) && isPlanId(m.from)) {
+    return m.from === m.to ? `${PLANS[m.to].name} · ${m.fromState} → ${m.toState}` : `${PLANS[m.from].name} → ${PLANS[m.to].name}`;
+  }
+  if (e.action.startsWith('farm.payment_') && typeof m.amount === 'string') return m.amount;
   if (e.action === 'admin.farm.plan_changed' && typeof m.to === 'string') return `${m.from} → ${m.to}`;
   if (e.action === 'admin.farm.suspended' && typeof m.reason === 'string') return m.reason;
   if (e.action.startsWith('products.') && isCatalogResource(m.resource)) {

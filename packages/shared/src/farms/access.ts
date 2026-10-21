@@ -12,7 +12,9 @@
  * Owners always hold every permission and can't be overridden.
  */
 
-export const FARM_ROLES = ['owner', 'manager', 'veterinarian', 'accountant', 'worker', 'viewer'] as const;
+import type { Capability } from '../subscriptions/plans';
+
+export const FARM_ROLES =['owner', 'manager', 'veterinarian', 'accountant', 'worker', 'viewer'] as const;
 export type FarmRole = (typeof FARM_ROLES)[number];
 
 export const ROLE_INFO: Record<FarmRole, { label: string; description: string }> = {
@@ -142,6 +144,62 @@ export function diffFromDefaults(role: FarmRole, wanted: readonly Permission[]):
   }
   return overrides;
 }
+
+// ─── Module gating: plan and tenant switches ─────────────────────
+//
+// On top of the three permission layers, a farm only gets the keys of modules
+// that are (a) included in its plan and (b) switched on in its settings.
+
+/** The plan capability a module needs. Modules left out are on every plan. */
+export const MODULE_CAPABILITIES: Partial<Record<PermissionModule, Capability>> = {
+  herd: 'herd',
+  milk: 'milk',
+  health: 'health',
+  breeding: 'breeding',
+  feed: 'feed',
+  finance: 'finance',
+  reports: 'advanced_reports',
+};
+
+/** The plan capability an action needs in any module (e.g. every `*.export`). */
+export const ACTION_CAPABILITIES: Partial<Record<PermissionAction, Capability>> = {
+  export: 'data_export',
+};
+
+/** Business modules a farm can switch off. Team, billing, settings and activity always stay on. */
+export const TOGGLEABLE_MODULES = ['herd', 'milk', 'health', 'breeding', 'feed', 'products', 'finance', 'reports'] as const satisfies readonly PermissionModule[];
+export type ToggleableModule = (typeof TOGGLEABLE_MODULES)[number];
+export const isToggleable = (m: PermissionModule): m is ToggleableModule => (TOGGLEABLE_MODULES as readonly string[]).includes(m);
+
+/** enabled · `plan` = not in the farm's plan (upgrade unlocks it) · `disabled` = switched off by the farm. */
+export type ModuleStatus = 'enabled' | 'plan' | 'disabled';
+
+export interface ModuleGate {
+  capabilities: readonly Capability[];
+  disabledModules: readonly string[];
+}
+
+export function moduleStatus(module: PermissionModule, gate: ModuleGate): ModuleStatus {
+  if (isToggleable(module) && gate.disabledModules.includes(module)) return 'disabled';
+  const needs = MODULE_CAPABILITIES[module];
+  if (needs && !gate.capabilities.includes(needs)) return 'plan';
+  return 'enabled';
+}
+
+export const moduleStatuses = (gate: ModuleGate) =>
+  Object.fromEntries(PERMISSION_MODULE_KEYS.map((m) => [m, moduleStatus(m, gate)])) as Record<PermissionModule, ModuleStatus>;
+
+/** Why the farm (not the member) can't use `permission`, or null. */
+export function permissionBlock(permission: Permission, gate: ModuleGate): Exclude<ModuleStatus, 'enabled'> | null {
+  const [module, action] = permission.split('.') as [PermissionModule, PermissionAction];
+  const status = moduleStatus(module, gate);
+  if (status !== 'enabled') return status;
+  const needs = ACTION_CAPABILITIES[action];
+  return needs && !gate.capabilities.includes(needs) ? 'plan' : null;
+}
+
+/** Drops the keys the farm's plan or module switches don't allow. */
+export const gatePermissions = (permissions: readonly Permission[], gate: ModuleGate) => permissions.filter((p) => !permissionBlock(p, gate));
 
 /** Roles a member may assign: only owners hand out ownership. */
 export const assignableRoles = (actor: FarmRole): FarmRole[] =>

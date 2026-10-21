@@ -11,6 +11,7 @@ import {
   type AdminUserListQuery,
   type AuditLogQuery,
   type BanUserInput,
+  platformPermissionsOf,
 } from '@kit/shared';
 import { db } from '../../db/client';
 import { auditLogs, jobs, sessions, users, type User } from '../../db/schema';
@@ -25,7 +26,7 @@ import {
 } from '../../core/session';
 import { serializeUser } from '../../core/user';
 import { badRequest, forbidden, notFound } from '../../lib/errors';
-import { requireRole } from '../../middleware/auth';
+import { requirePlatform, requireRole } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { sendAccountSuspendedEmail } from '../auth/emails';
 
@@ -57,7 +58,7 @@ function assertNotSelf(req: Request, target: User, message: string) {
   if (target.id === req.auth!.user.id) throw badRequest(message, 'SELF_ACTION');
 }
 
-adminRouter.get('/stats', async (_req, res) => {
+adminRouter.get('/stats', requirePlatform('platform.stats.view'), async (_req, res) => {
   const now = Date.now();
   const since30 = new Date(now - 30 * DAY);
   const [userCounts, sessionCounts, signupRows, jobCounts] = await Promise.all([
@@ -109,7 +110,7 @@ adminRouter.get('/stats', async (_req, res) => {
   res.json(stats);
 });
 
-adminRouter.get('/users', validate(adminUserListQuerySchema, 'query'), async (req, res) => {
+adminRouter.get('/users', requirePlatform('platform.users.view'), validate(adminUserListQuerySchema, 'query'), async (req, res) => {
   const { page, pageSize, q, role, status } = req.query as unknown as AdminUserListQuery;
   const filters: SQL[] = [];
   if (q) {
@@ -132,7 +133,7 @@ adminRouter.get('/users', validate(adminUserListQuerySchema, 'query'), async (re
   });
 });
 
-adminRouter.get('/users/:id', async (req, res) => {
+adminRouter.get('/users/:id', requirePlatform('platform.users.view'), async (req, res) => {
   const user = await loadTarget(req);
   const userSessions = await listUserSessions(user.id);
   res.json({
@@ -150,14 +151,28 @@ adminRouter.get('/users/:id', async (req, res) => {
   });
 });
 
-adminRouter.patch('/users/:id', validate(adminUpdateUserSchema), async (req, res) => {
+adminRouter.patch('/users/:id', requirePlatform('platform.users.update'), validate(adminUpdateUserSchema), async (req, res) => {
   const target = await loadTarget(req);
   const input = req.body as AdminUpdateUserInput;
-  if (input.role && input.role !== target.role) assertNotSelf(req, target, "You can't change your own role");
+  const changesRole = input.role !== undefined && input.role !== target.role;
+  const changesStaffRole = input.staffRole !== undefined && input.staffRole !== target.staffRole;
+  if (changesRole || changesStaffRole) {
+    assertNotSelf(req, target, "You can't change your own role");
+    // Making, removing and re-scoping staff is its own permission.
+    if (!platformPermissionsOf(req.auth!.user).includes('platform.staff.manage')) {
+      throw forbidden("Your staff role can't manage platform staff", 'PLATFORM_PERMISSION_REQUIRED');
+    }
+    if (changesStaffRole && (input.role ?? target.role) !== 'admin') {
+      throw badRequest('Only admins can have a staff role', 'NOT_STAFF');
+    }
+  }
 
   const patch: Partial<User> = {};
   if (input.name !== undefined) patch.name = input.name;
   if (input.role !== undefined) patch.role = input.role;
+  if (input.staffRole !== undefined) patch.staffRole = input.staffRole;
+  // Leaving the staff clears the staff role, so rejoining starts from scratch.
+  if (input.role === 'user') patch.staffRole = null;
   if (input.emailVerified !== undefined) {
     patch.emailVerifiedAt = input.emailVerified ? (target.emailVerifiedAt ?? new Date()) : null;
   }
@@ -166,7 +181,7 @@ adminRouter.patch('/users/:id', validate(adminUpdateUserSchema), async (req, res
   res.json({ user: await serializeAdminUser(user!) });
 });
 
-adminRouter.post('/users/:id/ban', validate(banUserSchema), async (req, res) => {
+adminRouter.post('/users/:id/ban', requirePlatform('platform.users.suspend'), validate(banUserSchema), async (req, res) => {
   const target = await loadTarget(req);
   assertNotSelf(req, target, "You can't suspend your own account");
   const { reason } = req.body as BanUserInput;
@@ -181,7 +196,7 @@ adminRouter.post('/users/:id/ban', validate(banUserSchema), async (req, res) => 
   res.json({ user: await serializeAdminUser(user!) });
 });
 
-adminRouter.post('/users/:id/unban', async (req, res) => {
+adminRouter.post('/users/:id/unban', requirePlatform('platform.users.suspend'), async (req, res) => {
   const target = await loadTarget(req);
   const [user] = await db
     .update(users)
@@ -192,7 +207,7 @@ adminRouter.post('/users/:id/unban', async (req, res) => {
   res.json({ user: await serializeAdminUser(user!) });
 });
 
-adminRouter.delete('/users/:id/sessions', async (req, res) => {
+adminRouter.delete('/users/:id/sessions', requirePlatform('platform.users.suspend'), async (req, res) => {
   const target = await loadTarget(req);
   assertNotSelf(req, target, 'Use Settings → Security to manage your own sessions');
   await deleteUserSessions(target.id);
@@ -201,7 +216,7 @@ adminRouter.delete('/users/:id/sessions', async (req, res) => {
 });
 
 /** Signs the admin in as another user for support/debugging. The admin's own session is kept aside. */
-adminRouter.post('/users/:id/impersonate', async (req, res) => {
+adminRouter.post('/users/:id/impersonate', requirePlatform('platform.users.impersonate'), async (req, res) => {
   const target = await loadTarget(req);
   assertNotSelf(req, target, "You can't impersonate yourself");
   if (target.role === 'admin') throw forbidden("Administrators can't be impersonated", 'CANNOT_IMPERSONATE_ADMIN');
@@ -215,7 +230,7 @@ adminRouter.post('/users/:id/impersonate', async (req, res) => {
   res.json({ redirect: '/dashboard' });
 });
 
-adminRouter.delete('/users/:id', async (req, res) => {
+adminRouter.delete('/users/:id', requirePlatform('platform.users.delete'), async (req, res) => {
   const target = await loadTarget(req);
   assertNotSelf(req, target, 'Delete your own account from Settings instead');
   await hooks.emit(hooks.userDeleting, target);
@@ -224,7 +239,7 @@ adminRouter.delete('/users/:id', async (req, res) => {
   res.status(204).end();
 });
 
-adminRouter.get('/audit-logs', validate(auditLogQuerySchema, 'query'), async (req, res) => {
+adminRouter.get('/audit-logs', requirePlatform('platform.audit.view'), validate(auditLogQuerySchema, 'query'), async (req, res) => {
   const { page, pageSize, userId, action } = req.query as unknown as AuditLogQuery;
   const filters: SQL[] = [];
   if (userId) {

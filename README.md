@@ -84,6 +84,28 @@ Owners always hold every key; `farm.delete` is owner-only. Changing permissions 
 non-owner given it can only change keys they hold, and never their own. Endpoints: `GET /api/farms/:farm/permissions`,
 `PUT|DELETE /api/farms/:farm/roles/:role/permissions`, `PUT /api/farms/:farm/members/:userId/permissions`. UI: **Farm → Roles & permissions**.
 
+**The farm decides which modules exist at all.** After the three layers, keys are limited to modules that are
+in the farm's plan (`MODULE_CAPABILITIES`, plus `ACTION_CAPABILITIES` — every `*.export` needs `data_export`) and
+not switched off in **Farm settings → Modules** (`farms.disabled_modules`). `requireFarm(key)` answers, in order:
+`403 MODULE_DISABLED` → `402 PLAN_UPGRADE_REQUIRED` → `403 FARM_PERMISSION_REQUIRED`. The context returns
+`modules: { finance: 'plan' | 'disabled' | 'enabled', … }`; the sidebar hides switched-off modules and shows a lock
+on plan-locked ones. Role settings are stored ungated, so an upgrade brings everything back.
+
+```
+user ─┬─ platform staff (users.role = admin, users.staff_role) → platform.* keys (operator console)
+      └─ farm member (farm_members.role)
+             role defaults → farm role overrides → member overrides   (what the person may do)
+             ∩ plan capabilities ∩ enabled modules                      (what the farm has)
+```
+
+**Platform staff** have per-action `platform.*` keys by staff role (`packages/shared/src/platform/access.ts`):
+`super_admin` (everything, incl. `platform.staff.manage`), `support`, `billing`, `analyst`. Admins without a
+staff role are super admins. Guard operator routes with `requirePlatform('platform.tenants.suspend')`.
+
+**Billing events** from Stripe webhooks land in the farm's activity log (`farm.subscription_changed`,
+`farm.subscription_cancel_scheduled|resumed`, `farm.payment_succeeded|failed`); a failed payment also emails every owner.
+Subscribe the webhook to `invoice.paid` and `invoice.payment_failed` in addition to the `customer.subscription.*` events.
+
 To give a new module keys, add it to `PERMISSION_MODULES` (and its defaults to `ROLE_PERMISSIONS`), then guard each route with
 `requireFarm('<module>.<action>')` and each button with `useCan('<module>.<action>')`.
 

@@ -135,9 +135,10 @@ const roleParam = (req: Request) => {
   return role.data;
 };
 
+/** Permission editors act on what they were granted, independent of the current plan. */
 const actorOf = (req: Request, res: Response) => {
-  const { role, permissions } = getFarm(res);
-  return { userId: req.auth!.user.id, role, permissions };
+  const { role, granted } = getFarm(res);
+  return { userId: req.auth!.user.id, role, permissions: granted };
 };
 
 router.get('/:farm/permissions', requireFarm('roles.view'), async (_req, res) => {

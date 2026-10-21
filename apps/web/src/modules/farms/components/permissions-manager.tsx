@@ -120,6 +120,7 @@ function useLockReason() {
 }
 
 function Matrix({ renderCell, renderRowControl }: { renderCell: (key: Permission) => ReactNode; renderRowControl?: (m: PermissionModule) => ReactNode }) {
+  const { modules } = useFarm();
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
@@ -140,6 +141,15 @@ function Matrix({ renderCell, renderRowControl }: { renderCell: (key: Permission
               <th scope="row" className="whitespace-nowrap px-4 py-2.5 font-medium">
                 {PERMISSION_MODULES[m].label}
                 <span className="block text-xs font-normal text-muted-foreground">{m}.*</span>
+                {modules[m] !== 'enabled' && (
+                  <Badge
+                    variant={modules[m] === 'plan' ? 'warning' : 'default'}
+                    className="mt-1"
+                    title={modules[m] === 'plan' ? 'Saved, but has no effect until the plan includes this module' : 'Switched off in farm settings'}
+                  >
+                    {modules[m] === 'plan' ? 'Not in plan' : 'Switched off'}
+                  </Badge>
+                )}
               </th>
               {renderRowControl && <td className="px-2 py-2">{renderRowControl(m)}</td>}
               {ACTIONS.map((a) => (

@@ -9,7 +9,7 @@ import { requireAdmin, serverFetch } from '@/lib/session';
 export const metadata: Metadata = { title: 'Admin' };
 
 export default async function AdminOverviewPage() {
-  await requireAdmin();
+  await requireAdmin('platform.stats.view');
   const [stats, platform] = await Promise.all([serverFetch<AdminStats>('/admin/stats'), serverFetch<PlatformStats>('/admin/farms/stats')]);
   if (!stats || !platform) throw new Error('Failed to load stats');
   const { users, signups, jobs } = stats;

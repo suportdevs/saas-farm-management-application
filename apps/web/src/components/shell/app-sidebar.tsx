@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { ChevronDown, LogOut, Moon, Settings, Shield, ShieldCheck, Sun, UserRound } from 'lucide-react';
+import { ChevronDown, Lock, LogOut, Moon, Settings, Shield, ShieldCheck, Sun, UserRound } from 'lucide-react';
 import type { FarmSummary, PublicUser } from '@kit/shared';
 import { Avatar } from '@/components/app/user-menu';
 import { LogoBadge } from '@/components/logo';
@@ -52,7 +52,13 @@ export function SidebarContent({ user, farms, onNavigate }: ShellProps & { onNav
 
       <nav className="scrollbar-sidebar mt-4 flex-1 space-y-5 overflow-y-auto px-3 pb-4" aria-label="Main">
         {sections.map((section, i) => {
-          const links = section.links.filter((l) => !l.permission || current?.permissions.includes(l.permission));
+          const links = section.links.flatMap((l): NavLink[] => {
+            const status = l.module && current?.modules[l.module];
+            if (status === 'disabled') return [];
+            // Not in the plan: still listed, with a lock, so the upgrade is discoverable.
+            if (status === 'plan') return [{ ...l, locked: true, children: undefined }];
+            return !l.permission || current?.permissions.includes(l.permission) ? [l] : [];
+          });
           if (!links.length) return null;
           return (
             <div key={section.title ?? i}>
@@ -105,7 +111,11 @@ function SidebarLink({ link, active, onNavigate }: { link: NavLink; active: bool
       {active && <span className="absolute inset-y-1.5 left-0 w-1 rounded-r-full bg-sidebar-primary" />}
       <Icon className={cn('h-[18px] w-[18px] shrink-0', active ? 'text-sidebar-primary' : 'opacity-80 group-hover:opacity-100')} />
       <span className="flex-1 truncate">{link.label}</span>
-      {link.soon && <span className="rounded-full bg-white/10 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-sidebar-muted">Soon</span>}
+      {link.locked ? (
+        <Lock className="h-3.5 w-3.5 text-sidebar-muted" aria-label="Upgrade to unlock" />
+      ) : (
+        link.soon && <span className="rounded-full bg-white/10 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-sidebar-muted">Soon</span>
+      )}
     </Link>
   );
 }

@@ -50,4 +50,43 @@ describe('platform admin', () => {
     expect((await admin.c.post(`/api/admin/farms/${farm.id}/unsuspend`)).status).toBe(204);
     expect((await owner.c.get(`/api/farms/${farm.slug}/members`)).status).toBe(200);
   });
+
+  it('scopes platform staff by staff role, per action', async () => {
+    const superAdmin = await signUp(app, { admin: true });
+    const staff = await signUp(app, { admin: true });
+    const owner = await signUp(app);
+    const { farm } = await createFarm(owner.c, `Staff Test Ranch ${Date.now()}`);
+    const asRole = (staffRole: string | null) => superAdmin.c.patch(`/api/admin/users/${staff.id}`, { staffRole });
+
+    // Admins without a staff role are super admins.
+    const session = await superAdmin.c.get('/api/auth/session');
+    expect(session.body.user.staffRole).toBe('super_admin');
+    expect(session.body.user.platformPermissions).toContain('platform.staff.manage');
+
+    expect((await asRole('analyst')).status).toBe(200);
+    expect((await staff.c.get('/api/admin/farms')).status).toBe(200);
+    expect((await staff.c.get('/api/admin/users')).status).toBe(200);
+    const denied = await staff.c.post(`/api/admin/farms/${farm.id}/suspend`, { reason: 'test' });
+    expect(denied.status).toBe(403);
+    expect(denied.body.error.code).toBe('PLATFORM_PERMISSION_REQUIRED');
+    expect((await staff.c.get('/api/admin/audit-logs')).status).toBe(403);
+
+    await asRole('billing');
+    expect((await staff.c.patch(`/api/admin/farms/${farm.id}/plan`, { planId: 'growth' })).status).toBe(204);
+    expect((await staff.c.post(`/api/admin/farms/${farm.id}/trial`, { days: 7 })).status).toBe(204);
+    expect((await staff.c.post(`/api/admin/farms/${farm.id}/suspend`, {})).status).toBe(403);
+
+    await asRole('support');
+    expect((await staff.c.post(`/api/admin/farms/${farm.id}/suspend`, {})).status).toBe(204);
+    expect((await staff.c.post(`/api/admin/farms/${farm.id}/unsuspend`)).status).toBe(204);
+    expect((await staff.c.delete(`/api/admin/farms/${farm.id}`)).status).toBe(403);
+    // Only super admins manage staff.
+    expect((await staff.c.patch(`/api/admin/users/${owner.id}`, { role: 'admin' })).status).toBe(403);
+    expect((await staff.c.patch(`/api/admin/users/${owner.id}`, { name: 'Renamed Owner' })).status).toBe(200);
+    expect((await superAdmin.c.patch(`/api/admin/users/${owner.id}`, { staffRole: 'support' })).body.error.code).toBe('NOT_STAFF');
+
+    // Demoting to user clears the staff role.
+    await superAdmin.c.patch(`/api/admin/users/${staff.id}`, { role: 'user' });
+    expect((await staff.c.get('/api/admin/farms')).status).toBe(403);
+  });
 });

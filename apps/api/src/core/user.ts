@@ -1,4 +1,4 @@
-import type { PublicUser } from '@kit/shared';
+import { platformPermissionsOf, staffRoleOf, type PublicUser } from '@kit/shared';
 import type { User } from '../db/schema';
 import { hooks } from './hooks';
 
@@ -10,6 +10,7 @@ export async function serializeUser(user: User): Promise<PublicUser> {
     name: user.name,
     image: user.image,
     role: user.role,
+    ...(user.role === 'admin' ? { staffRole: staffRoleOf(user), platformPermissions: platformPermissionsOf(user) } : {}),
     emailVerified: Boolean(user.emailVerifiedAt),
     hasPassword: Boolean(user.passwordHash),
     createdAt: user.createdAt.toISOString(),

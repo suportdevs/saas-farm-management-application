@@ -23,7 +23,7 @@ interface Detail {
 }
 
 export default async function AdminFarmPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireAdmin();
+  const me = await requireAdmin('platform.tenants.view');
   const { id } = await params;
   const data = await serverFetch<Detail>(`/admin/farms/${id}`);
   if (!data) notFound();
@@ -63,7 +63,7 @@ export default async function AdminFarmPage({ params }: { params: Promise<{ id: 
           </div>
           {farm.suspendedReason && <p className="mt-2 text-sm text-destructive">Suspended: {farm.suspendedReason}</p>}
         </div>
-        <FarmAdminActions farm={farm} />
+        <FarmAdminActions farm={farm} permissions={me.platformPermissions ?? []} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">

@@ -1,3 +1,5 @@
+import type { PlatformPermission, StaffRole } from '../platform/access';
+
 export type UserRole = 'user' | 'admin';
 
 /**
@@ -11,6 +13,9 @@ export interface PublicUser {
   name: string;
   image: string | null;
   role: UserRole;
+  /** Platform staff only: the staff role and what it may do in the operator console. */
+  staffRole?: StaffRole | null;
+  platformPermissions?: PlatformPermission[];
   emailVerified: boolean;
   hasPassword: boolean;
   createdAt: string;

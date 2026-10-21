@@ -16,7 +16,7 @@ import {
   type PlatformFarm,
   type PlatformStats,
 } from '@kit/shared';
-import { audit, db, notFound, requireRole, users, validate } from '../../core';
+import { audit, db, notFound, requirePlatform, requireRole, users, validate } from '../../core';
 import { deleteFarm, farmMembers, farms, findFarm, listActivity, listMembers, serializeFarm, setSuspended, type Farm } from '../farms';
 import { extendTrial, farmSubscriptions, findSubscription, setManualPlan, subscriptionOf, type FarmSubscriptionRow } from '../subscriptions';
 import { sendFarmSuspendedEmail } from './emails';
@@ -77,7 +77,7 @@ function serializePlatformFarm(
   };
 }
 
-router.get('/stats', async (_req, res) => {
+router.get('/stats', requirePlatform('platform.stats.view'), async (_req, res) => {
   const now = Date.now();
   const since30 = new Date(now - 30 * DAY);
   const [[totals], planRows, revenueRows, countryRows, typeRows, createdRows] = await Promise.all([
@@ -131,7 +131,7 @@ router.get('/stats', async (_req, res) => {
   res.json(stats);
 });
 
-router.get('/', validate(adminFarmListQuerySchema, 'query'), async (req, res) => {
+router.get('/', requirePlatform('platform.tenants.view'), validate(adminFarmListQuerySchema, 'query'), async (req, res) => {
   const { page, pageSize, q, plan, status, country } = req.query as unknown as AdminFarmListQuery;
   const filters: SQL[] = [];
   if (q) {
@@ -185,7 +185,7 @@ async function loadFarm(req: Request): Promise<Farm> {
 
 const event = (farm: Farm) => ({ targetType: 'farm', targetId: farm.id });
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', requirePlatform('platform.tenants.view'), async (req, res) => {
   const farm = await loadFarm(req);
   const [members, activity, sub] = await Promise.all([listMembers(farm.id), listActivity(farm.id, { limit: 20, offset: 0 }), findSubscription(farm.id)]);
   const owner = members.find((m) => m.role === 'owner');
@@ -205,7 +205,7 @@ router.get('/:id', async (req, res) => {
 });
 
 /** Manual plan assignment (enterprise deals, invoiced customers, comps). */
-router.patch('/:id/plan', validate(adminSetPlanSchema), async (req, res) => {
+router.patch('/:id/plan', requirePlatform('platform.billing.manage'), validate(adminSetPlanSchema), async (req, res) => {
   const farm = await loadFarm(req);
   const { planId, currentPeriodEnd } = req.body as AdminSetPlanInput;
   const from = subscriptionOf(await findSubscription(farm.id)).planId;
@@ -214,7 +214,7 @@ router.patch('/:id/plan', validate(adminSetPlanSchema), async (req, res) => {
   res.status(204).end();
 });
 
-router.post('/:id/trial', validate(adminExtendTrialSchema), async (req, res) => {
+router.post('/:id/trial', requirePlatform('platform.billing.manage'), validate(adminExtendTrialSchema), async (req, res) => {
   const farm = await loadFarm(req);
   const { days } = req.body as z.infer<typeof adminExtendTrialSchema>;
   const trialEndsAt = await extendTrial(farm.id, days);
@@ -222,7 +222,7 @@ router.post('/:id/trial', validate(adminExtendTrialSchema), async (req, res) => 
   res.status(204).end();
 });
 
-router.post('/:id/suspend', validate(adminSuspendFarmSchema), async (req, res) => {
+router.post('/:id/suspend', requirePlatform('platform.tenants.suspend'), validate(adminSuspendFarmSchema), async (req, res) => {
   const farm = await loadFarm(req);
   const { reason } = req.body as z.infer<typeof adminSuspendFarmSchema>;
   await setSuspended(farm.id, reason || null);
@@ -232,14 +232,14 @@ router.post('/:id/suspend', validate(adminSuspendFarmSchema), async (req, res) =
   res.status(204).end();
 });
 
-router.post('/:id/unsuspend', async (req, res) => {
+router.post('/:id/unsuspend', requirePlatform('platform.tenants.suspend'), async (req, res) => {
   const farm = await loadFarm(req);
   await setSuspended(farm.id, null, false);
   await audit(req, { action: 'admin.farm.unsuspended', ...event(farm) });
   res.status(204).end();
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePlatform('platform.tenants.delete'), async (req, res) => {
   const farm = await loadFarm(req);
   await deleteFarm(farm);
   await audit(req, { action: 'admin.farm.deleted', ...event(farm), metadata: { name: farm.name } });

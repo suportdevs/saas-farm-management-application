@@ -2,20 +2,22 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import type { PlatformPermission } from '@kit/shared';
 import { cn } from '@/lib/utils';
 
-const tabs = [
-  { href: '/admin', label: 'Overview', exact: true },
-  { href: '/admin/farms', label: 'Farms' },
-  { href: '/admin/users', label: 'Users' },
-  { href: '/admin/audit-logs', label: 'Audit log' },
+const tabs: { href: string; label: string; exact?: boolean; permission: PlatformPermission }[] = [
+  { href: '/admin', label: 'Overview', exact: true, permission: 'platform.stats.view' },
+  { href: '/admin/farms', label: 'Farms', permission: 'platform.tenants.view' },
+  { href: '/admin/users', label: 'Users', permission: 'platform.users.view' },
+  { href: '/admin/audit-logs', label: 'Audit log', permission: 'platform.audit.view' },
 ];
 
-export function AdminTabs() {
+/** Only the tabs the viewer's staff role can open. */
+export function AdminTabs({ permissions }: { permissions: PlatformPermission[] }) {
   const pathname = usePathname();
   return (
     <div className="mb-6 flex gap-1 overflow-x-auto overflow-y-hidden border-b">
-      {tabs.map((t) => {
+      {tabs.filter((t) => permissions.includes(t.permission)).map((t) => {
         const active = t.exact ? pathname === t.href : pathname === t.href || pathname.startsWith(`${t.href}/`);
         return (
           <Link

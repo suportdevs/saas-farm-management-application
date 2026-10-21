@@ -37,6 +37,38 @@ describe('subscriptions', () => {
     expect((await owner.c.post(`/api/farms/${farm.slug}/invitations`, { email: 'a@example.com' })).status).toBe(201);
   });
 
+  it('limits module permissions to the plan', async () => {
+    const owner = await signUp(app);
+    const { farm } = await createFarm(owner.c);
+    const base = `/api/farms/${farm.slug}`;
+
+    // On the Pro trial everything the role allows is available.
+    let ctx = await owner.c.get(base);
+    expect(ctx.body.modules).toMatchObject({ finance: 'enabled', products: 'enabled' });
+    expect(ctx.body.membership.permissions).toContain('products.export');
+
+    // Trial over → Starter: no finance, no reports, no exports.
+    await db.update(farmSubscriptions).set({ trialEndsAt: new Date(Date.now() - 1000) }).where(eq(farmSubscriptions.farmId, farm.id));
+    ctx = await owner.c.get(base);
+    expect(ctx.body.modules).toMatchObject({ herd: 'enabled', products: 'enabled', finance: 'plan', reports: 'plan' });
+    expect(ctx.body.membership.permissions).not.toContain('finance.view');
+    expect(ctx.body.membership.permissions).not.toContain('products.export');
+    expect(ctx.body.membership.permissions).toContain('products.create');
+    // The role is still configured with them, so an upgrade brings them straight back.
+    expect(ctx.body.rolePermissions.owner).toContain('finance.view');
+    expect((await owner.c.get('/api/farms')).body.farms[0].modules.finance).toBe('plan');
+
+    const exported = await owner.c.get(`${base}/products/sizes/export`);
+    expect(exported.status).toBe(402);
+    expect(exported.body.error.code).toBe('PLAN_UPGRADE_REQUIRED');
+    expect((await owner.c.post(`${base}/products/sizes`, { name: 'Small', weight: 1 })).status).toBe(201);
+
+    // Growth includes data exports.
+    await db.update(farmSubscriptions).set({ plan: 'growth', status: 'active', source: 'manual' }).where(eq(farmSubscriptions.farmId, farm.id));
+    expect((await owner.c.get(`${base}/products/sizes/export`)).status).toBe(200);
+    expect((await owner.c.get(base)).body.modules.finance).toBe('enabled');
+  });
+
   it('serves billing overview without Stripe configured', async () => {
     const owner = await signUp(app);
     const { farm } = await createFarm(owner.c);
