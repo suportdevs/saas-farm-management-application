@@ -36,7 +36,7 @@ export default async function FarmOverviewPage({ params, searchParams }: Props) 
   const base = `/farms/${farm.slug}`;
 
   const [members, activity] = await Promise.all([
-    serverFetch<{ members: FarmMember[] }>(`/farms/${farm.slug}/members`),
+    can('members.view') ? serverFetch<{ members: FarmMember[] }>(`/farms/${farm.slug}/members`) : null,
     can('activity.view') ? serverFetch<{ entries: FarmActivityEntry[] }>(`/farms/${farm.slug}/activity?pageSize=6`) : null,
   ]);
 
@@ -46,7 +46,7 @@ export default async function FarmOverviewPage({ params, searchParams }: Props) 
   const checklist = [
     { done: true, label: 'Create your farm workspace' },
     { done: profileComplete, label: 'Add address, phone and registration number', href: `${base}/settings`, show: can('farm.update') },
-    { done: usage.members > 1, label: 'Invite your team', href: `${base}/team`, show: can('members.manage') },
+    { done: usage.members > 1, label: 'Invite your team', href: `${base}/team`, show: can('members.invite') },
     { done: subscription.source !== null, label: 'Choose the right plan', href: `${base}/billing`, show: can('billing.manage') },
     { done: false, label: 'Add your first animals (Herd module, coming next)', href: `${base}/herd` },
   ].filter((i) => i.show !== false);
@@ -71,7 +71,7 @@ export default async function FarmOverviewPage({ params, searchParams }: Props) 
                 <Settings className="h-4 w-4" /> Settings
               </Link>
             )}
-            {can('members.manage') && (
+            {can('members.invite') && (
               <Link href={`${base}/team?invite=1`} className={buttonClasses('primary', 'md')}>
                 <UserPlus className="h-4 w-4" /> Invite team
               </Link>
@@ -216,7 +216,7 @@ export default async function FarmOverviewPage({ params, searchParams }: Props) 
                   </li>
                 ))}
               </ul>
-              {can('members.manage') && (
+              {can('members.invite') && (
                 <Link href={`${base}/team?invite=1`} className={cn(buttonClasses('outline', 'sm'), 'mt-4 w-full')}>
                   <UserPlus className="h-4 w-4" /> Invite someone
                 </Link>

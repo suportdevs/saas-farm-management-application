@@ -8,9 +8,10 @@ import { toast } from 'sonner';
 import {
   assignableRoles,
   FARM_ROLES,
-  PERMISSIONS,
+  PERMISSION_ACTION_LABELS,
+  PERMISSION_MODULE_KEYS,
+  PERMISSION_MODULES,
   ROLE_INFO,
-  ROLE_PERMISSIONS,
   type FarmInvitation,
   type FarmMember,
   type FarmRole,
@@ -32,24 +33,6 @@ import { useFarm } from '@/modules/farms/context';
 import { formatDate, timeAgo } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
-const PERMISSION_LABELS: Record<Permission, string> = {
-  'farm.update': 'Edit farm settings',
-  'farm.delete': 'Delete the farm',
-  'billing.view': 'See plan & invoices',
-  'billing.manage': 'Change plan & payment',
-  'members.manage': 'Manage the team',
-  'activity.view': 'See activity log',
-  'herd.manage': 'Manage animals',
-  'milk.manage': 'Record milk',
-  'health.manage': 'Record health & treatments',
-  'breeding.manage': 'Record breeding',
-  'feed.manage': 'Manage feed',
-  'products.manage': 'Manage the product catalog',
-  'finance.view': 'See finances',
-  'finance.manage': 'Record income & expenses',
-  'reports.view': 'See reports',
-};
-
 export function TeamManager({
   currentUserId,
   members,
@@ -64,7 +47,8 @@ export function TeamManager({
   const router = useRouter();
   const { farm, membership, usage, limits } = useFarm();
   const myRole = membership.role;
-  const canManage = membership.permissions.includes('members.manage');
+  const can = (p: Permission) => membership.permissions.includes(p);
+  const canInvite = can('members.invite');
   const [inviteOpen, setInviteOpen] = useState(openInvite);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<FarmMember | null>(null);
@@ -93,8 +77,8 @@ export function TeamManager({
     if (self) router.push('/dashboard');
   };
 
-  const canEditRole = (m: FarmMember) => canManage && m.userId !== currentUserId && (m.role !== 'owner' || myRole === 'owner');
-  const canRemove = (m: FarmMember) => m.userId === currentUserId || (canManage && (m.role !== 'owner' || myRole === 'owner'));
+  const canEditRole = (m: FarmMember) => can('members.update') && m.userId !== currentUserId && (m.role !== 'owner' || myRole === 'owner');
+  const canRemove = (m: FarmMember) => m.userId === currentUserId || (can('members.remove') && (m.role !== 'owner' || myRole === 'owner'));
 
   return (
     <>
@@ -102,7 +86,7 @@ export function TeamManager({
         title="Team"
         description={`Everyone who works on ${farm.name}, and what they can do.`}
         actions={
-          canManage && (
+          canInvite && (
             <Button onClick={() => setInviteOpen(true)} disabled={seatsFull} title={seatsFull ? 'All seats on your plan are in use' : undefined}>
               <UserPlus className="h-4 w-4" /> Invite member
             </Button>
@@ -184,7 +168,7 @@ export function TeamManager({
             </ul>
           </Card>
 
-          {canManage && (
+          {canInvite && (
             <Card className="overflow-hidden">
               <CardHeader className="border-b pb-4">
                 <CardTitle className="text-base">Pending invitations</CardTitle>
@@ -255,7 +239,7 @@ export function TeamManager({
         </aside>
       </div>
 
-      {canManage && <InviteDialog open={inviteOpen} onClose={() => setInviteOpen(false)} onInvited={() => router.refresh()} />}
+      {canInvite && <InviteDialog open={inviteOpen} onClose={() => setInviteOpen(false)} onInvited={() => router.refresh()} />}
 
       <Dialog
         open={confirmRemove !== null}
@@ -350,8 +334,11 @@ function InviteDialog({ open, onClose, onInvited }: { open: boolean; onClose: ()
   );
 }
 
+/** What each role can do on this farm, including the farm's own changes to the role. */
 function RolesGuide() {
+  const { farm, membership, rolePermissions } = useFarm();
   const [selected, setSelected] = useState<FarmRole>('manager');
+  const granted = rolePermissions[selected];
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -373,20 +360,25 @@ function RolesGuide() {
           ))}
         </div>
         <p className="text-sm text-muted-foreground">{ROLE_INFO[selected].description}</p>
-        <ul className="space-y-1.5 text-sm">
-          {PERMISSIONS.map((p) => {
-            const has = ROLE_PERMISSIONS[selected].includes(p);
+        <ul className="space-y-2 text-sm">
+          {PERMISSION_MODULE_KEYS.map((m) => {
+            const held = PERMISSION_MODULES[m].actions.filter((a) => granted.includes(`${m}.${a}` as Permission));
             return (
-              <li key={p} className={cn('flex items-center gap-2', !has && 'text-muted-foreground/60')}>
-                {has ? <Check className="h-3.5 w-3.5 text-primary" /> : <X className="h-3.5 w-3.5" />}
-                {PERMISSION_LABELS[p]}
+              <li key={m} className={cn('flex items-start gap-2', !held.length && 'text-muted-foreground/60')}>
+                {held.length ? <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" /> : <X className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
+                <span>
+                  {PERMISSION_MODULES[m].label}
+                  {held.length > 0 && <span className="block text-xs text-muted-foreground">{held.map((a) => PERMISSION_ACTION_LABELS[a]).join(' · ')}</span>}
+                </span>
               </li>
             );
           })}
-          <li className="flex items-center gap-2">
-            <Check className="h-3.5 w-3.5 text-primary" /> View the herd and records
-          </li>
         </ul>
+        {membership.permissions.includes('roles.view') && (
+          <Link href={`/farms/${farm.slug}/permissions`} className={cn(buttonClasses('outline', 'sm'), 'w-full')}>
+            Roles & permissions
+          </Link>
+        )}
       </CardContent>
     </Card>
   );

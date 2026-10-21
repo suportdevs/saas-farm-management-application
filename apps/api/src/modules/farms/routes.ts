@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import {
   assignableRoles,
@@ -6,12 +6,15 @@ import {
   deleteFarmSchema,
   inviteMemberSchema,
   invitationTokenSchema,
+  memberPermissionsSchema,
+  rolePermissionsSchema,
   updateFarmSchema,
   updateMemberSchema,
+  farmRoleSchema,
   type CreateFarmData,
   type UpdateFarmData,
 } from '@kit/shared';
-import { audit, badRequest, forbidden, forbidImpersonation, limiter, requireAuth, validate } from '../../core';
+import { audit, badRequest, forbidden, forbidImpersonation, limiter, notFound, requireAuth, validate } from '../../core';
 import { getFarm, requireFarm } from './access';
 import * as farms from './service';
 
@@ -39,7 +42,7 @@ router.post('/', createLimiter, validate(createFarmSchema), async (req, res) => 
   const input = req.body as CreateFarmData;
   const farm = await farms.createFarm(req.auth!.user, input);
   await audit(req, { action: 'farm.created', ...farmEvent(farm.id), metadata: { name: farm.name, type: farm.type, country: farm.country } });
-  res.status(201).json(await farms.contextOf(farm, { role: 'owner', title: null }));
+  res.status(201).json(await farms.contextOf(farm, { role: 'owner', title: null, permissionOverrides: {} }));
 });
 
 // Declared before the /:farm routes.
@@ -78,15 +81,15 @@ router.delete('/:farm', requireFarm('farm.delete'), forbidImpersonation, validat
 
 // ─── Team ────────────────────────────────────────────────────────
 
-router.get('/:farm/members', requireFarm(), async (_req, res) => {
+router.get('/:farm/members', requireFarm('members.view'), async (_req, res) => {
   res.json({ members: await farms.listMembers(getFarm(res).farm.id) });
 });
 
 router.patch('/:farm/members/:userId', requireFarm(), validate(updateMemberSchema), async (req, res) => {
-  const { farm, role } = getFarm(res);
+  const { farm, role, permissions } = getFarm(res);
   const patch = req.body as z.output<typeof updateMemberSchema>;
   const targetId = String(req.params.userId);
-  const { previousRole } = await farms.updateMember(farm.id, { userId: req.auth!.user.id, role }, targetId, patch);
+  const { previousRole } = await farms.updateMember(farm.id, { userId: req.auth!.user.id, role, permissions }, targetId, patch);
   if (patch.role && patch.role !== previousRole) {
     await audit(req, { action: 'farm.member_role_changed', ...farmEvent(farm.id), metadata: { userId: targetId, from: previousRole, to: patch.role } });
   }
@@ -95,19 +98,19 @@ router.patch('/:farm/members/:userId', requireFarm(), validate(updateMemberSchem
 
 /** Removes a member — or leaves the farm when the target is yourself. */
 router.delete('/:farm/members/:userId', requireFarm(), async (req, res) => {
-  const { farm, role } = getFarm(res);
+  const { farm, role, permissions } = getFarm(res);
   const targetId = String(req.params.userId);
-  await farms.removeMember(farm.id, { userId: req.auth!.user.id, role }, targetId);
+  await farms.removeMember(farm.id, { userId: req.auth!.user.id, role, permissions }, targetId);
   const self = targetId === req.auth!.user.id;
   await audit(req, { action: self ? 'farm.member_left' : 'farm.member_removed', ...farmEvent(farm.id), metadata: { userId: targetId } });
   res.status(204).end();
 });
 
-router.get('/:farm/invitations', requireFarm('members.manage'), async (_req, res) => {
+router.get('/:farm/invitations', requireFarm('members.invite'), async (_req, res) => {
   res.json({ invitations: await farms.listInvitations(getFarm(res).farm.id) });
 });
 
-router.post('/:farm/invitations', requireFarm('members.manage'), inviteLimiter, validate(inviteMemberSchema), async (req, res) => {
+router.post('/:farm/invitations', requireFarm('members.invite'), inviteLimiter, validate(inviteMemberSchema), async (req, res) => {
   const { farm, role } = getFarm(res);
   const input = req.body as z.output<typeof inviteMemberSchema>;
   if (!assignableRoles(role).includes(input.role)) throw forbidden('Only owners can invite owners', 'OWNER_REQUIRED');
@@ -117,11 +120,56 @@ router.post('/:farm/invitations', requireFarm('members.manage'), inviteLimiter, 
   res.status(201).json({ invitation: { id: invitation.id, email: invitation.email, role: invitation.role, expiresAt: invitation.expiresAt.toISOString() } });
 });
 
-router.delete('/:farm/invitations/:id', requireFarm('members.manage'), async (req, res) => {
+router.delete('/:farm/invitations/:id', requireFarm('members.invite'), async (req, res) => {
   const { farm } = getFarm(res);
   const { email } = await farms.revokeInvitation(farm.id, String(req.params.id));
   await audit(req, { action: 'farm.invitation_revoked', ...farmEvent(farm.id), metadata: { email } });
   res.status(204).end();
+});
+
+// ─── Roles & permissions ─────────────────────────────────────────
+
+const roleParam = (req: Request) => {
+  const role = farmRoleSchema.safeParse(req.params.role);
+  if (!role.success) throw notFound('Role not found');
+  return role.data;
+};
+
+const actorOf = (req: Request, res: Response) => {
+  const { role, permissions } = getFarm(res);
+  return { userId: req.auth!.user.id, role, permissions };
+};
+
+router.get('/:farm/permissions', requireFarm('roles.view'), async (_req, res) => {
+  res.json(await farms.getFarmPermissions(getFarm(res).farm.id));
+});
+
+/** Role-based keys: the full set of action keys a role holds on this farm. */
+router.put('/:farm/roles/:role/permissions', requireFarm('roles.manage'), validate(rolePermissionsSchema), async (req, res) => {
+  const { farm } = getFarm(res);
+  const role = roleParam(req);
+  const { permissions } = req.body as z.output<typeof rolePermissionsSchema>;
+  const { changed } = await farms.setRolePermissions(farm.id, actorOf(req, res), role, permissions);
+  if (changed.length) await audit(req, { action: 'farm.role_permissions_changed', ...farmEvent(farm.id), metadata: { role, changed } });
+  res.json(await farms.getFarmPermissions(farm.id));
+});
+
+router.delete('/:farm/roles/:role/permissions', requireFarm('roles.manage'), async (req, res) => {
+  const { farm } = getFarm(res);
+  const role = roleParam(req);
+  const { changed } = await farms.resetRolePermissions(farm.id, actorOf(req, res), role);
+  if (changed.length) await audit(req, { action: 'farm.role_permissions_reset', ...farmEvent(farm.id), metadata: { role, changed } });
+  res.json(await farms.getFarmPermissions(farm.id));
+});
+
+/** Module overrides: allow / deny single action keys for one member, on top of their role. */
+router.put('/:farm/members/:userId/permissions', requireFarm('roles.manage'), validate(memberPermissionsSchema), async (req, res) => {
+  const { farm } = getFarm(res);
+  const targetId = String(req.params.userId);
+  const { overrides } = req.body as z.output<typeof memberPermissionsSchema>;
+  const { changed } = await farms.setMemberOverrides(farm.id, actorOf(req, res), targetId, overrides);
+  if (changed.length) await audit(req, { action: 'farm.member_permissions_changed', ...farmEvent(farm.id), metadata: { userId: targetId, changed } });
+  res.json(await farms.getFarmPermissions(farm.id));
 });
 
 // ─── Activity ────────────────────────────────────────────────────

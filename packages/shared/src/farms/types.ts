@@ -1,4 +1,4 @@
-import type { FarmRole, Permission } from './access';
+import type { FarmRole, Permission, PermissionOverrides } from './access';
 import type { AreaUnit, MilkUnit, UnitSystem, WeightUnit } from './geo';
 import type { FarmType } from './schemas';
 import type { PlanId } from '../subscriptions/plans';
@@ -14,6 +14,8 @@ export interface FarmSummary {
   planId: PlanId;
   memberCount: number;
   suspended: boolean;
+  /** The user's effective permissions on this farm. */
+  permissions: Permission[];
 }
 
 export interface FarmProfile {
@@ -55,7 +57,15 @@ export interface FarmProfile {
 export interface FarmContext extends SubscriptionSnapshot {
   farm: FarmProfile;
   membership: { role: FarmRole; title: string | null; permissions: Permission[] };
+  /** What each role can do on this farm (defaults plus the farm's role overrides). */
+  rolePermissions: Record<FarmRole, Permission[]>;
   usage: FarmUsage;
+}
+
+/** GET /farms/:farm/permissions — the editor for role and member permissions. */
+export interface FarmPermissions {
+  roles: Record<FarmRole, { permissions: Permission[]; overrides: PermissionOverrides }>;
+  members: { userId: string; role: FarmRole; overrides: PermissionOverrides; permissions: Permission[] }[];
 }
 
 export interface FarmMember {

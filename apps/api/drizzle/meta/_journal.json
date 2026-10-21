@@ -50,6 +50,13 @@
       "when": 1791983306762,
       "tag": "0006_products",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792563500116,
+      "tag": "0007_farm_permissions",
+      "breakpoints": true
     }
   ]
 }

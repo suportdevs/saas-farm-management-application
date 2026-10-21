@@ -76,9 +76,16 @@ export function CatalogManager({
   const router = useRouter();
   const pathname = usePathname();
   const { farm } = useFarm();
-  const canManage = useCan('products.manage');
   const { label, plural, description, columns } = CATALOG[resource];
   const withStatus = hasStatus(resource);
+  // One per-action key per button.
+  const canCreate = useCan('products.create');
+  const canUpdate = useCan('products.update');
+  const canDelete = useCan('products.delete');
+  const canImport = useCan('products.import');
+  const canExport = useCan('products.export');
+  /** Selection only exists for bulk actions the member may run. */
+  const canSelect = canDelete || (withStatus && canUpdate);
   const withImage = !!CATALOG[resource].image;
   const apiPath = `/farms/${farm.slug}/${catalogPath(resource)}`;
   const { rows, pagination } = page;
@@ -183,28 +190,32 @@ export function CatalogManager({
         description={description}
         actions={
           <>
-            {canManage && (
+            {canImport && (
               <Button variant="outline" onClick={() => setModal({ type: 'import' })}>
                 <Upload className="h-4 w-4" /> Import
               </Button>
             )}
-            <Button
-              variant="outline"
-              onClick={() => download('export')}
-              loading={busy === 'export'}
-              disabled={empty}
-            >
-              {busy !== 'export' && <Download className="h-4 w-4" />} Export
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => download('print')}
-              loading={busy === 'print'}
-              disabled={empty}
-            >
-              {busy !== 'print' && <Printer className="h-4 w-4" />} Print
-            </Button>
-            {canManage && (
+            {canExport && (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => download('export')}
+                  loading={busy === 'export'}
+                  disabled={empty}
+                >
+                  {busy !== 'export' && <Download className="h-4 w-4" />} Export
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => download('print')}
+                  loading={busy === 'print'}
+                  disabled={empty}
+                >
+                  {busy !== 'print' && <Printer className="h-4 w-4" />} Print
+                </Button>
+              </>
+            )}
+            {canCreate && (
               <Button onClick={() => setModal({ type: 'form', row: null })}>
                 <Plus className="h-4 w-4" /> Add {label.toLowerCase()}
               </Button>
@@ -218,19 +229,23 @@ export function CatalogManager({
           icon={Package}
           title={`No ${plural.toLowerCase()} yet`}
           description={
-            canManage
+            canCreate || canImport
               ? 'Add them one by one, or import a spreadsheet.'
               : `Nobody has added any ${plural.toLowerCase()} yet.`
           }
           action={
-            canManage && (
+            (canCreate || canImport) && (
               <>
-                <Button variant="outline" onClick={() => setModal({ type: 'import' })}>
-                  <Upload className="h-4 w-4" /> Import
-                </Button>
-                <Button onClick={() => setModal({ type: 'form', row: null })}>
-                  <Plus className="h-4 w-4" /> Add {label.toLowerCase()}
-                </Button>
+                {canImport && (
+                  <Button variant="outline" onClick={() => setModal({ type: 'import' })}>
+                    <Upload className="h-4 w-4" /> Import
+                  </Button>
+                )}
+                {canCreate && (
+                  <Button onClick={() => setModal({ type: 'form', row: null })}>
+                    <Plus className="h-4 w-4" /> Add {label.toLowerCase()}
+                  </Button>
+                )}
               </>
             )
           }
@@ -262,7 +277,7 @@ export function CatalogManager({
             {selected.size > 0 && (
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <span className="font-medium">{selected.size} selected</span>
-                {withStatus && (
+                {withStatus && canUpdate && (
                   <Button
                     size="sm"
                     variant="outline"
@@ -273,13 +288,15 @@ export function CatalogManager({
                     {busy !== 'status' && <RefreshCw className="h-3.5 w-3.5" />} Status
                   </Button>
                 )}
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={() => setModal({ type: 'delete', keys: [...selected] })}
-                >
-                  <Trash2 className="h-3.5 w-3.5" /> Delete
-                </Button>
+                {canDelete && (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => setModal({ type: 'delete', keys: [...selected] })}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Delete
+                  </Button>
+                )}
                 <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
                   <X className="h-3.5 w-3.5" /> Clear
                 </Button>
@@ -304,7 +321,7 @@ export function CatalogManager({
             <table className="w-full text-left text-sm">
               <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
-                  {canManage && (
+                  {canSelect && (
                     <th className="w-10 px-4 py-3">
                       <Checkbox
                         checked={allSelected}
@@ -324,7 +341,7 @@ export function CatalogManager({
                       {c.label}
                     </th>
                   ))}
-                  {canManage && <th className="w-24 px-4 py-3" />}
+                  {(canUpdate || canDelete) && <th className="w-24 px-4 py-3" />}
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -333,7 +350,7 @@ export function CatalogManager({
                     key={row.key}
                     className={selected.has(row.key) ? 'bg-primary/5' : 'hover:bg-muted/30'}
                   >
-                    {canManage && (
+                    {canSelect && (
                       <td className="px-4 py-3">
                         <Checkbox
                           checked={selected.has(row.key)}
@@ -359,29 +376,33 @@ export function CatalogManager({
                         <Cell
                           column={c}
                           value={rowValue(row, c.key)}
-                          onToggleStatus={canManage ? () => toggleStatus([row.key]) : undefined}
+                          onToggleStatus={canUpdate ? () => toggleStatus([row.key]) : undefined}
                         />
                       </td>
                     ))}
-                    {canManage && (
+                    {(canUpdate || canDelete) && (
                       <td className="px-4 py-2 text-right">
                         <div className="flex justify-end gap-1">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => setModal({ type: 'form', row })}
-                            aria-label={`Edit ${row.name}`}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => setModal({ type: 'delete', keys: [row.key] })}
-                            aria-label={`Delete ${row.name}`}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
+                          {canUpdate && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => setModal({ type: 'form', row })}
+                              aria-label={`Edit ${row.name}`}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {canDelete && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => setModal({ type: 'delete', keys: [row.key] })}
+                              aria-label={`Delete ${row.name}`}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          )}
                         </div>
                       </td>
                     )}

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { FARM_ROLES } from './access';
+import { FARM_ROLES, PERMISSIONS, type Permission } from './access';
 import { AREA_UNITS, COUNTRY_CODES, isValidCurrency, isValidLocale, isValidTimeZone, MILK_UNITS, UNIT_SYSTEMS, WEIGHT_UNITS } from './geo';
 
 export const FARM_TYPES = ['dairy', 'beef', 'mixed', 'breeding', 'calf_rearing'] as const;
@@ -129,3 +129,17 @@ export type UpdateMemberInput = z.input<typeof updateMemberSchema>;
 export const deleteFarmSchema = z.object({ confirm: z.string().trim().min(1, 'Type the farm name to confirm') });
 
 export const invitationTokenSchema = z.object({ token: z.string().min(1).max(200) });
+
+export const permissionSchema = z.enum(PERMISSIONS as [Permission, ...Permission[]]);
+
+/** PUT /farms/:farm/roles/:role/permissions — the full set of keys the role should hold. */
+export const rolePermissionsSchema = z.object({
+  permissions: z.array(permissionSchema).max(PERMISSIONS.length),
+});
+export type RolePermissionsInput = z.input<typeof rolePermissionsSchema>;
+
+/** PUT /farms/:farm/members/:userId/permissions — allow (true) / deny (false) per key; omitted keys inherit the role. */
+export const memberPermissionsSchema = z.object({
+  overrides: z.partialRecord(permissionSchema, z.boolean()),
+});
+export type MemberPermissionsInput = z.input<typeof memberPermissionsSchema>;

@@ -9,12 +9,13 @@ import {
   Milk,
   Package,
   Settings,
+  ShieldCheck,
   Stethoscope,
   Users,
   Wallet,
   Wheat,
 } from 'lucide-react';
-import { CATALOG, CATALOG_RESOURCES, catalogPath, type Capability, type Permission } from '@kit/shared';
+import { CATALOG, CATALOG_RESOURCES, catalogPath, PERMISSION_MODULES, type Capability, type Permission } from '@kit/shared';
 import { CowMark } from '@/components/logo';
 
 type Icon = ComponentType<{ className?: string }>;
@@ -148,6 +149,8 @@ export function farmNav(slug: string): NavSection[] {
     href: `${base}/${m.slug}`,
     label: m.label,
     icon: m.icon,
+    // Modules with permission keys need their view key, e.g. products.view.
+    permission: m.slug in PERMISSION_MODULES ? (`${m.slug}.view` as Permission) : undefined,
     soon: m.status === 'soon',
     children: m.children?.map((c) => ({ href: `${base}/${c.slug}`, label: c.label })),
   });
@@ -158,7 +161,8 @@ export function farmNav(slug: string): NavSection[] {
     {
       title: 'Farm',
       links: [
-        { href: `${base}/team`, label: 'Team', icon: Users },
+        { href: `${base}/team`, label: 'Team', icon: Users, permission: 'members.view' },
+        { href: `${base}/permissions`, label: 'Roles & permissions', icon: ShieldCheck, permission: 'roles.view' },
         { href: `${base}/activity`, label: 'Activity', icon: History, permission: 'activity.view' },
         { href: `${base}/billing`, label: 'Plan & billing', icon: CreditCard, permission: 'billing.view' },
         { href: `${base}/settings`, label: 'Farm settings', icon: Settings, permission: 'farm.update' },
@@ -177,6 +181,9 @@ export const ACTIVITY_LABELS: Record<string, string> = {
   'farm.member_removed': 'removed a team member',
   'farm.member_role_changed': "changed a member's role",
   'farm.invitation_revoked': 'revoked an invitation',
+  'farm.role_permissions_changed': "changed a role's permissions",
+  'farm.role_permissions_reset': "reset a role's permissions",
+  'farm.member_permissions_changed': "changed a member's permissions",
   'farm.checkout_started': 'started a plan upgrade',
   'products.created': 'added to the product catalog',
   'products.updated': 'updated the product catalog',

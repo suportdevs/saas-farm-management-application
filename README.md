@@ -57,7 +57,7 @@ Rules that keep modules independent:
    import { getFarm, registerUsageCounter, requireFarm } from '../farms';
    import { assertWithinLimit, requireCapability } from '../subscriptions';
 
-   router.post('/:farm/animals', requireFarm('herd.manage'), requireCapability('herd'), async (req, res) => {
+   router.post('/:farm/animals', requireFarm('herd.create'), requireCapability('herd'), async (req, res) => {
      const { farm } = getFarm(res);
      await assertWithinLimit(farm.id, 'animals', await countAnimals(farm.id)); // 402 PLAN_LIMIT_REACHED
      …
@@ -67,8 +67,25 @@ Rules that keep modules independent:
 3. `apps/web/src/modules/herd/` — components; pages under `apps/web/src/app/(app)/farms/[farm]/herd/`
    (they take precedence over the "coming next" placeholder). Flip the module's `status` to `'live'` in
    `apps/web/src/modules/farms/navigation.ts`. Client components read the tenant with `useFarm()`,
-   `useCan('herd.manage')` and `useHasCapability('herd')` from `@/modules/farms/context`.
+   `useCan('herd.create')` and `useHasCapability('herd')` from `@/modules/farms/context`.
 4. `apps/api/test/herd.test.ts`.
+
+### Roles & permissions
+
+Permissions are per-action keys, `<module>.<action>` (`products.view`, `products.delete`, `members.invite`…), declared once
+in `PERMISSION_MODULES` (`packages/shared/src/farms/access.ts`). A member's effective permissions are resolved in three layers:
+
+1. **Role defaults** — `ROLE_PERMISSIONS` in the same file.
+2. **Role overrides (per farm)** — owners change what a role can do on their farm, per action key. Stored as allow/deny deltas in
+   `farm_role_permissions`, so keys added later still follow the defaults.
+3. **Member overrides (per module/action)** — allow or deny single keys for one member (`farm_members.permission_overrides`); they win over the role.
+
+Owners always hold every key; `farm.delete` is owner-only. Changing permissions needs `roles.manage` (owners by default); a
+non-owner given it can only change keys they hold, and never their own. Endpoints: `GET /api/farms/:farm/permissions`,
+`PUT|DELETE /api/farms/:farm/roles/:role/permissions`, `PUT /api/farms/:farm/members/:userId/permissions`. UI: **Farm → Roles & permissions**.
+
+To give a new module keys, add it to `PERMISSION_MODULES` (and its defaults to `ROLE_PERMISSIONS`), then guard each route with
+`requireFarm('<module>.<action>')` and each button with `useCan('<module>.<action>')`.
 
 ### Products module (catalog engine)
 

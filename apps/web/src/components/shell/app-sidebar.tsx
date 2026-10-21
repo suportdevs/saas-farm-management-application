@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ChevronDown, LogOut, Moon, Settings, Shield, ShieldCheck, Sun, UserRound } from 'lucide-react';
-import { can, type FarmSummary, type PublicUser } from '@kit/shared';
+import type { FarmSummary, PublicUser } from '@kit/shared';
 import { Avatar } from '@/components/app/user-menu';
 import { LogoBadge } from '@/components/logo';
 import { Menu, MenuSeparator, menuItemClasses } from '@/components/ui/menu';
@@ -52,7 +52,7 @@ export function SidebarContent({ user, farms, onNavigate }: ShellProps & { onNav
 
       <nav className="scrollbar-sidebar mt-4 flex-1 space-y-5 overflow-y-auto px-3 pb-4" aria-label="Main">
         {sections.map((section, i) => {
-          const links = section.links.filter((l) => !l.permission || (current && can(current.role, l.permission)));
+          const links = section.links.filter((l) => !l.permission || current?.permissions.includes(l.permission));
           if (!links.length) return null;
           return (
             <div key={section.title ?? i}>

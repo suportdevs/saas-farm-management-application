@@ -9,9 +9,9 @@ import { deleteFarm, findFarm, handleUserDeletion } from './service';
  *
  * Public API for other modules (import from '../farms' only):
  */
-export { getFarm, requireFarm, type FarmAccess } from './access';
+export { getFarm, hasPermission, requireFarm, type FarmAccess } from './access';
 export { farmExtensions, type Tx } from './extensions';
-export { farmInvitations, farmMembers, farms, type Farm, type FarmMemberRow } from './schema';
+export { farmInvitations, farmMembers, farmRolePermissions, farms, type Farm, type FarmMemberRow } from './schema';
 export {
   deleteFarm,
   findFarm,

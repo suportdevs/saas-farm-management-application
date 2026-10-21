@@ -454,7 +454,7 @@ describe('products catalog', () => {
     ]);
   });
 
-  it('isolates tenants and enforces products.manage', async () => {
+  it('isolates tenants and enforces per-action product permissions', async () => {
     const { owner, farm, base } = await setup();
     const size = (await owner.c.post(`${base}/sizes`, { name: 'Large', weight: 10 })).body;
 

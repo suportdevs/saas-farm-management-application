@@ -1,13 +1,21 @@
 import { and, asc, count, desc, eq, gt, ne, sql } from 'drizzle-orm';
 import {
-  can,
+  cleanOverrides,
+  diffFromDefaults,
+  FARM_ROLES,
+  isOwnerOnly,
   PERMISSIONS,
+  resolvePermissions,
+  rolePermissions,
   type CreateFarmData,
   type FarmContext,
+  type FarmPermissions,
   type FarmProfile,
   type FarmRole,
   type FarmSummary,
   type FarmUsage,
+  type Permission,
+  type PermissionOverrides,
   type UnitSystem,
 } from '@kit/shared';
 import { auditLogs } from '../../db/schema';
@@ -15,7 +23,7 @@ import { badRequest, conflict, db, forbidden, notFound, randomToken, sha256, use
 import { config } from './config';
 import { sendInvitationEmail } from './emails';
 import { farmExtensions } from './extensions';
-import { farmInvitations, farmMembers, farms, type Farm, type FarmMemberRow } from './schema';
+import { farmInvitations, farmMembers, farmRolePermissions, farms, type Farm, type FarmMemberRow } from './schema';
 
 const DAY = 24 * 60 * 60 * 1000;
 const INVITE_TTL = 7 * DAY;
@@ -89,14 +97,114 @@ export async function usageOf(farmId: string): Promise<FarmUsage> {
 }
 
 /** The farm workspace: the core fields plus whatever other modules contribute (e.g. the plan). */
-export async function contextOf(farm: Farm, member: Pick<FarmMemberRow, 'role' | 'title'>): Promise<FarmContext> {
-  const [usage, extra] = await Promise.all([usageOf(farm.id), farmExtensions.context(farm)]);
+export async function contextOf(farm: Farm, member: Pick<FarmMemberRow, 'role' | 'title' | 'permissionOverrides'>): Promise<FarmContext> {
+  const [usage, extra, roleOverrides] = await Promise.all([usageOf(farm.id), farmExtensions.context(farm), roleOverridesOf(farm.id)]);
+  const permissions = resolvePermissions(member.role, {
+    roleOverrides: roleOverrides[member.role],
+    memberOverrides: cleanOverrides(member.permissionOverrides),
+  });
   return {
     ...extra,
     farm: serializeFarm(farm),
-    membership: { role: member.role, title: member.title, permissions: PERMISSIONS.filter((p) => can(member.role, p)) },
+    membership: { role: member.role, title: member.title, permissions },
+    rolePermissions: Object.fromEntries(FARM_ROLES.map((r) => [r, rolePermissions(r, roleOverrides[r])])),
     usage,
   } as FarmContext;
+}
+
+// ─── Permissions ─────────────────────────────────────────────────
+
+/** The farm's role overrides, per role ({} for roles on their defaults). */
+export async function roleOverridesOf(farmId: string): Promise<Record<FarmRole, PermissionOverrides>> {
+  const rows = await db.select().from(farmRolePermissions).where(eq(farmRolePermissions.farmId, farmId));
+  const byRole = Object.fromEntries(FARM_ROLES.map((r) => [r, {}])) as Record<FarmRole, PermissionOverrides>;
+  for (const row of rows) byRole[row.role] = cleanOverrides(row.overrides);
+  return byRole;
+}
+
+export async function getFarmPermissions(farmId: string): Promise<FarmPermissions> {
+  const [roleOverrides, members] = await Promise.all([
+    roleOverridesOf(farmId),
+    db
+      .select({ userId: farmMembers.userId, role: farmMembers.role, overrides: farmMembers.permissionOverrides })
+      .from(farmMembers)
+      .where(eq(farmMembers.farmId, farmId)),
+  ]);
+  return {
+    roles: Object.fromEntries(
+      FARM_ROLES.map((r) => [r, { permissions: rolePermissions(r, roleOverrides[r]), overrides: roleOverrides[r] }]),
+    ) as FarmPermissions['roles'],
+    members: members.map((m) => {
+      const overrides = m.role === 'owner' ? {} : cleanOverrides(m.overrides);
+      return { userId: m.userId, role: m.role, overrides, permissions: resolvePermissions(m.role, { roleOverrides: roleOverrides[m.role], memberOverrides: overrides }) };
+    }),
+  };
+}
+
+export interface PermissionActor {
+  userId: string;
+  role: FarmRole;
+  permissions: Permission[];
+}
+
+/**
+ * Nobody hands out more than they hold: owners may change any key (except the
+ * owner-only ones, which can't be granted at all); others only keys they hold themselves.
+ */
+function assertMayChange(actor: PermissionActor, changed: Permission[]) {
+  const ownerOnly = changed.filter(isOwnerOnly);
+  if (ownerOnly.length) throw badRequest(`Only owners can ${ownerOnly.join(', ')}`, 'OWNER_ONLY_PERMISSION');
+  if (actor.role === 'owner') return;
+  const missing = changed.filter((p) => !actor.permissions.includes(p));
+  if (missing.length) {
+    throw forbidden(`You can only change permissions you hold yourself (${missing.join(', ')})`, 'PERMISSION_ESCALATION');
+  }
+}
+
+/** Sets what `role` can do on this farm. Stored as overrides of the role's defaults. */
+export async function setRolePermissions(farmId: string, actor: PermissionActor, role: FarmRole, wanted: Permission[]) {
+  if (role === 'owner') throw badRequest('Owners always have every permission', 'OWNER_ROLE_LOCKED');
+  if (actor.role !== 'owner' && actor.role === role) {
+    throw badRequest("You can't change your own role's permissions. Ask an owner.", 'SELF_PERMISSION_CHANGE');
+  }
+  const current = rolePermissions(role, (await roleOverridesOf(farmId))[role]);
+  const target = new Set(wanted);
+  const changed = PERMISSIONS.filter((p) => current.includes(p) !== target.has(p));
+  if (!changed.length) return { changed };
+  assertMayChange(actor, changed);
+  const overrides = diffFromDefaults(role, [...target]);
+  if (Object.keys(overrides).length === 0) {
+    await db.delete(farmRolePermissions).where(and(eq(farmRolePermissions.farmId, farmId), eq(farmRolePermissions.role, role)));
+  } else {
+    await db
+      .insert(farmRolePermissions)
+      .values({ farmId, role, overrides, updatedById: actor.userId })
+      .onConflictDoUpdate({ target: [farmRolePermissions.farmId, farmRolePermissions.role], set: { overrides, updatedById: actor.userId } });
+  }
+  return { changed };
+}
+
+/** Puts a role back on its built-in defaults. */
+export async function resetRolePermissions(farmId: string, actor: PermissionActor, role: FarmRole) {
+  return setRolePermissions(farmId, actor, role, rolePermissions(role));
+}
+
+/** Replaces a member's allow/deny overrides (keys left out inherit the role). */
+export async function setMemberOverrides(farmId: string, actor: PermissionActor, targetUserId: string, overrides: PermissionOverrides) {
+  const target = await getMember(farmId, targetUserId);
+  if (!target) throw notFound('Member not found');
+  if (actor.userId === targetUserId) throw badRequest("You can't change your own permissions. Ask an owner.", 'SELF_PERMISSION_CHANGE');
+  if (target.role === 'owner') throw badRequest('Owners always have every permission', 'OWNER_ROLE_LOCKED');
+  const previous = cleanOverrides(target.permissionOverrides);
+  const next = cleanOverrides(overrides);
+  const changed = PERMISSIONS.filter((p) => previous[p] !== next[p]);
+  if (!changed.length) return { changed };
+  assertMayChange(actor, changed);
+  await db
+    .update(farmMembers)
+    .set({ permissionOverrides: next })
+    .where(and(eq(farmMembers.farmId, farmId), eq(farmMembers.userId, targetUserId)));
+  return { changed };
 }
 
 // ─── Farms ───────────────────────────────────────────────────────
@@ -134,14 +242,21 @@ export async function listUserFarms(userId: string): Promise<FarmSummary[]> {
     .groupBy(farmMembers.farmId)
     .as('member_count');
   const rows = await db
-    .select({ farm: farms, role: farmMembers.role, members: memberCount.total })
+    .select({
+      farm: farms,
+      role: farmMembers.role,
+      members: memberCount.total,
+      memberOverrides: farmMembers.permissionOverrides,
+      roleOverrides: farmRolePermissions.overrides,
+    })
     .from(farmMembers)
     .innerJoin(farms, eq(farms.id, farmMembers.farmId))
     .innerJoin(memberCount, eq(memberCount.farmId, farms.id))
+    .leftJoin(farmRolePermissions, and(eq(farmRolePermissions.farmId, farmMembers.farmId), eq(farmRolePermissions.role, farmMembers.role)))
     .where(eq(farmMembers.userId, userId))
     .orderBy(sql`${farmMembers.lastAccessedAt} desc nulls last`, asc(farms.name));
   const extra = await farmExtensions.summaries(rows.map((r) => r.farm.id));
-  return rows.map(({ farm, role, members }) => ({
+  return rows.map(({ farm, role, members, memberOverrides, roleOverrides }) => ({
     ...extra(farm.id),
     id: farm.id,
     name: farm.name,
@@ -151,6 +266,7 @@ export async function listUserFarms(userId: string): Promise<FarmSummary[]> {
     role,
     memberCount: Number(members),
     suspended: Boolean(farm.suspendedAt),
+    permissions: resolvePermissions(role, { roleOverrides: cleanOverrides(roleOverrides), memberOverrides: cleanOverrides(memberOverrides) }),
   })) as FarmSummary[];
 }
 
@@ -192,15 +308,21 @@ export async function createFarm(user: User, input: CreateFarmData) {
   });
 }
 
-/** Resolves a farm by id or slug together with the user's membership. */
+/** Resolves a farm by id or slug together with the user's membership and effective permissions. */
 export async function findMembership(key: string, userId: string) {
   const [row] = await db
-    .select({ farm: farms, member: farmMembers })
+    .select({ farm: farms, member: farmMembers, roleOverrides: farmRolePermissions.overrides })
     .from(farms)
     .innerJoin(farmMembers, and(eq(farmMembers.farmId, farms.id), eq(farmMembers.userId, userId)))
+    .leftJoin(farmRolePermissions, and(eq(farmRolePermissions.farmId, farms.id), eq(farmRolePermissions.role, farmMembers.role)))
     .where(uuidPattern.test(key) ? eq(farms.id, key) : eq(farms.slug, key.toLowerCase()))
     .limit(1);
-  return row;
+  if (!row) return undefined;
+  const permissions = resolvePermissions(row.member.role, {
+    roleOverrides: cleanOverrides(row.roleOverrides),
+    memberOverrides: cleanOverrides(row.member.permissionOverrides),
+  });
+  return { farm: row.farm, member: row.member, permissions };
 }
 
 export async function findFarm(id: string) {
@@ -284,14 +406,14 @@ async function ownerCount(farmId: string) {
 
 export async function updateMember(
   farmId: string,
-  actor: { userId: string; role: FarmRole },
+  actor: PermissionActor,
   targetUserId: string,
   patch: { role?: FarmRole; title?: string | null },
 ) {
   const target = await getMember(farmId, targetUserId);
   if (!target) throw notFound('Member not found');
   const self = actor.userId === targetUserId;
-  if (!self && !can(actor.role, 'members.manage')) throw forbidden();
+  if (!self && !actor.permissions.includes('members.update')) throw forbidden(undefined, 'FARM_PERMISSION_REQUIRED');
   if (patch.role && patch.role !== target.role) {
     if (self) throw badRequest("You can't change your own role. Ask another owner.", 'SELF_ROLE_CHANGE');
     if ((patch.role === 'owner' || target.role === 'owner') && actor.role !== 'owner') {
@@ -306,11 +428,11 @@ export async function updateMember(
 }
 
 /** Removes a member, or leaves when the target is yourself. */
-export async function removeMember(farmId: string, actor: { userId: string; role: FarmRole }, targetUserId: string) {
+export async function removeMember(farmId: string, actor: PermissionActor, targetUserId: string) {
   const target = await getMember(farmId, targetUserId);
   if (!target) throw notFound('Member not found');
   const self = actor.userId === targetUserId;
-  if (!self && !can(actor.role, 'members.manage')) throw forbidden();
+  if (!self && !actor.permissions.includes('members.remove')) throw forbidden(undefined, 'FARM_PERMISSION_REQUIRED');
   if (!self && target.role === 'owner' && actor.role !== 'owner') throw forbidden('Only owners can remove owners', 'OWNER_REQUIRED');
   if (target.role === 'owner' && (await ownerCount(farmId)) <= 1) {
     throw badRequest('Make someone else an owner first — every farm needs an owner', 'LAST_OWNER');

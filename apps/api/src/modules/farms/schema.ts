@@ -67,6 +67,8 @@ export const farmMembers = pgTable(
     role: farmRole('role').notNull().default('worker'),
     /** Free-text job title, e.g. "Herd manager". */
     title: varchar('title', { length: 80 }),
+    /** Per-member allow (true) / deny (false) of single permission keys, on top of the role. */
+    permissionOverrides: jsonb('permission_overrides').$type<Record<string, boolean>>().notNull().default({}),
     /** Used to reopen the farm the user worked in last. */
     lastAccessedAt: timestamp('last_accessed_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -93,7 +95,30 @@ export const farmInvitations = pgTable(
   (t) => [unique('farm_invitations_farm_email_unique').on(t.farmId, t.email)],
 );
 
+/**
+ * A farm's changes to a role's default permissions, stored as allow/deny per
+ * key so permissions added later still follow the role's defaults.
+ * No row = the role's defaults.
+ */
+export const farmRolePermissions = pgTable(
+  'farm_role_permissions',
+  {
+    farmId: uuid('farm_id')
+      .notNull()
+      .references(() => farms.id, { onDelete: 'cascade' }),
+    role: farmRole('role').notNull(),
+    overrides: jsonb('overrides').$type<Record<string, boolean>>().notNull().default({}),
+    updatedById: uuid('updated_by_id').references(() => users.id, { onDelete: 'set null' }),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [primaryKey({ columns: [t.farmId, t.role] })],
+);
+
 
 export type Farm = typeof farms.$inferSelect;
 export type FarmMemberRow = typeof farmMembers.$inferSelect;
 export type FarmInvitationRow = typeof farmInvitations.$inferSelect;
+export type FarmRolePermissionsRow = typeof farmRolePermissions.$inferSelect;

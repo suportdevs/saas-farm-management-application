@@ -22,7 +22,15 @@ import { sniffImage } from './images';
 
 const importLimiter = limiter({ name: 'catalog-import', windowMs: 60 * 60 * 1000, limit: 30 });
 const uploadLimiter = limiter({ name: 'catalog-upload', windowMs: 60 * 60 * 1000, limit: 200 });
-const manage = requireFarm('products.manage');
+/** One per-action key per endpoint group. */
+const can = {
+  view: requireFarm('products.view'),
+  create: requireFarm('products.create'),
+  update: requireFarm('products.update'),
+  delete: requireFarm('products.delete'),
+  import: requireFarm('products.import'),
+  export: requireFarm('products.export'),
+};
 /** Image uploads arrive as the raw file body (Content-Type: image/*). */
 const imageBody = express.raw({ type: 'image/*', limit: IMAGE_MAX_BYTES });
 
@@ -72,7 +80,7 @@ function catalogRouter(catalog: Catalog) {
 
   router.get(
     '/',
-    requireFarm(),
+    can.view,
     validate(catalogListSchema(resource), 'query'),
     async (req, res) => {
       res.json(await catalog.list(tenantOf(res), req.query as unknown as CatalogListQuery));
@@ -81,7 +89,7 @@ function catalogRouter(catalog: Catalog) {
 
   router.get(
     '/export',
-    requireFarm(),
+    can.export,
     validate(catalogFilterSchema(resource), 'query'),
     async (req, res) => {
       res.json({
@@ -92,7 +100,7 @@ function catalogRouter(catalog: Catalog) {
 
   router.get(
     '/options',
-    requireFarm(),
+    can.view,
     validate(catalogOptionsSchema(resource), 'query'),
     async (req, res) => {
       const query = req.query as unknown as CatalogFilters & { keys?: string[] };
@@ -100,7 +108,7 @@ function catalogRouter(catalog: Catalog) {
     },
   );
 
-  router.post('/', manage, validate(input), async (req, res) => {
+  router.post('/', can.create, validate(input), async (req, res) => {
     const tenantId = getFarm(res).farm.id;
     const row = await catalog.create(tenantId, req.auth!.user.id, req.body);
     await record(req, tenantId, 'created', { name: req.body.name });
@@ -109,7 +117,7 @@ function catalogRouter(catalog: Catalog) {
 
   router.post(
     '/import',
-    manage,
+    can.import,
     importLimiter,
     validate(catalogImportSchema(resource)),
     async (req, res) => {
@@ -120,7 +128,7 @@ function catalogRouter(catalog: Catalog) {
     },
   );
 
-  router.post('/bulk-delete', manage, validate(bulkKeysSchema), async (req, res) => {
+  router.post('/bulk-delete', can.delete, validate(bulkKeysSchema), async (req, res) => {
     const { keys } = req.body as z.infer<typeof bulkKeysSchema>;
     const tenantId = getFarm(res).farm.id;
     const deleted = await catalog.remove(tenantId, req.auth!.user.id, keys);
@@ -129,7 +137,7 @@ function catalogRouter(catalog: Catalog) {
   });
 
   if (hasStatus(resource)) {
-    router.post('/toggle-status', manage, validate(bulkKeysSchema), async (req, res) => {
+    router.post('/toggle-status', can.update, validate(bulkKeysSchema), async (req, res) => {
       const { keys } = req.body as z.infer<typeof bulkKeysSchema>;
       const tenantId = getFarm(res).farm.id;
       const updated = await catalog.toggleStatus(tenantId, req.auth!.user.id, keys);
@@ -139,7 +147,7 @@ function catalogRouter(catalog: Catalog) {
   }
 
   if (CATALOG[resource].image) {
-    router.get('/:key/image', requireFarm(), async (req, res) => {
+    router.get('/:key/image', can.view, async (req, res) => {
       const image = await catalog.image(getFarm(res).farm.id, keyParam(req));
       if (!image) throw notFound('No image');
       // URLs carry the file name as ?v=, so a changed image gets a new URL.
@@ -150,7 +158,7 @@ function catalogRouter(catalog: Catalog) {
       res.send(image.data);
     });
 
-    router.put('/:key/image', manage, uploadLimiter, imageBody, async (req, res) => {
+    router.put('/:key/image', can.update, uploadLimiter, imageBody, async (req, res) => {
       const data = Buffer.isBuffer(req.body) ? req.body : null;
       const type = data && sniffImage(data);
       if (!data || !type)
@@ -164,7 +172,7 @@ function catalogRouter(catalog: Catalog) {
       res.json({ image });
     });
 
-    router.delete('/:key/image', manage, async (req, res) => {
+    router.delete('/:key/image', can.update, async (req, res) => {
       const tenantId = getFarm(res).farm.id;
       await catalog.setImage(tenantId, req.auth!.user.id, keyParam(req), null);
       await record(req, tenantId, 'updated', { image: 'removed' });
@@ -172,14 +180,14 @@ function catalogRouter(catalog: Catalog) {
     });
   }
 
-  router.put('/:key', manage, validate(input), async (req, res) => {
+  router.put('/:key', can.update, validate(input), async (req, res) => {
     const tenantId = getFarm(res).farm.id;
     const row = await catalog.update(tenantId, req.auth!.user.id, keyParam(req), req.body);
     await record(req, tenantId, 'updated', { name: req.body.name });
     res.json(row);
   });
 
-  router.delete('/:key', manage, async (req, res) => {
+  router.delete('/:key', can.delete, async (req, res) => {
     const tenantId = getFarm(res).farm.id;
     await catalog.remove(tenantId, req.auth!.user.id, [keyParam(req)]);
     await record(req, tenantId, 'deleted', { count: 1 });

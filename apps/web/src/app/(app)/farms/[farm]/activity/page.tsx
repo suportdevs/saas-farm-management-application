@@ -20,6 +20,8 @@ function detail(e: FarmActivityEntry): string | null {
   if (e.action === 'farm.member_role_changed' && typeof m.to === 'string') return `${ROLE_INFO[m.from as FarmRole]?.label ?? m.from} → ${ROLE_INFO[m.to as FarmRole]?.label ?? m.to}`;
   if (e.action === 'farm.invitation_revoked' && typeof m.email === 'string') return m.email;
   if (e.action === 'farm.updated' && Array.isArray(m.fields)) return `Changed ${m.fields.join(', ')}`;
+  if (e.action.startsWith('farm.role_permissions_') && Array.isArray(m.changed)) return `${ROLE_INFO[m.role as FarmRole]?.label ?? m.role} · ${m.changed.join(', ')}`;
+  if (e.action === 'farm.member_permissions_changed' && Array.isArray(m.changed)) return m.changed.join(', ');
   if (e.action === 'admin.farm.plan_changed' && typeof m.to === 'string') return `${m.from} → ${m.to}`;
   if (e.action === 'admin.farm.suspended' && typeof m.reason === 'string') return m.reason;
   if (e.action.startsWith('products.') && isCatalogResource(m.resource)) {
