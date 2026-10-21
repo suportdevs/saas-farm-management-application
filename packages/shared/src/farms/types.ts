@@ -11,6 +11,8 @@ export interface FarmSummary {
   type: FarmType;
   country: string;
   role: FarmRole;
+  /** Set when the user has one of the farm's custom roles. */
+  customRole: CustomRoleRef | null;
   planId: PlanId;
   memberCount: number;
   suspended: boolean;
@@ -60,9 +62,11 @@ export interface FarmProfile {
  */
 export interface FarmContext extends SubscriptionSnapshot {
   farm: FarmProfile;
-  membership: { role: FarmRole; title: string | null; permissions: Permission[] };
+  membership: { role: FarmRole; customRole: CustomRoleRef | null; title: string | null; permissions: Permission[] };
   /** What each role can do on this farm (defaults plus the farm's role overrides). */
   rolePermissions: Record<FarmRole, Permission[]>;
+  /** The farm's own roles, for role pickers and the roles guide. */
+  customRoles: FarmCustomRole[];
   /** Per module: on, not in the plan, or switched off by the farm. */
   modules: Record<PermissionModule, ModuleStatus>;
   usage: FarmUsage;
@@ -71,7 +75,23 @@ export interface FarmContext extends SubscriptionSnapshot {
 /** GET /farms/:farm/permissions — the editor for role and member permissions. */
 export interface FarmPermissions {
   roles: Record<FarmRole, { permissions: Permission[]; overrides: PermissionOverrides }>;
-  members: { userId: string; role: FarmRole; overrides: PermissionOverrides; permissions: Permission[] }[];
+  customRoles: FarmCustomRole[];
+  members: { userId: string; role: FarmRole; customRoleId: string | null; overrides: PermissionOverrides; permissions: Permission[] }[];
+}
+
+export interface CustomRoleRef {
+  id: string;
+  name: string;
+}
+
+/** A role a farm defined itself, with its own per-action keys. */
+export interface FarmCustomRole extends CustomRoleRef {
+  description: string | null;
+  permissions: Permission[];
+  /** Members plus pending invitations holding the role. */
+  memberCount: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface FarmMember {
@@ -80,6 +100,7 @@ export interface FarmMember {
   email: string;
   image: string | null;
   role: FarmRole;
+  customRole: CustomRoleRef | null;
   title: string | null;
   joinedAt: string;
   lastActiveAt: string | null;
@@ -89,6 +110,7 @@ export interface FarmInvitation {
   id: string;
   email: string;
   role: FarmRole;
+  customRole: CustomRoleRef | null;
   title: string | null;
   invitedBy: string | null;
   expiresAt: string;
@@ -99,6 +121,7 @@ export interface InvitationPreview {
   farm: { name: string; slug: string; type: FarmType; country: string };
   email: string;
   role: FarmRole;
+  customRole: CustomRoleRef | null;
   invitedBy: string | null;
 }
 

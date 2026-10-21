@@ -124,15 +124,37 @@ export function rolePermissions(role: FarmRole, roleOverrides: PermissionOverrid
   return PERMISSIONS.filter((p) => set.has(p) && !isOwnerOnly(p));
 }
 
-/** A member's effective permissions, in PERMISSIONS order. */
+/**
+ * A member's effective permissions, in PERMISSIONS order. A member with a
+ * custom role gets that role's keys in place of their system role's.
+ */
 export function resolvePermissions(
   role: FarmRole,
-  layers: { roleOverrides?: PermissionOverrides; memberOverrides?: PermissionOverrides } = {},
+  layers: { roleOverrides?: PermissionOverrides; memberOverrides?: PermissionOverrides; customRole?: readonly unknown[] | null } = {},
 ): Permission[] {
   if (role === 'owner') return [...PERMISSIONS];
-  const set = applyOverrides(rolePermissions(role, layers.roleOverrides), layers.memberOverrides ?? {});
+  const base = layers.customRole ? cleanPermissions(layers.customRole) : rolePermissions(role, layers.roleOverrides);
+  const set = applyOverrides(base, layers.memberOverrides ?? {});
   return PERMISSIONS.filter((p) => set.has(p) && !isOwnerOnly(p));
 }
+
+/** A stored permission list, minus unknown and owner-only keys, in PERMISSIONS order. */
+export function cleanPermissions(raw: readonly unknown[]): Permission[] {
+  const set = new Set(raw.filter(isPermission));
+  return PERMISSIONS.filter((p) => set.has(p) && !isOwnerOnly(p));
+}
+
+/**
+ * Members with a custom role are stored with this system role underneath: it
+ * carries no special powers (unlike owner), so owner-only rules keep working.
+ */
+export const CUSTOM_ROLE_BASE: FarmRole = 'viewer';
+
+/** Most custom roles a farm can define. */
+export const MAX_CUSTOM_ROLES = 30;
+
+/** The name shown for a member: their custom role, else their system role. */
+export const roleLabel = (role: FarmRole, customRole?: { name: string } | null) => customRole?.name ?? ROLE_INFO[role].label;
 
 /** The role overrides that turn a role's defaults into `wanted`. */
 export function diffFromDefaults(role: FarmRole, wanted: readonly Permission[]): PermissionOverrides {

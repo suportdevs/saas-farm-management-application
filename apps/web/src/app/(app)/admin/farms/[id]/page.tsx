@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
-import { FARM_TYPE_INFO, ROLE_INFO, type FarmActivityEntry, type FarmMember, type FarmProfile, type PlatformFarm } from '@kit/shared';
+import { FARM_TYPE_INFO, roleLabel, type FarmActivityEntry, type FarmMember, type FarmProfile, type PlatformFarm } from '@kit/shared';
 import { FarmAdminActions } from '@/modules/platform/components/farm-admin-actions';
 import { SubscriptionBadge } from '@/modules/platform/components/subscription-badge';
 import { Avatar } from '@/components/app/user-menu';
@@ -99,7 +99,7 @@ export default async function AdminFarmPage({ params }: { params: Promise<{ id: 
                     <p className="truncate text-sm font-medium">{m.name}</p>
                     <p className="truncate text-xs text-muted-foreground">{m.email}</p>
                   </Link>
-                  <Badge variant={m.role === 'owner' ? 'primary' : 'default'}>{ROLE_INFO[m.role].label}</Badge>
+                  <Badge variant={m.role === 'owner' ? 'primary' : 'default'}>{roleLabel(m.role, m.customRole)}</Badge>
                 </li>
               ))}
             </ul>

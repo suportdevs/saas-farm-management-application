@@ -61,13 +61,35 @@ export const STAFF_ROLE_PERMISSIONS: Record<StaffRole, readonly PlatformPermissi
   analyst: ['platform.stats.view', 'platform.users.view', 'platform.tenants.view'],
 };
 
+/** Whether `v` is one of the built-in staff roles (custom staff roles live in the database). */
 export const isStaffRole = (v: unknown): v is StaffRole => typeof v === 'string' && (STAFF_ROLES as readonly string[]).includes(v);
 
-/** The staff role in effect: admins without one are super admins; non-admins have none. */
-export const staffRoleOf = (user: { role: string; staffRole?: string | null }): StaffRole | null =>
-  user.role !== 'admin' ? null : isStaffRole(user.staffRole) ? user.staffRole : 'super_admin';
+const PLATFORM_PERMISSION_SET: ReadonlySet<string> = new Set(PLATFORM_PERMISSIONS);
+export const isPlatformPermission = (v: unknown): v is PlatformPermission => typeof v === 'string' && PLATFORM_PERMISSION_SET.has(v);
 
-export const platformPermissionsOf = (user: { role: string; staffRole?: string | null }): PlatformPermission[] => {
-  const role = staffRoleOf(user);
-  return role ? [...STAFF_ROLE_PERMISSIONS[role]] : [];
-};
+/** A stored list, minus unknown keys, in PLATFORM_PERMISSIONS order. */
+export const cleanPlatformPermissions = (raw: readonly unknown[]): PlatformPermission[] =>
+  PLATFORM_PERMISSIONS.filter((p) => raw.includes(p));
+
+/**
+ * The staff role key in effect: admins without one are super admins; non-admins
+ * have none. Custom keys are returned as-is — the API resolves their permissions.
+ */
+export const staffRoleOf = (user: { role: string; staffRole?: string | null }): string | null =>
+  user.role !== 'admin' ? null : (user.staffRole ?? 'super_admin');
+
+/** Permissions of a built-in staff role key ([] for custom keys — see the API's staff resolver). */
+export const systemStaffPermissions = (key: string | null): PlatformPermission[] => (isStaffRole(key) ? [...STAFF_ROLE_PERMISSIONS[key]] : []);
+
+/** A staff role as the operator console lists it: built-in or created by a super admin. */
+export interface PlatformRole {
+  key: string;
+  name: string;
+  description: string | null;
+  permissions: PlatformPermission[];
+  system: boolean;
+  /** Staff currently holding the role. */
+  userCount: number;
+  createdAt: string | null;
+  updatedAt: string | null;
+}

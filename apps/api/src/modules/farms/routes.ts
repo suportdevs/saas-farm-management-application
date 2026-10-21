@@ -1,8 +1,11 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import {
-  assignableRoles,
+  createCustomRoleSchema,
   createFarmSchema,
+  FARM_ROLES,
+  ROLE_INFO,
+  updateCustomRoleSchema,
   deleteFarmSchema,
   inviteMemberSchema,
   invitationTokenSchema,
@@ -14,8 +17,9 @@ import {
   type CreateFarmData,
   type UpdateFarmData,
 } from '@kit/shared';
-import { audit, badRequest, forbidden, forbidImpersonation, limiter, notFound, requireAuth, validate } from '../../core';
+import { audit, badRequest, forbidImpersonation, limiter, notFound, requireAuth, validate } from '../../core';
 import { getFarm, requireFarm } from './access';
+import { createCustomRole, deleteCustomRole, isRoleId, listCustomRoles, updateCustomRole, type PermissionActor } from './roles';
 import * as farms from './service';
 
 export const router = Router();
@@ -42,7 +46,7 @@ router.post('/', createLimiter, validate(createFarmSchema), async (req, res) => 
   const input = req.body as CreateFarmData;
   const farm = await farms.createFarm(req.auth!.user, input);
   await audit(req, { action: 'farm.created', ...farmEvent(farm.id), metadata: { name: farm.name, type: farm.type, country: farm.country } });
-  res.status(201).json(await farms.contextOf(farm, { role: 'owner', title: null, permissionOverrides: {} }));
+  res.status(201).json(await farms.contextOf(farm, { role: 'owner', title: null, permissionOverrides: {}, customRoleId: null }));
 });
 
 // Declared before the /:farm routes.
@@ -79,6 +83,12 @@ router.delete('/:farm', requireFarm('farm.delete'), forbidImpersonation, validat
   res.status(204).end();
 });
 
+/** Role and permission editors act on what they were granted, independent of the current plan. */
+const actorOf = (req: Request, res: Response): PermissionActor => {
+  const { role, member, granted } = getFarm(res);
+  return { userId: req.auth!.user.id, role, customRoleId: member.customRoleId, permissions: granted };
+};
+
 // ─── Team ────────────────────────────────────────────────────────
 
 router.get('/:farm/members', requireFarm('members.view'), async (_req, res) => {
@@ -86,21 +96,21 @@ router.get('/:farm/members', requireFarm('members.view'), async (_req, res) => {
 });
 
 router.patch('/:farm/members/:userId', requireFarm(), validate(updateMemberSchema), async (req, res) => {
-  const { farm, role, permissions } = getFarm(res);
+  const { farm } = getFarm(res);
   const patch = req.body as z.output<typeof updateMemberSchema>;
   const targetId = String(req.params.userId);
-  const { previousRole } = await farms.updateMember(farm.id, { userId: req.auth!.user.id, role, permissions }, targetId, patch);
-  if (patch.role && patch.role !== previousRole) {
-    await audit(req, { action: 'farm.member_role_changed', ...farmEvent(farm.id), metadata: { userId: targetId, from: previousRole, to: patch.role } });
+  const { changed, from, to } = await farms.updateMember(farm.id, actorOf(req, res), targetId, patch);
+  if (changed && from !== to) {
+    await audit(req, { action: 'farm.member_role_changed', ...farmEvent(farm.id), metadata: { userId: targetId, from, to } });
   }
   res.status(204).end();
 });
 
 /** Removes a member — or leaves the farm when the target is yourself. */
 router.delete('/:farm/members/:userId', requireFarm(), async (req, res) => {
-  const { farm, role, permissions } = getFarm(res);
+  const { farm } = getFarm(res);
   const targetId = String(req.params.userId);
-  await farms.removeMember(farm.id, { userId: req.auth!.user.id, role, permissions }, targetId);
+  await farms.removeMember(farm.id, actorOf(req, res), targetId);
   const self = targetId === req.auth!.user.id;
   await audit(req, { action: self ? 'farm.member_left' : 'farm.member_removed', ...farmEvent(farm.id), metadata: { userId: targetId } });
   res.status(204).end();
@@ -111,13 +121,20 @@ router.get('/:farm/invitations', requireFarm('members.invite'), async (_req, res
 });
 
 router.post('/:farm/invitations', requireFarm('members.invite'), inviteLimiter, validate(inviteMemberSchema), async (req, res) => {
-  const { farm, role } = getFarm(res);
+  const { farm } = getFarm(res);
   const input = req.body as z.output<typeof inviteMemberSchema>;
-  if (!assignableRoles(role).includes(input.role)) throw forbidden('Only owners can invite owners', 'OWNER_REQUIRED');
   if (input.email === req.auth!.user.email) throw badRequest("You're already on the team", 'ALREADY_MEMBER');
-  const invitation = await farms.invite(farm, req.auth!.user, input);
-  await audit(req, { action: 'farm.member_invited', ...farmEvent(farm.id), metadata: { email: input.email, role: input.role } });
-  res.status(201).json({ invitation: { id: invitation.id, email: invitation.email, role: invitation.role, expiresAt: invitation.expiresAt.toISOString() } });
+  const { invitation, roleLabel } = await farms.invite(farm, req.auth!.user, actorOf(req, res), input);
+  await audit(req, { action: 'farm.member_invited', ...farmEvent(farm.id), metadata: { email: input.email, role: invitation.role, roleLabel } });
+  res.status(201).json({
+    invitation: {
+      id: invitation.id,
+      email: invitation.email,
+      role: invitation.role,
+      customRoleId: invitation.customRoleId,
+      expiresAt: invitation.expiresAt.toISOString(),
+    },
+  });
 });
 
 router.delete('/:farm/invitations/:id', requireFarm('members.invite'), async (req, res) => {
@@ -128,27 +145,79 @@ router.delete('/:farm/invitations/:id', requireFarm('members.invite'), async (re
 });
 
 // ─── Roles & permissions ─────────────────────────────────────────
+//
+//   GET    /:farm/permissions              everything the editor needs (system + custom roles, members)
+//   GET    /:farm/roles                    system and custom roles
+//   POST   /:farm/roles                    create a custom role
+//   GET    /:farm/roles/:id                one custom role
+//   PATCH  /:farm/roles/:id                rename / describe / change keys of a custom role
+//   DELETE /:farm/roles/:id                delete an unused custom role
+//   PUT    /:farm/roles/:role/permissions  keys of a system role (DELETE resets it to the defaults)
+//   PUT    /:farm/members/:userId/permissions   per-member allow / deny overrides
 
-const roleParam = (req: Request) => {
+const systemRoleParam = (req: Request) => {
   const role = farmRoleSchema.safeParse(req.params.role);
   if (!role.success) throw notFound('Role not found');
   return role.data;
-};
-
-/** Permission editors act on what they were granted, independent of the current plan. */
-const actorOf = (req: Request, res: Response) => {
-  const { role, granted } = getFarm(res);
-  return { userId: req.auth!.user.id, role, permissions: granted };
 };
 
 router.get('/:farm/permissions', requireFarm('roles.view'), async (_req, res) => {
   res.json(await farms.getFarmPermissions(getFarm(res).farm.id));
 });
 
-/** Role-based keys: the full set of action keys a role holds on this farm. */
+router.get('/:farm/roles', requireFarm('roles.view'), async (_req, res) => {
+  const { roles, customRoles } = await farms.getFarmPermissions(getFarm(res).farm.id);
+  res.json({
+    system: FARM_ROLES.map((key) => ({ key, ...ROLE_INFO[key], ...roles[key] })),
+    custom: customRoles,
+  });
+});
+
+router.post('/:farm/roles', requireFarm('roles.manage'), validate(createCustomRoleSchema), async (req, res) => {
+  const { farm } = getFarm(res);
+  const input = req.body as z.output<typeof createCustomRoleSchema>;
+  const role = await createCustomRole(farm.id, actorOf(req, res), input);
+  await audit(req, {
+    action: 'farm.role_created',
+    ...farmEvent(farm.id),
+    metadata: { roleId: role.id, name: role.name, permissions: role.permissions },
+  });
+  const created = (await listCustomRoles(farm.id)).find((r) => r.id === role.id);
+  res.status(201).json({ role: created });
+});
+
+router.get('/:farm/roles/:id', requireFarm('roles.view'), async (req, res) => {
+  const { farm } = getFarm(res);
+  const id = String(req.params.id);
+  if (!isRoleId(id)) throw notFound('Role not found', 'ROLE_NOT_FOUND');
+  const role = (await listCustomRoles(farm.id)).find((r) => r.id === id);
+  if (!role) throw notFound('Role not found', 'ROLE_NOT_FOUND');
+  res.json({ role });
+});
+
+router.patch('/:farm/roles/:id', requireFarm('roles.manage'), validate(updateCustomRoleSchema), async (req, res) => {
+  const { farm } = getFarm(res);
+  const patch = req.body as z.output<typeof updateCustomRoleSchema>;
+  const { role, previous, changed } = await updateCustomRole(farm.id, actorOf(req, res), String(req.params.id), patch);
+  await audit(req, {
+    action: 'farm.role_updated',
+    ...farmEvent(farm.id),
+    metadata: { roleId: role.id, name: role.name, ...(previous.name !== role.name ? { from: previous.name } : {}), changed },
+  });
+  res.json({ role: (await listCustomRoles(farm.id)).find((r) => r.id === role.id) });
+});
+
+router.delete('/:farm/roles/:id', requireFarm('roles.manage'), async (req, res) => {
+  const { farm } = getFarm(res);
+  const role = await deleteCustomRole(farm.id, actorOf(req, res), String(req.params.id));
+  await audit(req, { action: 'farm.role_deleted', ...farmEvent(farm.id), metadata: { roleId: role.id, name: role.name } });
+  res.status(204).end();
+});
+
+/** Role-based keys: the full set of action keys a system role holds on this farm. */
 router.put('/:farm/roles/:role/permissions', requireFarm('roles.manage'), validate(rolePermissionsSchema), async (req, res) => {
   const { farm } = getFarm(res);
-  const role = roleParam(req);
+  const role = systemRoleParam(req);
   const { permissions } = req.body as z.output<typeof rolePermissionsSchema>;
   const { changed } = await farms.setRolePermissions(farm.id, actorOf(req, res), role, permissions);
   if (changed.length) await audit(req, { action: 'farm.role_permissions_changed', ...farmEvent(farm.id), metadata: { role, changed } });
@@ -157,7 +226,7 @@ router.put('/:farm/roles/:role/permissions', requireFarm('roles.manage'), valida
 
 router.delete('/:farm/roles/:role/permissions', requireFarm('roles.manage'), async (req, res) => {
   const { farm } = getFarm(res);
-  const role = roleParam(req);
+  const role = systemRoleParam(req);
   const { changed } = await farms.resetRolePermissions(farm.id, actorOf(req, res), role);
   if (changed.length) await audit(req, { action: 'farm.role_permissions_reset', ...farmEvent(farm.id), metadata: { role, changed } });
   res.json(await farms.getFarmPermissions(farm.id));

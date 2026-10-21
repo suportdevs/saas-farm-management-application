@@ -12,6 +12,8 @@ import {
   PERMISSION_MODULE_KEYS,
   PERMISSION_MODULES,
   ROLE_INFO,
+  roleLabel,
+  type CustomRoleRef,
   type FarmInvitation,
   type FarmMember,
   type FarmRole,
@@ -33,6 +35,38 @@ import { useFarm } from '@/modules/farms/context';
 import { formatDate, timeAgo } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
+/** A role picker value: a system role key, or `custom:<id>` for one of the farm's custom roles. */
+type RoleChoice = string;
+const choiceOf = (role: FarmRole, customRole: CustomRoleRef | null): RoleChoice => (customRole ? `custom:${customRole.id}` : role);
+const roleBody = (choice: RoleChoice) => (choice.startsWith('custom:') ? { customRoleId: choice.slice(7) } : { role: choice as FarmRole });
+const choiceLabel = (choice: RoleChoice, customRoles: { id: string; name: string }[]) =>
+  choice.startsWith('custom:') ? (customRoles.find((r) => r.id === choice.slice(7))?.name ?? 'Custom role') : ROLE_INFO[choice as FarmRole].label;
+
+/** System roles the actor may hand out, then the farm's custom roles. */
+function RoleOptions({ actorRole }: { actorRole: FarmRole }) {
+  const { customRoles } = useFarm();
+  return (
+    <>
+      <optgroup label="Roles">
+        {assignableRoles(actorRole).map((r) => (
+          <option key={r} value={r}>
+            {ROLE_INFO[r].label}
+          </option>
+        ))}
+      </optgroup>
+      {customRoles.length > 0 && (
+        <optgroup label="Custom roles">
+          {customRoles.map((r) => (
+            <option key={r.id} value={`custom:${r.id}`}>
+              {r.name}
+            </option>
+          ))}
+        </optgroup>
+      )}
+    </>
+  );
+}
+
 export function TeamManager({
   currentUserId,
   members,
@@ -45,7 +79,7 @@ export function TeamManager({
   openInvite: boolean;
 }) {
   const router = useRouter();
-  const { farm, membership, usage, limits } = useFarm();
+  const { farm, membership, usage, limits, customRoles } = useFarm();
   const myRole = membership.role;
   const can = (p: Permission) => membership.permissions.includes(p);
   const canInvite = can('members.invite');
@@ -67,8 +101,12 @@ export function TeamManager({
     }
   };
 
-  const changeRole = (m: FarmMember, role: FarmRole) =>
-    run(`role:${m.userId}`, () => api.patch(`/farms/${farm.slug}/members/${m.userId}`, { role }), `${m.name} is now ${ROLE_INFO[role].label.toLowerCase()}`);
+  const changeRole = (m: FarmMember, choice: RoleChoice) =>
+    run(
+      `role:${m.userId}`,
+      () => api.patch(`/farms/${farm.slug}/members/${m.userId}`, roleBody(choice)),
+      `${m.name} is now ${choiceLabel(choice, customRoles).toLowerCase()}`,
+    );
 
   const remove = async (m: FarmMember) => {
     const self = m.userId === currentUserId;
@@ -123,20 +161,16 @@ export function TeamManager({
                   {canEditRole(m) ? (
                     <Select
                       aria-label={`Role for ${m.name}`}
-                      value={m.role}
+                      value={choiceOf(m.role, m.customRole)}
                       disabled={busy === `role:${m.userId}`}
-                      onChange={(e) => changeRole(m, e.target.value as FarmRole)}
+                      onChange={(e) => changeRole(m, e.target.value)}
                       className="h-9 w-40"
                     >
-                      {assignableRoles(myRole).map((r) => (
-                        <option key={r} value={r}>
-                          {ROLE_INFO[r].label}
-                        </option>
-                      ))}
+                      <RoleOptions actorRole={myRole} />
                     </Select>
                   ) : (
                     <Badge variant={m.role === 'owner' ? 'primary' : 'default'} className="w-40 justify-center py-1.5">
-                      {ROLE_INFO[m.role].label}
+                      {roleLabel(m.role, m.customRole)}
                     </Badge>
                   )}
                   {canRemove(m) ? (
@@ -192,13 +226,13 @@ export function TeamManager({
                           {inv.invitedBy && ` · invited by ${inv.invitedBy}`}
                         </p>
                       </div>
-                      <Badge variant="outline">{ROLE_INFO[inv.role].label}</Badge>
+                      <Badge variant="outline">{roleLabel(inv.role, inv.customRole)}</Badge>
                       <Button
                         variant="ghost"
                         size="sm"
                         loading={busy === `resend:${inv.id}`}
                         onClick={() =>
-                          run(`resend:${inv.id}`, () => api.post(`/farms/${farm.slug}/invitations`, { email: inv.email, role: inv.role, title: inv.title ?? '' }), 'Invitation re-sent')
+                          run(`resend:${inv.id}`, () => api.post(`/farms/${farm.slug}/invitations`, { email: inv.email, ...roleBody(choiceOf(inv.role, inv.customRole)), title: inv.title ?? '' }), 'Invitation re-sent')
                         }
                       >
                         <Send className="h-3.5 w-3.5" /> Resend
@@ -267,9 +301,13 @@ export function TeamManager({
 
 function InviteDialog({ open, onClose, onInvited }: { open: boolean; onClose: () => void; onInvited: () => void }) {
   const { farm, membership } = useFarm();
-  const roles = assignableRoles(membership.role);
+  const { customRoles } = useFarm();
+  const choices: { value: RoleChoice; label: string; description: string | null }[] = [
+    ...assignableRoles(membership.role).map((r) => ({ value: r, label: ROLE_INFO[r].label, description: ROLE_INFO[r].description })),
+    ...customRoles.map((r) => ({ value: `custom:${r.id}`, label: r.name, description: r.description ?? 'Custom role' })),
+  ];
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<FarmRole>('worker');
+  const [role, setRole] = useState<RoleChoice>('worker');
   const [title, setTitle] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -279,7 +317,7 @@ function InviteDialog({ open, onClose, onInvited }: { open: boolean; onClose: ()
     setSending(true);
     setError(null);
     try {
-      await api.post(`/farms/${farm.slug}/invitations`, { email, role, title });
+      await api.post(`/farms/${farm.slug}/invitations`, { email, ...roleBody(role), title });
       toast.success(`Invitation sent to ${email}`);
       setEmail('');
       setTitle('');
@@ -303,19 +341,19 @@ function InviteDialog({ open, onClose, onInvited }: { open: boolean; onClose: ()
         </Field>
         <fieldset>
           <legend className="text-sm font-medium">Role</legend>
-          <div className="mt-2 grid gap-2">
-            {roles.map((r) => (
+          <div className="mt-2 grid max-h-80 gap-2 overflow-y-auto pr-1">
+            {choices.map((c) => (
               <label
-                key={r}
+                key={c.value}
                 className={cn(
                   'flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50',
-                  role === r && 'border-primary bg-primary/5',
+                  role === c.value && 'border-primary bg-primary/5',
                 )}
               >
-                <input type="radio" name="role" value={r} checked={role === r} onChange={() => setRole(r)} className="mt-1 accent-[var(--primary)]" />
+                <input type="radio" name="role" value={c.value} checked={role === c.value} onChange={() => setRole(c.value)} className="mt-1 accent-[var(--primary)]" />
                 <span>
-                  <span className="block text-sm font-medium">{ROLE_INFO[r].label}</span>
-                  <span className="block text-xs text-muted-foreground">{ROLE_INFO[r].description}</span>
+                  <span className="block text-sm font-medium">{c.label}</span>
+                  {c.description && <span className="block text-xs text-muted-foreground">{c.description}</span>}
                 </span>
               </label>
             ))}
@@ -334,11 +372,23 @@ function InviteDialog({ open, onClose, onInvited }: { open: boolean; onClose: ()
   );
 }
 
-/** What each role can do on this farm, including the farm's own changes to the role. */
+/** What each role can do on this farm: system roles (with the farm's changes) and custom roles. */
 function RolesGuide() {
-  const { farm, membership, rolePermissions } = useFarm();
-  const [selected, setSelected] = useState<FarmRole>('manager');
-  const granted = rolePermissions[selected];
+  const { farm, membership, rolePermissions, customRoles } = useFarm();
+  const [selected, setSelected] = useState<RoleChoice>('manager');
+  const custom = selected.startsWith('custom:') ? customRoles.find((r) => r.id === selected.slice(7)) : undefined;
+  const granted = custom ? custom.permissions : (rolePermissions[selected as FarmRole] ?? []);
+  const description = custom ? (custom.description ?? 'Custom role') : ROLE_INFO[selected as FarmRole]?.description;
+  const chip = (value: RoleChoice, label: string) => (
+    <button
+      key={value}
+      type="button"
+      onClick={() => setSelected(value)}
+      className={cn('rounded-full border px-2.5 py-1 text-xs font-medium transition-colors', selected === value ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-muted')}
+    >
+      {label}
+    </button>
+  );
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -348,18 +398,10 @@ function RolesGuide() {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap gap-1.5">
-          {FARM_ROLES.map((r) => (
-            <button
-              key={r}
-              type="button"
-              onClick={() => setSelected(r)}
-              className={cn('rounded-full border px-2.5 py-1 text-xs font-medium transition-colors', selected === r ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-muted')}
-            >
-              {ROLE_INFO[r].label}
-            </button>
-          ))}
+          {FARM_ROLES.map((r) => chip(r, ROLE_INFO[r].label))}
+          {customRoles.map((r) => chip(`custom:${r.id}`, r.name))}
         </div>
-        <p className="text-sm text-muted-foreground">{ROLE_INFO[selected].description}</p>
+        <p className="text-sm text-muted-foreground">{description}</p>
         <ul className="space-y-2 text-sm">
           {PERMISSION_MODULE_KEYS.map((m) => {
             const held = PERMISSION_MODULES[m].actions.filter((a) => granted.includes(`${m}.${a}` as Permission));

@@ -11,7 +11,7 @@ import {
   type AdminUserListQuery,
   type AuditLogQuery,
   type BanUserInput,
-  platformPermissionsOf,
+  isStaffRole,
 } from '@kit/shared';
 import { db } from '../../db/client';
 import { auditLogs, jobs, sessions, users, type User } from '../../db/schema';
@@ -25,6 +25,8 @@ import {
   setSessionCookie,
 } from '../../core/session';
 import { serializeUser } from '../../core/user';
+import { resolveStaff } from '../../core/staff';
+import { platformRoleExists, staffRolesRouter } from './staff-roles';
 import { badRequest, forbidden, notFound } from '../../lib/errors';
 import { requirePlatform, requireRole } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
@@ -32,6 +34,7 @@ import { sendAccountSuspendedEmail } from '../auth/emails';
 
 export const adminRouter = Router();
 adminRouter.use(requireRole('admin'));
+adminRouter.use('/staff-roles', staffRolesRouter);
 
 const DAY = 24 * 60 * 60 * 1000;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -156,23 +159,39 @@ adminRouter.patch('/users/:id', requirePlatform('platform.users.update'), valida
   const input = req.body as AdminUpdateUserInput;
   const changesRole = input.role !== undefined && input.role !== target.role;
   const changesStaffRole = input.staffRole !== undefined && input.staffRole !== target.staffRole;
+  const patch: Partial<User> = {};
   if (changesRole || changesStaffRole) {
     assertNotSelf(req, target, "You can't change your own role");
     // Making, removing and re-scoping staff is its own permission.
-    if (!platformPermissionsOf(req.auth!.user).includes('platform.staff.manage')) {
+    const actor = (await resolveStaff(req.auth!.user))!;
+    if (!actor.permissions.includes('platform.staff.manage')) {
       throw forbidden("Your staff role can't manage platform staff", 'PLATFORM_PERMISSION_REQUIRED');
     }
-    if (changesStaffRole && (input.role ?? target.role) !== 'admin') {
-      throw badRequest('Only admins can have a staff role', 'NOT_STAFF');
+    const outranks = (perms: readonly string[]) => actor.key === 'super_admin' || perms.every((p) => actor.permissions.includes(p as never));
+    // Nobody re-scopes staff who can do more than they can.
+    const current = await resolveStaff(target);
+    if (current && !outranks(current.permissions)) throw forbidden('That staff member can do more than you can', 'PERMISSION_ESCALATION');
+
+    const becomesStaff = (input.role ?? target.role) === 'admin';
+    if (!becomesStaff) {
+      if (changesStaffRole && input.staffRole !== null) throw badRequest('Only admins can have a staff role', 'NOT_STAFF');
+      // Leaving the staff clears the staff role, so rejoining starts from scratch.
+      patch.staffRole = null;
+    } else {
+      // New staff start with the least access unless a role is chosen.
+      const key = input.staffRole !== undefined ? input.staffRole : target.role === 'admin' ? target.staffRole : 'analyst';
+      const next = await resolveStaff({ role: 'admin', staffRole: key });
+      if (!next || (!isStaffRole(next.key) && !(await platformRoleExists(next.key)))) {
+        throw badRequest('That staff role does not exist', 'UNKNOWN_STAFF_ROLE');
+      }
+      if (next.key === 'super_admin' && actor.key !== 'super_admin') throw forbidden('Only super admins can appoint super admins', 'PERMISSION_ESCALATION');
+      if (!outranks(next.permissions)) throw forbidden('That staff role can do more than you can', 'PERMISSION_ESCALATION');
+      patch.staffRole = key;
     }
   }
 
-  const patch: Partial<User> = {};
   if (input.name !== undefined) patch.name = input.name;
   if (input.role !== undefined) patch.role = input.role;
-  if (input.staffRole !== undefined) patch.staffRole = input.staffRole;
-  // Leaving the staff clears the staff role, so rejoining starts from scratch.
-  if (input.role === 'user') patch.staffRole = null;
   if (input.emailVerified !== undefined) {
     patch.emailVerifiedAt = input.emailVerified ? (target.emailVerifiedAt ?? new Date()) : null;
   }

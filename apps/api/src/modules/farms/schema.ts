@@ -1,4 +1,5 @@
-import { index, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, text, timestamp, unique, uuid, varchar } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { index, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
 import { users } from '../../db/schema';
 
 // NOTE: keep imports in schema files relative — drizzle-kit loads them directly.
@@ -57,6 +58,27 @@ export const farms = pgTable(
   (t) => [index('farms_created_at_idx').on(t.createdAt), index('farms_country_idx').on(t.country)],
 );
 
+/** Roles a farm defines itself, each with its own set of per-action permission keys. */
+export const farmCustomRoles = pgTable(
+  'farm_custom_roles',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    farmId: uuid('farm_id')
+      .notNull()
+      .references(() => farms.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 60 }).notNull(),
+    description: varchar('description', { length: 255 }),
+    permissions: jsonb('permissions').$type<string[]>().notNull().default([]),
+    createdById: uuid('created_by_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [uniqueIndex('farm_custom_roles_farm_name_unique').on(t.farmId, sql`lower(${t.name})`)],
+);
+
 export const farmMembers = pgTable(
   'farm_members',
   {
@@ -67,6 +89,8 @@ export const farmMembers = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     role: farmRole('role').notNull().default('worker'),
+    /** Set when the member has one of the farm's custom roles; its keys replace the system role's. */
+    customRoleId: uuid('custom_role_id').references(() => farmCustomRoles.id, { onDelete: 'no action' }),
     /** Free-text job title, e.g. "Herd manager". */
     title: varchar('title', { length: 80 }),
     /** Per-member allow (true) / deny (false) of single permission keys, on top of the role. */
@@ -87,6 +111,8 @@ export const farmInvitations = pgTable(
       .references(() => farms.id, { onDelete: 'cascade' }),
     email: varchar('email', { length: 254 }).notNull(),
     role: farmRole('role').notNull().default('worker'),
+    /** A custom role to join with (members keep the base system role underneath). */
+    customRoleId: uuid('custom_role_id').references(() => farmCustomRoles.id, { onDelete: 'no action' }),
     title: varchar('title', { length: 80 }),
     // SHA-256 of the emailed token.
     tokenHash: text('token_hash').notNull().unique(),
@@ -124,3 +150,4 @@ export type Farm = typeof farms.$inferSelect;
 export type FarmMemberRow = typeof farmMembers.$inferSelect;
 export type FarmInvitationRow = typeof farmInvitations.$inferSelect;
 export type FarmRolePermissionsRow = typeof farmRolePermissions.$inferSelect;
+export type FarmCustomRoleRow = typeof farmCustomRoles.$inferSelect;

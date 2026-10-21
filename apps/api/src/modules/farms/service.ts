@@ -1,10 +1,12 @@
 import { and, asc, count, desc, eq, gt, ne, sql } from 'drizzle-orm';
 import {
   cleanOverrides,
+  CUSTOM_ROLE_BASE,
+  ROLE_INFO,
   diffFromDefaults,
   FARM_ROLES,
   gatePermissions,
-  isOwnerOnly,
+
   moduleStatuses,
   PERMISSIONS,
   resolvePermissions,
@@ -27,7 +29,8 @@ import { badRequest, conflict, db, forbidden, notFound, randomToken, sha256, use
 import { config } from './config';
 import { sendInvitationEmail } from './emails';
 import { farmExtensions } from './extensions';
-import { farmInvitations, farmMembers, farmRolePermissions, farms, type Farm, type FarmMemberRow } from './schema';
+import { assertMayAssign, assertMayChange, customRoleRef, findCustomRole, listCustomRoles, type PermissionActor } from './roles';
+import { farmCustomRoles, farmInvitations, farmMembers, farmRolePermissions, farms, type Farm, type FarmMemberRow } from './schema';
 
 const DAY = 24 * 60 * 60 * 1000;
 const INVITE_TTL = 7 * DAY;
@@ -102,23 +105,30 @@ export async function usageOf(farmId: string): Promise<FarmUsage> {
 }
 
 /** The farm workspace: the core fields plus whatever other modules contribute (e.g. the plan). */
-export async function contextOf(farm: Farm, member: Pick<FarmMemberRow, 'role' | 'title' | 'permissionOverrides'>): Promise<FarmContext> {
-  const [usage, extra, roleOverrides, gate] = await Promise.all([
+export async function contextOf(
+  farm: Farm,
+  member: Pick<FarmMemberRow, 'role' | 'title' | 'permissionOverrides' | 'customRoleId'>,
+): Promise<FarmContext> {
+  const [usage, extra, roleOverrides, gate, customRoles] = await Promise.all([
     usageOf(farm.id),
     farmExtensions.context(farm),
     roleOverridesOf(farm.id),
     gateOf(farm),
+    listCustomRoles(farm.id),
   ]);
+  const customRole = (member.customRoleId && customRoles.find((r) => r.id === member.customRoleId)) || null;
   const permissions = resolvePermissions(member.role, {
     roleOverrides: roleOverrides[member.role],
     memberOverrides: cleanOverrides(member.permissionOverrides),
+    customRole: customRole?.permissions,
   });
   return {
     ...extra,
     farm: serializeFarm(farm),
-    membership: { role: member.role, title: member.title, permissions: gatePermissions(permissions, gate) },
+    membership: { role: member.role, customRole: customRoleRef(customRole), title: member.title, permissions: gatePermissions(permissions, gate) },
     // Role settings as configured (not plan-gated), so they survive plan changes.
     rolePermissions: Object.fromEntries(FARM_ROLES.map((r) => [r, rolePermissions(r, roleOverrides[r])])),
+    customRoles,
     modules: moduleStatuses(gate),
     usage,
   } as FarmContext;
@@ -141,48 +151,39 @@ export async function roleOverridesOf(farmId: string): Promise<Record<FarmRole, 
 }
 
 export async function getFarmPermissions(farmId: string): Promise<FarmPermissions> {
-  const [roleOverrides, members] = await Promise.all([
+  const [roleOverrides, customRoles, members] = await Promise.all([
     roleOverridesOf(farmId),
+    listCustomRoles(farmId),
     db
-      .select({ userId: farmMembers.userId, role: farmMembers.role, overrides: farmMembers.permissionOverrides })
+      .select({ userId: farmMembers.userId, role: farmMembers.role, customRoleId: farmMembers.customRoleId, overrides: farmMembers.permissionOverrides })
       .from(farmMembers)
       .where(eq(farmMembers.farmId, farmId)),
   ]);
+  const byId = new Map(customRoles.map((r) => [r.id, r]));
   return {
     roles: Object.fromEntries(
       FARM_ROLES.map((r) => [r, { permissions: rolePermissions(r, roleOverrides[r]), overrides: roleOverrides[r] }]),
     ) as FarmPermissions['roles'],
+    customRoles,
     members: members.map((m) => {
       const overrides = m.role === 'owner' ? {} : cleanOverrides(m.overrides);
-      return { userId: m.userId, role: m.role, overrides, permissions: resolvePermissions(m.role, { roleOverrides: roleOverrides[m.role], memberOverrides: overrides }) };
+      const customRole = m.customRoleId ? byId.get(m.customRoleId)?.permissions : undefined;
+      return {
+        userId: m.userId,
+        role: m.role,
+        customRoleId: m.customRoleId,
+        overrides,
+        permissions: resolvePermissions(m.role, { roleOverrides: roleOverrides[m.role], memberOverrides: overrides, customRole }),
+      };
     }),
   };
-}
-
-export interface PermissionActor {
-  userId: string;
-  role: FarmRole;
-  permissions: Permission[];
-}
-
-/**
- * Nobody hands out more than they hold: owners may change any key (except the
- * owner-only ones, which can't be granted at all); others only keys they hold themselves.
- */
-function assertMayChange(actor: PermissionActor, changed: Permission[]) {
-  const ownerOnly = changed.filter(isOwnerOnly);
-  if (ownerOnly.length) throw badRequest(`Only owners can ${ownerOnly.join(', ')}`, 'OWNER_ONLY_PERMISSION');
-  if (actor.role === 'owner') return;
-  const missing = changed.filter((p) => !actor.permissions.includes(p));
-  if (missing.length) {
-    throw forbidden(`You can only change permissions you hold yourself (${missing.join(', ')})`, 'PERMISSION_ESCALATION');
-  }
 }
 
 /** Sets what `role` can do on this farm. Stored as overrides of the role's defaults. */
 export async function setRolePermissions(farmId: string, actor: PermissionActor, role: FarmRole, wanted: Permission[]) {
   if (role === 'owner') throw badRequest('Owners always have every permission', 'OWNER_ROLE_LOCKED');
-  if (actor.role !== 'owner' && actor.role === role) {
+  // Members with a custom role don't get their base system role's keys, so editing it isn't self-editing.
+  if (actor.role !== 'owner' && actor.role === role && !actor.customRoleId) {
     throw badRequest("You can't change your own role's permissions. Ask an owner.", 'SELF_PERMISSION_CHANGE');
   }
   const current = rolePermissions(role, (await roleOverridesOf(farmId))[role]);
@@ -266,18 +267,24 @@ export async function listUserFarms(userId: string): Promise<FarmSummary[]> {
       members: memberCount.total,
       memberOverrides: farmMembers.permissionOverrides,
       roleOverrides: farmRolePermissions.overrides,
+      customRole: { id: farmCustomRoles.id, name: farmCustomRoles.name, permissions: farmCustomRoles.permissions },
     })
     .from(farmMembers)
     .innerJoin(farms, eq(farms.id, farmMembers.farmId))
     .innerJoin(memberCount, eq(memberCount.farmId, farms.id))
     .leftJoin(farmRolePermissions, and(eq(farmRolePermissions.farmId, farmMembers.farmId), eq(farmRolePermissions.role, farmMembers.role)))
+    .leftJoin(farmCustomRoles, eq(farmCustomRoles.id, farmMembers.customRoleId))
     .where(eq(farmMembers.userId, userId))
     .orderBy(sql`${farmMembers.lastAccessedAt} desc nulls last`, asc(farms.name));
   const ids = rows.map((r) => r.farm.id);
   const [extra, capabilities] = await Promise.all([farmExtensions.summaries(ids), farmExtensions.capabilities(ids)]);
-  return rows.map(({ farm, role, members, memberOverrides, roleOverrides }) => {
+  return rows.map(({ farm, role, members, memberOverrides, roleOverrides, customRole }) => {
     const gate = { capabilities: capabilities(farm.id), disabledModules: farm.disabledModules };
-    const permissions = resolvePermissions(role, { roleOverrides: cleanOverrides(roleOverrides), memberOverrides: cleanOverrides(memberOverrides) });
+    const permissions = resolvePermissions(role, {
+      roleOverrides: cleanOverrides(roleOverrides),
+      memberOverrides: cleanOverrides(memberOverrides),
+      customRole: customRole?.permissions,
+    });
     return {
     ...extra(farm.id),
     id: farm.id,
@@ -286,6 +293,7 @@ export async function listUserFarms(userId: string): Promise<FarmSummary[]> {
     type: farm.type,
     country: farm.country,
     role,
+    customRole: customRoleRef(customRole),
     memberCount: Number(members),
     suspended: Boolean(farm.suspendedAt),
     permissions: gatePermissions(permissions, gate),
@@ -335,10 +343,11 @@ export async function createFarm(user: User, input: CreateFarmData) {
 /** Resolves a farm by id or slug together with the user's membership and effective permissions. */
 export async function findMembership(key: string, userId: string) {
   const [row] = await db
-    .select({ farm: farms, member: farmMembers, roleOverrides: farmRolePermissions.overrides })
+    .select({ farm: farms, member: farmMembers, roleOverrides: farmRolePermissions.overrides, customRole: farmCustomRoles.permissions })
     .from(farms)
     .innerJoin(farmMembers, and(eq(farmMembers.farmId, farms.id), eq(farmMembers.userId, userId)))
     .leftJoin(farmRolePermissions, and(eq(farmRolePermissions.farmId, farms.id), eq(farmRolePermissions.role, farmMembers.role)))
+    .leftJoin(farmCustomRoles, eq(farmCustomRoles.id, farmMembers.customRoleId))
     .where(uuidPattern.test(key) ? eq(farms.id, key) : eq(farms.slug, key.toLowerCase()))
     .limit(1);
   if (!row) return undefined;
@@ -346,6 +355,7 @@ export async function findMembership(key: string, userId: string) {
   const granted = resolvePermissions(row.member.role, {
     roleOverrides: cleanOverrides(row.roleOverrides),
     memberOverrides: cleanOverrides(row.member.permissionOverrides),
+    customRole: row.customRole,
   });
   const gate = await gateOf(row.farm);
   return { farm: row.farm, member: row.member, granted, gate, permissions: gatePermissions(granted, gate) };
@@ -402,15 +412,47 @@ export async function listMembers(farmId: string) {
       email: users.email,
       image: users.image,
       role: farmMembers.role,
+      customRoleId: farmCustomRoles.id,
+      customRoleName: farmCustomRoles.name,
       title: farmMembers.title,
       joinedAt: farmMembers.createdAt,
       lastActiveAt: farmMembers.lastAccessedAt,
     })
     .from(farmMembers)
     .innerJoin(users, eq(users.id, farmMembers.userId))
+    .leftJoin(farmCustomRoles, eq(farmCustomRoles.id, farmMembers.customRoleId))
     .where(eq(farmMembers.farmId, farmId))
     .orderBy(sql`case ${farmMembers.role} when 'owner' then 0 when 'manager' then 1 else 2 end`, asc(farmMembers.createdAt));
-  return rows.map((r) => ({ ...r, joinedAt: r.joinedAt.toISOString(), lastActiveAt: r.lastActiveAt?.toISOString() ?? null }));
+  return rows.map(({ customRoleId, customRoleName, ...r }) => ({
+    ...r,
+    customRole: customRoleId ? { id: customRoleId, name: customRoleName! } : null,
+    joinedAt: r.joinedAt.toISOString(),
+    lastActiveAt: r.lastActiveAt?.toISOString() ?? null,
+  }));
+}
+
+/** A role to give someone: a system role, or one of the farm's custom roles. */
+export interface RoleAssignment {
+  role?: FarmRole;
+  customRoleId?: string | null;
+}
+
+/**
+ * Resolves what a member or invitee will hold, and checks the actor may hand it
+ * out: ownership only from owners, and nobody gives a role that can do more than they can.
+ */
+async function resolveAssignment(farmId: string, actor: PermissionActor, assignment: RoleAssignment) {
+  if (assignment.customRoleId) {
+    const custom = await findCustomRole(farmId, assignment.customRoleId);
+    if (!custom) throw notFound('Role not found', 'ROLE_NOT_FOUND');
+    const permissions = resolvePermissions(CUSTOM_ROLE_BASE, { customRole: custom.permissions });
+    assertMayAssign(actor, permissions);
+    return { role: CUSTOM_ROLE_BASE, customRoleId: custom.id, customRole: custom, label: custom.name };
+  }
+  const role = assignment.role ?? 'worker';
+  if (role === 'owner' && actor.role !== 'owner') throw forbidden('Only owners can grant ownership', 'OWNER_REQUIRED');
+  assertMayAssign(actor, rolePermissions(role, (await roleOverridesOf(farmId))[role]));
+  return { role, customRoleId: null, customRole: null, label: ROLE_INFO[role].label };
 }
 
 async function getMember(farmId: string, userId: string) {
@@ -434,23 +476,36 @@ export async function updateMember(
   farmId: string,
   actor: PermissionActor,
   targetUserId: string,
-  patch: { role?: FarmRole; title?: string | null },
+  patch: { role?: FarmRole; customRoleId?: string; title?: string | null },
 ) {
   const target = await getMember(farmId, targetUserId);
   if (!target) throw notFound('Member not found');
   const self = actor.userId === targetUserId;
   if (!self && !actor.permissions.includes('members.update')) throw forbidden(undefined, 'FARM_PERMISSION_REQUIRED');
-  if (patch.role && patch.role !== target.role) {
+  if (patch.role && patch.customRoleId) throw badRequest('Choose a system role or a custom role, not both', 'ROLE_CONFLICT');
+
+  const changesRole =
+    (patch.customRoleId !== undefined && patch.customRoleId !== target.customRoleId) ||
+    (patch.role !== undefined && (patch.role !== target.role || target.customRoleId !== null));
+  let next: Awaited<ReturnType<typeof resolveAssignment>> | null = null;
+  if (changesRole) {
     if (self) throw badRequest("You can't change your own role. Ask another owner.", 'SELF_ROLE_CHANGE');
-    if ((patch.role === 'owner' || target.role === 'owner') && actor.role !== 'owner') {
-      throw forbidden('Only owners can grant or remove ownership', 'OWNER_REQUIRED');
-    }
+    if (target.role === 'owner' && actor.role !== 'owner') throw forbidden('Only owners can grant or remove ownership', 'OWNER_REQUIRED');
+    next = await resolveAssignment(farmId, actor, patch);
   }
   await db
     .update(farmMembers)
-    .set({ ...(patch.role ? { role: patch.role } : {}), ...(patch.title !== undefined ? { title: patch.title } : {}) })
+    .set({
+      ...(next ? { role: next.role, customRoleId: next.customRoleId } : {}),
+      ...(patch.title !== undefined ? { title: patch.title } : {}),
+    })
     .where(and(eq(farmMembers.farmId, farmId), eq(farmMembers.userId, targetUserId)));
-  return { previousRole: target.role };
+  const previousCustom = target.customRoleId ? await findCustomRole(farmId, target.customRoleId) : undefined;
+  return {
+    changed: Boolean(next),
+    from: previousCustom?.name ?? target.role,
+    to: next?.customRole?.name ?? next?.role ?? target.role,
+  };
 }
 
 /** Removes a member, or leaves when the target is yourself. */
@@ -470,15 +525,17 @@ export async function removeMember(farmId: string, actor: PermissionActor, targe
 
 export async function listInvitations(farmId: string) {
   const rows = await db
-    .select({ invitation: farmInvitations, inviter: users.name })
+    .select({ invitation: farmInvitations, inviter: users.name, customRole: { id: farmCustomRoles.id, name: farmCustomRoles.name } })
     .from(farmInvitations)
     .leftJoin(users, eq(users.id, farmInvitations.invitedById))
+    .leftJoin(farmCustomRoles, eq(farmCustomRoles.id, farmInvitations.customRoleId))
     .where(and(eq(farmInvitations.farmId, farmId), gt(farmInvitations.expiresAt, new Date())))
     .orderBy(desc(farmInvitations.createdAt));
-  return rows.map(({ invitation: i, inviter }) => ({
+  return rows.map(({ invitation: i, inviter, customRole }) => ({
     id: i.id,
     email: i.email,
     role: i.role,
+    customRole: customRoleRef(customRole),
     title: i.title,
     invitedBy: inviter,
     expiresAt: i.expiresAt.toISOString(),
@@ -487,7 +544,13 @@ export async function listInvitations(farmId: string) {
 }
 
 /** Creates (or refreshes) an invitation and emails the link. */
-export async function invite(farm: Farm, inviter: User, input: { email: string; role: FarmRole; title?: string | null }) {
+export async function invite(
+  farm: Farm,
+  inviter: User,
+  actor: PermissionActor,
+  input: { email: string; role: FarmRole; customRoleId?: string | null; title?: string | null },
+) {
+  const assigned = await resolveAssignment(farm.id, actor, input);
   const [existingMember] = await db
     .select({ id: users.id })
     .from(farmMembers)
@@ -508,7 +571,8 @@ export async function invite(farm: Farm, inviter: User, input: { email: string; 
   const values = {
     farmId: farm.id,
     email: input.email,
-    role: input.role,
+    role: assigned.role,
+    customRoleId: assigned.customRoleId,
     title: input.title ?? null,
     tokenHash: sha256(token),
     invitedById: inviter.id,
@@ -519,11 +583,19 @@ export async function invite(farm: Farm, inviter: User, input: { email: string; 
     .values(values)
     .onConflictDoUpdate({
       target: [farmInvitations.farmId, farmInvitations.email],
-      set: { role: values.role, title: values.title, tokenHash: values.tokenHash, invitedById: inviter.id, expiresAt: values.expiresAt, createdAt: sql`now()` },
+      set: {
+        role: values.role,
+        customRoleId: values.customRoleId,
+        title: values.title,
+        tokenHash: values.tokenHash,
+        invitedById: inviter.id,
+        expiresAt: values.expiresAt,
+        createdAt: sql`now()`,
+      },
     })
     .returning();
-  await sendInvitationEmail({ to: input.email, token, farm, inviter, role: input.role });
-  return invitation!;
+  await sendInvitationEmail({ to: input.email, token, farm, inviter, roleLabel: assigned.label });
+  return { invitation: invitation!, roleLabel: assigned.label };
 }
 
 export async function revokeInvitation(farmId: string, invitationId: string) {
@@ -538,9 +610,10 @@ export async function revokeInvitation(farmId: string, invitationId: string) {
 
 async function findInvitation(token: string) {
   const [row] = await db
-    .select({ invitation: farmInvitations, farm: farms })
+    .select({ invitation: farmInvitations, farm: farms, customRole: { id: farmCustomRoles.id, name: farmCustomRoles.name } })
     .from(farmInvitations)
     .innerJoin(farms, eq(farms.id, farmInvitations.farmId))
+    .leftJoin(farmCustomRoles, eq(farmCustomRoles.id, farmInvitations.customRoleId))
     .where(and(eq(farmInvitations.tokenHash, sha256(token)), gt(farmInvitations.expiresAt, new Date())))
     .limit(1);
   return row;
@@ -557,6 +630,7 @@ export async function lookupInvitation(token: string) {
     farm: { name: row.farm.name, slug: row.farm.slug, type: row.farm.type, country: row.farm.country },
     email: row.invitation.email,
     role: row.invitation.role,
+    customRole: customRoleRef(row.customRole),
     invitedBy: inviter?.name ?? null,
   };
 }
@@ -571,11 +645,18 @@ export async function acceptInvitation(token: string, user: User) {
   await db.transaction(async (tx) => {
     await tx
       .insert(farmMembers)
-      .values({ farmId: row.farm.id, userId: user.id, role: row.invitation.role, title: row.invitation.title, lastAccessedAt: new Date() })
+      .values({
+        farmId: row.farm.id,
+        userId: user.id,
+        role: row.invitation.role,
+        customRoleId: row.invitation.customRoleId,
+        title: row.invitation.title,
+        lastAccessedAt: new Date(),
+      })
       .onConflictDoNothing();
     await tx.delete(farmInvitations).where(eq(farmInvitations.id, row.invitation.id));
   });
-  return { farm: row.farm, role: row.invitation.role };
+  return { farm: row.farm, role: row.customRole?.name ?? row.invitation.role };
 }
 
 // ─── Activity ────────────────────────────────────────────────────
@@ -632,7 +713,7 @@ export async function handleUserDeletion(userId: string): Promise<string[]> {
     }
     await db
       .update(farmMembers)
-      .set({ role: 'owner' })
+      .set({ role: 'owner', customRoleId: null })
       .where(and(eq(farmMembers.farmId, farmId), eq(farmMembers.userId, heir.userId)));
   }
   return deleted;

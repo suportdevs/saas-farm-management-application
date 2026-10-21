@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { STAFF_ROLE_INFO, STAFF_ROLES, type AdminUser, type PlatformPermission, type StaffRole } from '@kit/shared';
+import type { AdminUser, PlatformPermission, PlatformRole } from '@kit/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
@@ -13,7 +13,18 @@ import { api, errorMessage } from '@/lib/api';
 
 type Pending = null | 'ban' | 'delete';
 
-export function UserActions({ user, isSelf, permissions }: { user: AdminUser; isSelf: boolean; permissions: PlatformPermission[] }) {
+export function UserActions({
+  user,
+  isSelf,
+  permissions,
+  staffRoles = [],
+}: {
+  user: AdminUser;
+  isSelf: boolean;
+  permissions: PlatformPermission[];
+  /** Built-in and custom staff roles (only loaded for staff managers). */
+  staffRoles?: PlatformRole[];
+}) {
   const router = useRouter();
   const can = (p: PlatformPermission) => permissions.includes(p);
   const [busy, setBusy] = useState<string | null>(null);
@@ -74,13 +85,28 @@ export function UserActions({ user, isSelf, permissions }: { user: AdminUser; is
               className="h-10 w-44"
               disabled={isSelf || busy === 'staff'}
               value={user.staffRole ?? 'super_admin'}
-              onChange={(e) => run('staff', () => api.patch(`/admin/users/${user.id}`, { staffRole: e.target.value as StaffRole }), 'Staff role updated')}
+              onChange={(e) => run('staff', () => api.patch(`/admin/users/${user.id}`, { staffRole: e.target.value }), 'Staff role updated')}
             >
-              {STAFF_ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {STAFF_ROLE_INFO[r].label}
-                </option>
-              ))}
+              <optgroup label="Built-in">
+                {staffRoles
+                  .filter((r) => r.system)
+                  .map((r) => (
+                    <option key={r.key} value={r.key}>
+                      {r.name}
+                    </option>
+                  ))}
+              </optgroup>
+              {staffRoles.some((r) => !r.system) && (
+                <optgroup label="Custom">
+                  {staffRoles
+                    .filter((r) => !r.system)
+                    .map((r) => (
+                      <option key={r.key} value={r.key}>
+                        {r.name}
+                      </option>
+                    ))}
+                </optgroup>
+              )}
             </Select>
           )}
           {can('platform.users.update') && (
@@ -116,8 +142,8 @@ export function UserActions({ user, isSelf, permissions }: { user: AdminUser; is
             </Button>
           )}
         </CardContent>
-        {user.role === 'admin' && user.staffRole && (
-          <p className="px-6 pb-5 text-xs text-muted-foreground">{STAFF_ROLE_INFO[user.staffRole].description}</p>
+        {user.role === 'admin' && staffRoles.find((r) => r.key === user.staffRole)?.description && (
+          <p className="px-6 pb-5 text-xs text-muted-foreground">{staffRoles.find((r) => r.key === user.staffRole)?.description}</p>
         )}
       </Card>
 

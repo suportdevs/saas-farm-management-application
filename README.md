@@ -98,6 +98,19 @@ user ─┬─ platform staff (users.role = admin, users.staff_role) → platfor
              ∩ plan capabilities ∩ enabled modules                      (what the farm has)
 ```
 
+**Custom farm roles.** Besides the six system roles, a farm can define up to 30 roles of its own (name, description,
+per-action keys) in **Roles & permissions** — `GET|POST /api/farms/:farm/roles`, `GET|PATCH|DELETE /api/farms/:farm/roles/:id`.
+Members and invitations point at one with `custom_role_id`; its keys replace the system role's (member overrides still
+apply on top). Underneath, such members keep the `viewer` system role, so owner-only rules are untouched. A role that
+members or pending invitations hold can't be deleted (`409 ROLE_IN_USE`), and non-owners can only create, edit or assign
+roles whose keys they hold themselves (`403 PERMISSION_ESCALATION`).
+
+**Custom staff roles.** Super admins (anyone with `platform.staff.manage`) manage staff roles in **Platform admin → Staff roles**
+— `GET|POST /api/admin/staff-roles`, `GET|PATCH|DELETE /api/admin/staff-roles/:key`. Built-in roles are read-only; custom
+ones live in `platform_roles` and `users.staff_role` holds the key. New staff start as `analyst`, and nobody appoints or
+re-scopes staff who can do more than they can. `npm run db:seed` creates a login per built-in staff role:
+`support@example.com`, `billing@example.com`, `analyst@example.com` (password `SEED_STAFF_PASSWORD`, default the admin password).
+
 **Platform staff** have per-action `platform.*` keys by staff role (`packages/shared/src/platform/access.ts`):
 `super_admin` (everything, incl. `platform.staff.manage`), `support`, `billing`, `analyst`. Admins without a
 staff role are super admins. Guard operator routes with `requirePlatform('platform.tenants.suspend')`.

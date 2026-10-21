@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
-import { platformPermissionsOf, type PlatformPermission } from '@kit/shared';
+import type { PlatformPermission } from '@kit/shared';
+import { staffPermissionsOf } from '../core/staff';
 import { env } from '../config/env';
 import type { User } from '../db/schema';
 import { clearSessionCookie, sessionCookieName, setSessionCookie, validateSessionToken } from '../core/session';
@@ -49,9 +50,9 @@ export function requireRole(...roles: User['role'][]) {
  *   router.post('/:id/suspend', requirePlatform('platform.tenants.suspend'), handler)
  */
 export function requirePlatform(permission: PlatformPermission) {
-  return (req: Request, _res: Response, next: NextFunction) => {
+  return async (req: Request, _res: Response, next: NextFunction) => {
     if (!req.auth || req.auth.session.pending) throw unauthorized();
-    if (!platformPermissionsOf(req.auth.user).includes(permission)) {
+    if (!(await staffPermissionsOf(req.auth.user)).includes(permission)) {
       throw forbidden("Your staff role doesn't allow that", 'PLATFORM_PERMISSION_REQUIRED');
     }
     next();

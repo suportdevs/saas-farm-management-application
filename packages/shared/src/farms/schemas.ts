@@ -117,12 +117,15 @@ export const farmRoleSchema = z.enum(FARM_ROLES);
 export const inviteMemberSchema = z.object({
   email: z.string().trim().toLowerCase().max(254).pipe(z.email('Enter a valid email address')),
   role: farmRoleSchema.default('worker'),
+  /** A custom role of this farm; replaces `role` when set. */
+  customRoleId: z.uuid().nullable().optional(),
   title: text(80),
 });
 export type InviteMemberInput = z.input<typeof inviteMemberSchema>;
 
 export const updateMemberSchema = z
-  .object({ role: farmRoleSchema, title: text(80) })
+  // `role` moves the member to a system role; `customRoleId` to one of the farm's custom roles.
+  .object({ role: farmRoleSchema, customRoleId: z.uuid(), title: text(80) })
   .partial()
   .refine((v) => Object.keys(v).length > 0, 'Nothing to update');
 export type UpdateMemberInput = z.input<typeof updateMemberSchema>;
@@ -144,3 +147,19 @@ export const memberPermissionsSchema = z.object({
   overrides: z.partialRecord(permissionSchema, z.boolean()),
 });
 export type MemberPermissionsInput = z.input<typeof memberPermissionsSchema>;
+
+const roleName = z.string().trim().min(2, 'Use at least 2 characters').max(60);
+
+/** POST /farms/:farm/roles — a custom role with its own per-action keys. */
+export const createCustomRoleSchema = z.object({
+  name: roleName,
+  description: text(255),
+  permissions: z.array(permissionSchema).max(PERMISSIONS.length).default([]),
+});
+export type CreateCustomRoleInput = z.input<typeof createCustomRoleSchema>;
+
+export const updateCustomRoleSchema = z
+  .object({ name: roleName, description: text(255), permissions: z.array(permissionSchema).max(PERMISSIONS.length) })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, 'Nothing to update');
+export type UpdateCustomRoleInput = z.input<typeof updateCustomRoleSchema>;

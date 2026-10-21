@@ -1,11 +1,11 @@
-import { ROLE_INFO, type FarmRole } from '@kit/shared';
 import { env, renderEmail, sendMail, type User } from '../../core';
 import type { Farm } from './schema';
 
 const article = (word: string) => (/^[aeiou]/i.test(word) ? 'an' : 'a');
 
-export function sendInvitationEmail(opts: { to: string; token: string; farm: Farm; inviter: User; role: FarmRole }) {
-  const role = ROLE_INFO[opts.role].label;
+/** `roleLabel` is the system role's label or the custom role's name. */
+export function sendInvitationEmail(opts: { to: string; token: string; farm: Farm; inviter: User; roleLabel: string }) {
+  const role = opts.roleLabel;
   return sendMail({
     to: opts.to,
     subject: `${opts.inviter.name} invited you to join ${opts.farm.name} on ${env.APP_NAME}`,

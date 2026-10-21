@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { STAFF_ROLES } from '../../platform/access';
+import { staffRoleKeySchema } from '../../platform/schemas';
 
 export const adminUserListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -15,7 +15,7 @@ export const adminUpdateUserSchema = z
     name: z.string().trim().min(2, 'Name must be at least 2 characters').max(100).optional(),
     role: z.enum(['user', 'admin']).optional(),
     /** Platform staff role (admins only); null = super admin. */
-    staffRole: z.enum(STAFF_ROLES).nullable().optional(),
+    staffRole: staffRoleKeySchema.nullable().optional(),
     emailVerified: z.boolean().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, 'Nothing to update');

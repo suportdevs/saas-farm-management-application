@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useMemo, useState, type ReactNode } from 'react';
-import { Check, Lock, Minus, RotateCcw, Save, ShieldCheck, Users, X } from 'lucide-react';
+import { Check, Lock, Minus, Plus, RotateCcw, Save, ShieldCheck, Trash2, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   FARM_ROLES,
@@ -12,6 +12,7 @@ import {
   PERMISSION_MODULES,
   resolvePermissions,
   ROLE_INFO,
+  roleLabel,
   ROLE_PERMISSIONS,
   type FarmMember,
   type FarmPermissions,
@@ -27,6 +28,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Field } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { api, errorMessage } from '@/lib/api';
 import { useFarm } from '@/modules/farms/context';
@@ -189,23 +192,45 @@ const sameSet = (a: Iterable<Permission>, b: Iterable<Permission>) => {
 
 // ─── Roles ───────────────────────────────────────────────────────
 
+/** The role being edited: a system role key, `custom:<id>`, or `new` for a role being created. */
+type RoleSelection = Exclude<FarmRole, 'owner'> | `custom:${string}` | 'new';
+
+const ROLE_KEY_COUNT = PERMISSION_MODULE_KEYS.reduce((n, m) => n + moduleKeys(m).length, 0);
+
 function RoleEditor({ data, onSaved, canManage }: { data: FarmPermissions; onSaved: (d: FarmPermissions) => void; canManage: boolean }) {
   const router = useRouter();
   const { farm, membership } = useFarm();
   const lockReason = useLockReason();
-  const [role, setRole] = useState<Exclude<FarmRole, 'owner'>>('manager');
-  const saved = data.roles[role].permissions;
-  const [draft, setDraft] = useState<Set<Permission>>(() => new Set(saved));
-  const [saving, setSaving] = useState(false);
-  const ownRole = membership.role !== 'owner' && membership.role === role;
-  const editable = canManage && !ownRole;
-  const dirty = !sameSet(draft, saved);
-  const customized = Object.keys(data.roles[role].overrides).length > 0;
-  const defaults = ROLE_PERMISSIONS[role];
+  const [selection, setSelection] = useState<RoleSelection>('manager');
+  const custom = selection.startsWith('custom:') ? data.customRoles.find((r) => `custom:${r.id}` === selection) : undefined;
+  const system = !custom && selection !== 'new' ? (selection as Exclude<FarmRole, 'owner'>) : null;
+  const saved: Permission[] = system ? data.roles[system].permissions : (custom?.permissions ?? []);
 
-  const pick = (r: Exclude<FarmRole, 'owner'>) => {
-    setRole(r);
-    setDraft(new Set(data.roles[r].permissions));
+  const [draft, setDraft] = useState<Set<Permission>>(() => new Set(saved));
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // Members can't edit the role they hold themselves.
+  const ownRole =
+    membership.role !== 'owner' &&
+    (custom ? membership.customRole?.id === custom.id : system !== null && !membership.customRole && membership.role === system);
+  const editable = canManage && !ownRole;
+  const savedName = custom?.name ?? '';
+  const savedDescription = custom?.description ?? '';
+  const dirty = !sameSet(draft, saved) || (system === null && (name.trim() !== savedName || description.trim() !== savedDescription));
+  const customized = system ? Object.keys(data.roles[system].overrides).length > 0 : false;
+  const defaults = system ? ROLE_PERMISSIONS[system] : null;
+  const title = system ? ROLE_INFO[system].label : (custom?.name ?? 'New role');
+
+  const pick = (next: RoleSelection, d = data) => {
+    setSelection(next);
+    setConfirmDelete(false);
+    const c = next.startsWith('custom:') ? d.customRoles.find((r) => `custom:${r.id}` === next) : undefined;
+    setDraft(new Set(next === 'new' ? [] : c ? c.permissions : d.roles[next as Exclude<FarmRole, 'owner'>].permissions));
+    setName(c?.name ?? '');
+    setDescription(c?.description ?? '');
   };
 
   const toggle = (key: Permission, on: boolean) =>
@@ -216,12 +241,14 @@ function RoleEditor({ data, onSaved, canManage }: { data: FarmPermissions; onSav
       return next;
     });
 
-  const send = async (fn: () => Promise<FarmPermissions>, message: string) => {
+  /** Runs a change, reloads the editor data and selects `then` (default: stay). */
+  const send = async (fn: () => Promise<unknown>, message: string, then?: (d: FarmPermissions, result: unknown) => RoleSelection) => {
     setSaving(true);
     try {
-      const next = await fn();
+      const result = await fn();
+      const next = await api.get<FarmPermissions>(`/farms/${farm.slug}/permissions`);
       onSaved(next);
-      setDraft(new Set(next.roles[role].permissions));
+      pick(then ? then(next, result) : selection, next);
       toast.success(message);
       router.refresh();
     } catch (err) {
@@ -231,40 +258,99 @@ function RoleEditor({ data, onSaved, canManage }: { data: FarmPermissions; onSav
     }
   };
 
-  const path = `/farms/${farm.slug}/roles/${role}/permissions`;
+  const save = () => {
+    const permissions = [...draft];
+    if (system) {
+      return send(() => api.put(`/farms/${farm.slug}/roles/${system}/permissions`, { permissions }), `${title} permissions saved`);
+    }
+    const body = { name: name.trim(), description: description.trim(), permissions };
+    if (custom) return send(() => api.patch(`/farms/${farm.slug}/roles/${custom.id}`, body), `${body.name} saved`);
+    return send(
+      () => api.post<{ role: { id: string } }>(`/farms/${farm.slug}/roles`, body),
+      `${body.name} created`,
+      (_d, result) => `custom:${(result as { role: { id: string } }).role.id}`,
+    );
+  };
+
+  const chip = (value: RoleSelection, label: ReactNode, dot = false) => (
+    <button
+      key={value}
+      type="button"
+      onClick={() => pick(value)}
+      className={cn(
+        'flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium transition-colors',
+        selection === value ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-muted',
+      )}
+    >
+      {label}
+      {dot && <span className={cn('h-1.5 w-1.5 rounded-full', selection === value ? 'bg-primary-foreground' : 'bg-primary')} aria-label="customized" />}
+    </button>
+  );
 
   return (
     <Card className="overflow-hidden">
       <CardHeader className="border-b pb-4">
+        <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">System roles</p>
         <div className="flex flex-wrap gap-1.5">
-          {EDITABLE_ROLES.map((r) => (
-            <button
-              key={r}
-              type="button"
-              onClick={() => pick(r)}
-              className={cn(
-                'flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium transition-colors',
-                role === r ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-muted',
-              )}
-            >
-              {ROLE_INFO[r].label}
-              {Object.keys(data.roles[r].overrides).length > 0 && (
-                <span className={cn('h-1.5 w-1.5 rounded-full', role === r ? 'bg-primary-foreground' : 'bg-primary')} aria-label="customized" />
-              )}
-            </button>
-          ))}
+          {EDITABLE_ROLES.map((r) => chip(r, ROLE_INFO[r].label, Object.keys(data.roles[r].overrides).length > 0))}
           <span className="flex items-center gap-1.5 rounded-full border border-dashed px-3 py-1 text-sm text-muted-foreground" title="Owners always have every permission">
             <Lock className="h-3.5 w-3.5" /> Owner
           </span>
         </div>
-        <CardTitle className="mt-3 flex items-center gap-2 text-base">
-          {ROLE_INFO[role].label}
-          {customized ? <Badge variant="primary">Customized for this farm</Badge> : <Badge variant="outline">Default</Badge>}
+        <p className="mb-1.5 mt-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">Custom roles</p>
+        <div className="flex flex-wrap gap-1.5">
+          {data.customRoles.map((r) =>
+            chip(
+              `custom:${r.id}`,
+              <>
+                {r.name}
+                <span className={cn('text-xs', selection === `custom:${r.id}` ? 'opacity-80' : 'text-muted-foreground')}>{r.memberCount}</span>
+              </>,
+            ),
+          )}
+          {canManage &&
+            chip(
+              'new',
+              <>
+                <Plus className="h-3.5 w-3.5" /> New role
+              </>,
+            )}
+          {!canManage && data.customRoles.length === 0 && <span className="text-sm text-muted-foreground">None yet.</span>}
+        </div>
+
+        <CardTitle className="mt-5 flex flex-wrap items-center gap-2 text-base">
+          {title}
+          {system && (customized ? <Badge variant="primary">Customized for this farm</Badge> : <Badge variant="outline">Default</Badge>)}
+          {custom && <Badge variant="accent">Custom role</Badge>}
+          {custom && (
+            <Badge variant="outline">
+              {custom.memberCount} {custom.memberCount === 1 ? 'person' : 'people'}
+            </Badge>
+          )}
         </CardTitle>
         <CardDescription>
-          {ROLE_INFO[role].description} {draft.size} of {PERMISSION_MODULE_KEYS.reduce((n, m) => n + moduleKeys(m).length, 0)} action keys.
+          {system ? ROLE_INFO[system].description : 'A role you define: pick exactly which actions it can take.'} {draft.size} of {ROLE_KEY_COUNT} action
+          keys.
           {ownRole && ' This is your own role, so an owner has to change it.'}
         </CardDescription>
+
+        {system === null && (
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <Field id="role-name" label="Role name">
+              <Input id="role-name" value={name} maxLength={60} placeholder="e.g. Milker" disabled={!editable} onChange={(e) => setName(e.target.value)} />
+            </Field>
+            <Field id="role-description" label="Description (optional)">
+              <Input
+                id="role-description"
+                value={description}
+                maxLength={255}
+                placeholder="What people with this role do"
+                disabled={!editable}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </Field>
+          </div>
+        )}
       </CardHeader>
 
       <Matrix
@@ -285,15 +371,10 @@ function RoleEditor({ data, onSaved, canManage }: { data: FarmPermissions; onSav
         }}
         renderCell={(key) => {
           const reason = lockReason(key);
-          const changedFromDefault = draft.has(key) !== defaults.includes(key);
+          const changedFromDefault = defaults !== null && draft.has(key) !== defaults.includes(key);
           return (
             <span className="relative inline-flex" title={reason ?? (changedFromDefault ? 'Changed from the role default' : key)}>
-              <Checkbox
-                aria-label={key}
-                checked={draft.has(key)}
-                disabled={!editable || Boolean(reason)}
-                onChange={(e) => toggle(key, e.target.checked)}
-              />
+              <Checkbox aria-label={key} checked={draft.has(key)} disabled={!editable || Boolean(reason)} onChange={(e) => toggle(key, e.target.checked)} />
               {changedFromDefault && <span className="absolute -right-1.5 -top-1 h-1.5 w-1.5 rounded-full bg-primary" />}
             </span>
           );
@@ -302,23 +383,62 @@ function RoleEditor({ data, onSaved, canManage }: { data: FarmPermissions; onSav
 
       {editable && (
         <Footer
-          dirty={dirty}
+          dirty={selection === 'new' ? name.trim().length >= 2 : dirty}
           saving={saving}
-          onDiscard={() => setDraft(new Set(saved))}
-          onSave={() => send(() => api.put<FarmPermissions>(path, { permissions: [...draft] }), `${ROLE_INFO[role].label} permissions saved`)}
+          onDiscard={() => pick(selection)}
+          onSave={save}
           extra={
-            customized && (
-              <Button variant="outline" disabled={saving} onClick={() => send(() => api.delete<FarmPermissions>(path), `${ROLE_INFO[role].label} is back on the defaults`)}>
-                <RotateCcw className="h-4 w-4" /> Reset to defaults
-              </Button>
-            )
+            <>
+              {customized && system && (
+                <Button
+                  variant="outline"
+                  disabled={saving}
+                  onClick={() => send(() => api.delete(`/farms/${farm.slug}/roles/${system}/permissions`), `${title} is back on the defaults`)}
+                >
+                  <RotateCcw className="h-4 w-4" /> Reset to defaults
+                </Button>
+              )}
+              {custom &&
+                (confirmDelete ? (
+                  <>
+                    <span className="text-sm text-muted-foreground">Delete {custom.name}?</span>
+                    <Button
+                      variant="destructive"
+                      loading={saving}
+                      onClick={() => send(() => api.delete(`/farms/${farm.slug}/roles/${custom.id}`), `${custom.name} deleted`, () => 'manager')}
+                    >
+                      Delete
+                    </Button>
+                    <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
+                      Keep
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    variant="outline"
+                    className="text-destructive"
+                    disabled={saving || custom.memberCount > 0}
+                    title={custom.memberCount > 0 ? 'Give the people with this role another role first' : undefined}
+                    onClick={() => setConfirmDelete(true)}
+                  >
+                    <Trash2 className="h-4 w-4" /> Delete role
+                  </Button>
+                ))}
+            </>
           }
         />
       )}
-      <p className="border-t px-4 py-3 text-xs text-muted-foreground">
-        <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-primary align-middle" /> differs from the built-in default for this role. New
-        permissions added later follow the defaults unless you change them here.
-      </p>
+      {system && (
+        <p className="border-t px-4 py-3 text-xs text-muted-foreground">
+          <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-primary align-middle" /> differs from the built-in default for this role. New
+          permissions added later follow the defaults unless you change them here.
+        </p>
+      )}
+      {custom && custom.memberCount > 0 && (
+        <p className="border-t px-4 py-3 text-xs text-muted-foreground">
+          Changes apply immediately to everyone with this role. To delete it, give them another role on the Team page first.
+        </p>
+      )}
     </Card>
   );
 }
@@ -364,8 +484,12 @@ function MemberOverrides({
 
   const self = selected.userId === currentUserId;
   const editable = canManage && !self;
-  const roleBase = data.roles[selected.role].permissions;
-  const effective = new Set(resolvePermissions(selected.role, { roleOverrides: data.roles[selected.role].overrides, memberOverrides: draft }));
+  // A custom role replaces the system role as the base the overrides apply to.
+  const customBase = selected.customRole ? data.customRoles.find((r) => r.id === selected.customRole!.id)?.permissions : undefined;
+  const roleBase = customBase ?? data.roles[selected.role].permissions;
+  const effective = new Set(
+    resolvePermissions(selected.role, { roleOverrides: data.roles[selected.role].overrides, memberOverrides: draft, customRole: customBase }),
+  );
   const overrideCount = Object.keys(draft).length;
   const dirty = JSON.stringify(Object.entries(draft).sort()) !== JSON.stringify(Object.entries(saved).sort());
 
@@ -423,7 +547,7 @@ function MemberOverrides({
                       {m.name}
                       {m.userId === currentUserId && <span className="font-normal text-muted-foreground"> (you)</span>}
                     </span>
-                    <span className="block truncate text-xs text-muted-foreground">{ROLE_INFO[m.role].label}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{roleLabel(m.role, m.customRole)}</span>
                   </span>
                   {count > 0 && <Badge variant="primary">{count}</Badge>}
                 </button>
@@ -437,7 +561,7 @@ function MemberOverrides({
         <CardHeader className="border-b pb-4">
           <CardTitle className="flex flex-wrap items-center gap-2 text-base">
             {selected.name}
-            <Badge variant="outline">{ROLE_INFO[selected.role].label}</Badge>
+            <Badge variant="outline">{roleLabel(selected.role, selected.customRole)}</Badge>
             {overrideCount > 0 && <Badge variant="primary">{overrideCount} override{overrideCount === 1 ? '' : 's'}</Badge>}
           </CardTitle>
           <CardDescription>

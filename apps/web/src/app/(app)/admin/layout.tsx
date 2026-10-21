@@ -1,4 +1,3 @@
-import { STAFF_ROLE_INFO } from '@kit/shared';
 import { AdminTabs } from '@/components/admin/admin-tabs';
 import { PageHeader } from '@/components/app/page-header';
 import { Badge } from '@/components/ui/badge';
@@ -11,7 +10,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       <PageHeader
         title="Platform admin"
         description="Tenants, revenue, users and security activity across the platform."
-        actions={user.staffRole && <Badge variant="primary">{STAFF_ROLE_INFO[user.staffRole].label}</Badge>}
+        actions={user.staffRoleName && <Badge variant="primary">{user.staffRoleName}</Badge>}
       />
       <AdminTabs permissions={user.platformPermissions ?? []} />
       {children}

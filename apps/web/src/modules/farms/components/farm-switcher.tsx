@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { Check, ChevronsUpDown, Plus } from 'lucide-react';
-import { PLANS, ROLE_INFO, type FarmSummary } from '@kit/shared';
+import { PLANS, roleLabel, type FarmSummary } from '@kit/shared';
 import { Menu, MenuLabel, MenuSeparator, menuItemClasses } from '@/components/ui/menu';
 import { flag, initials } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -44,7 +44,7 @@ export function FarmSwitcher({ farms, current, onNavigate }: { farms: FarmSummar
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-semibold text-sidebar-foreground">{current.name}</span>
             <span className="block truncate text-xs text-sidebar-muted">
-              {flag(current.country)} {PLANS[current.planId].name} · {ROLE_INFO[current.role].label}
+              {flag(current.country)} {PLANS[current.planId].name} · {roleLabel(current.role, current.customRole)}
             </span>
           </span>
           <ChevronsUpDown className="h-4 w-4 shrink-0 text-sidebar-muted" />
@@ -70,7 +70,7 @@ export function FarmSwitcher({ farms, current, onNavigate }: { farms: FarmSummar
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium">{farm.name}</span>
                   <span className="block truncate text-xs text-muted-foreground">
-                    {flag(farm.country)} {ROLE_INFO[farm.role].label}
+                    {flag(farm.country)} {roleLabel(farm.role, farm.customRole)}
                     {farm.suspended && ' · Suspended'}
                   </span>
                 </span>

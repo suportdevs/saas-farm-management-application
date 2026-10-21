@@ -25,3 +25,4 @@ export { storage } from '../lib/storage';
 export * from './tokens';
 export { authLimiter, limiter } from '../middleware/rate-limit';
 export { requireVerifiedEmail } from '../middleware/auth';
+export * from './staff';

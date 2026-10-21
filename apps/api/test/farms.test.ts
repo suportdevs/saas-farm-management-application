@@ -255,3 +255,104 @@ describe('farm permissions', () => {
     expect((await manager.c.delete(`${base}/members/${worker.id}`)).status).toBe(403);
   });
 });
+
+describe('farm custom roles', () => {
+  it('creates, lists, updates and deletes a custom role', async () => {
+    const owner = await signUp(app);
+    const { farm } = await createFarm(owner.c);
+    const base = `/api/farms/${farm.slug}`;
+
+    const created = await owner.c.post(`${base}/roles`, {
+      name: 'Milker',
+      description: 'Milking shifts only',
+      permissions: ['milk.view', 'milk.create', 'herd.view'],
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.role).toMatchObject({ name: 'Milker', permissions: ['herd.view', 'milk.view', 'milk.create'], memberCount: 0 });
+    const id = created.body.role.id;
+
+    expect((await owner.c.post(`${base}/roles`, { name: 'milker' })).body.error.code).toBe('ROLE_NAME_TAKEN');
+    expect((await owner.c.post(`${base}/roles`, { name: 'Boss', permissions: ['farm.delete'] })).body.error.code).toBe('OWNER_ONLY_PERMISSION');
+
+    const list = await owner.c.get(`${base}/roles`);
+    expect(list.body.system.map((r: { key: string }) => r.key)).toEqual(['owner', 'manager', 'veterinarian', 'accountant', 'worker', 'viewer']);
+    expect(list.body.custom).toHaveLength(1);
+    expect((await owner.c.get(`${base}/roles/${id}`)).body.role.name).toBe('Milker');
+
+    const updated = await owner.c.patch(`${base}/roles/${id}`, { name: 'Milking team', permissions: ['milk.view', 'milk.create', 'milk.update'] });
+    expect(updated.status).toBe(200);
+    expect(updated.body.role).toMatchObject({ name: 'Milking team', permissions: ['milk.view', 'milk.create', 'milk.update'] });
+
+    expect((await owner.c.delete(`${base}/roles/${id}`)).status).toBe(204);
+    expect((await owner.c.get(`${base}/roles/${id}`)).status).toBe(404);
+    const activity = await owner.c.get(`${base}/activity`);
+    expect(activity.body.entries.map((e: { action: string }) => e.action)).toEqual(
+      expect.arrayContaining(['farm.role_created', 'farm.role_updated', 'farm.role_deleted']),
+    );
+  });
+
+  it('gives members a custom role and blocks deleting a role in use', async () => {
+    const owner = await signUp(app);
+    const { farm } = await createFarm(owner.c);
+    const base = `/api/farms/${farm.slug}`;
+    const { body } = await owner.c.post(`${base}/roles`, { name: 'Catalog clerk', permissions: ['products.view', 'products.create'] });
+    const roleId = body.role.id;
+
+    // Invite straight into the custom role.
+    const clerk = await signUp(app);
+    const invited = await owner.c.post(`${base}/invitations`, { email: clerk.email, customRoleId: roleId });
+    expect(invited.status).toBe(201);
+    expect((await owner.c.get(`${base}/invitations`)).body.invitations[0].customRole).toEqual({ id: roleId, name: 'Catalog clerk' });
+    const { token } = sentInvites.findLast((i) => i.to === clerk.email)!;
+    expect((await clerk.c.post('/api/farms/invitations/lookup', { token })).body.invitation.customRole.name).toBe('Catalog clerk');
+    await clerk.c.post('/api/farms/invitations/accept', { token });
+
+    const ctx = await clerk.c.get(base);
+    expect(ctx.body.membership.customRole).toEqual({ id: roleId, name: 'Catalog clerk' });
+    expect(ctx.body.membership.permissions).toEqual(['products.view', 'products.create']);
+    expect((await clerk.c.post(`${base}/products/sizes`, { name: 'Small', weight: 1 })).status).toBe(201);
+    expect((await clerk.c.get(`${base}/members`)).status).toBe(403);
+    expect((await clerk.c.get('/api/farms')).body.farms[0].customRole.name).toBe('Catalog clerk');
+
+    // Editing the role changes what its members can do.
+    await owner.c.patch(`${base}/roles/${roleId}`, { permissions: ['products.view', 'members.view'] });
+    expect((await clerk.c.post(`${base}/products/sizes`, { name: 'Medium', weight: 2 })).status).toBe(403);
+    expect((await clerk.c.get(`${base}/members`)).status).toBe(200);
+    expect((await owner.c.get(`${base}/members`)).body.members.find((m: { userId: string }) => m.userId === clerk.id).customRole.name).toBe('Catalog clerk');
+
+    const inUse = await owner.c.delete(`${base}/roles/${roleId}`);
+    expect(inUse.status).toBe(409);
+    expect(inUse.body.error.code).toBe('ROLE_IN_USE');
+
+    // Back to a system role, then the custom role can go.
+    expect((await owner.c.patch(`${base}/members/${clerk.id}`, { role: 'worker' })).status).toBe(204);
+    expect((await clerk.c.get(base)).body.membership).toMatchObject({ role: 'worker', customRole: null });
+    expect((await owner.c.delete(`${base}/roles/${roleId}`)).status).toBe(204);
+    expect((await owner.c.patch(`${base}/members/${clerk.id}`, { customRoleId: roleId })).status).toBe(404);
+  });
+
+  it('stops non-owners handing out more than they hold', async () => {
+    const owner = await signUp(app);
+    const { farm } = await createFarm(owner.c);
+    const base = `/api/farms/${farm.slug}`;
+    const manager = await inviteAndJoin(app, owner, farm.slug, 'manager');
+    const worker = await inviteAndJoin(app, owner, farm.slug, 'worker');
+    const { body } = await owner.c.post(`${base}/roles`, { name: 'Treasurer', permissions: ['billing.view', 'billing.manage'] });
+
+    // Managers lack billing.manage, so they can't hand out a role that has it…
+    const assign = await manager.c.patch(`${base}/members/${worker.id}`, { customRoleId: body.role.id });
+    expect(assign.status).toBe(403);
+    expect(assign.body.error.code).toBe('PERMISSION_ESCALATION');
+    expect((await manager.c.post(`${base}/invitations`, { email: 'x@example.com', customRoleId: body.role.id })).status).toBe(403);
+    // …nor create one, even with roles.manage.
+    await owner.c.put(`${base}/members/${manager.id}/permissions`, { overrides: { 'roles.manage': true } });
+    expect((await manager.c.post(`${base}/roles`, { name: 'Sneaky', permissions: ['billing.manage'] })).status).toBe(403);
+    const ok = await manager.c.post(`${base}/roles`, { name: 'Feeder', permissions: ['feed.view', 'feed.create'] });
+    expect(ok.status).toBe(201);
+    expect((await manager.c.patch(`${base}/members/${worker.id}`, { customRoleId: ok.body.role.id })).status).toBe(204);
+    expect((await manager.c.patch(`${base}/members/${worker.id}`, { role: 'worker', customRoleId: ok.body.role.id })).body.error.code).toBe('ROLE_CONFLICT');
+    // Only owners touch ownership, and nobody moves themselves.
+    expect((await manager.c.patch(`${base}/members/${worker.id}`, { role: 'owner' })).status).toBe(403);
+    expect((await manager.c.patch(`${base}/members/${manager.id}`, { customRoleId: ok.body.role.id })).body.error.code).toBe('SELF_ROLE_CHANGE');
+  });
+});

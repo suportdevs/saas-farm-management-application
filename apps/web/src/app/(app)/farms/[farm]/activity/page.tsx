@@ -16,12 +16,13 @@ export const metadata: Metadata = { title: 'Activity' };
 
 function detail(e: FarmActivityEntry): string | null {
   const m = e.metadata;
-  if (e.action === 'farm.member_invited' && typeof m.email === 'string') return `${m.email} as ${ROLE_INFO[m.role as FarmRole]?.label ?? m.role}`;
+  if (e.action === 'farm.member_invited' && typeof m.email === 'string') return `${m.email} as ${typeof m.roleLabel === 'string' ? m.roleLabel : (ROLE_INFO[m.role as FarmRole]?.label ?? m.role)}`;
   if (e.action === 'farm.member_role_changed' && typeof m.to === 'string') return `${ROLE_INFO[m.from as FarmRole]?.label ?? m.from} → ${ROLE_INFO[m.to as FarmRole]?.label ?? m.to}`;
   if (e.action === 'farm.invitation_revoked' && typeof m.email === 'string') return m.email;
   if (e.action === 'farm.updated' && Array.isArray(m.fields)) return `Changed ${m.fields.join(', ')}`;
   if (e.action.startsWith('farm.role_permissions_') && Array.isArray(m.changed)) return `${ROLE_INFO[m.role as FarmRole]?.label ?? m.role} · ${m.changed.join(', ')}`;
   if (e.action === 'farm.member_permissions_changed' && Array.isArray(m.changed)) return m.changed.join(', ');
+  if (e.action.startsWith('farm.role_') && typeof m.name === 'string') return typeof m.from === 'string' ? `${m.from} → ${m.name}` : m.name;
   if (e.action === 'farm.subscription_changed' && isPlanId(m.to) && isPlanId(m.from)) {
     return m.from === m.to ? `${PLANS[m.to].name} · ${m.fromState} → ${m.toState}` : `${PLANS[m.from].name} → ${PLANS[m.to].name}`;
   }

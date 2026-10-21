@@ -32,13 +32,24 @@ export const users = pgTable('users', {
   passwordHash: text('password_hash'),
   image: text('image'),
   role: userRole('role').notNull().default('user'),
-  // Platform staff role for admins (super_admin, support, billing, analyst); null = super admin.
-  staffRole: varchar('staff_role', { length: 20 }),
+  // Platform staff role key for admins: built-in (super_admin, support, billing, analyst) or a platform_roles key; null = super admin.
+  staffRole: varchar('staff_role', { length: 40 }),
   emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
   // Suspended accounts cannot sign in and all their sessions are revoked.
   bannedAt: timestamp('banned_at', { withTimezone: true }),
   bannedReason: varchar('banned_reason', { length: 500 }),
   lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
+  ...timestamps,
+});
+
+/** Custom platform staff roles created by super admins (built-in ones live in code). */
+export const platformRoles = pgTable('platform_roles', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  key: varchar('key', { length: 40 }).notNull().unique(),
+  name: varchar('name', { length: 60 }).notNull(),
+  description: varchar('description', { length: 255 }),
+  permissions: jsonb('permissions').$type<string[]>().notNull().default([]),
+  createdById: uuid('created_by_id').references(() => users.id, { onDelete: 'set null' }),
   ...timestamps,
 });
 
@@ -158,3 +169,4 @@ export type NewUser = typeof users.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type Job = typeof jobs.$inferSelect;
+export type PlatformRoleRow = typeof platformRoles.$inferSelect;

@@ -10,6 +10,7 @@ const tabs: { href: string; label: string; exact?: boolean; permission: Platform
   { href: '/admin/farms', label: 'Farms', permission: 'platform.tenants.view' },
   { href: '/admin/users', label: 'Users', permission: 'platform.users.view' },
   { href: '/admin/audit-logs', label: 'Audit log', permission: 'platform.audit.view' },
+  { href: '/admin/staff-roles', label: 'Staff roles', permission: 'platform.staff.manage' },
 ];
 
 /** Only the tabs the viewer's staff role can open. */

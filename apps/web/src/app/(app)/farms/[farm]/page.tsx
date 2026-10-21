@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowRight, CheckCircle2, Circle, Clock, Crown, History, MapPin, Settings, UserPlus, Users } from 'lucide-react';
-import { FARM_TYPE_INFO, ROLE_INFO, type FarmActivityEntry, type FarmMember, type Permission } from '@kit/shared';
+import { FARM_TYPE_INFO, roleLabel, type FarmActivityEntry, type FarmMember, type Permission } from '@kit/shared';
 import { PageHeader } from '@/components/app/page-header';
 import { Avatar } from '@/components/app/user-menu';
 import { FARM_TYPE_ICONS } from '@/modules/farms/constants';
@@ -210,9 +210,9 @@ export default async function FarmOverviewPage({ params, searchParams }: Props) 
                         {m.name}
                         {m.userId === user.id && <span className="text-muted-foreground"> (you)</span>}
                       </p>
-                      <p className="truncate text-xs text-muted-foreground">{m.title || ROLE_INFO[m.role].label}</p>
+                      <p className="truncate text-xs text-muted-foreground">{m.title || roleLabel(m.role, m.customRole)}</p>
                     </div>
-                    <Badge variant={m.role === 'owner' ? 'primary' : 'default'}>{ROLE_INFO[m.role].label}</Badge>
+                    <Badge variant={m.role === 'owner' ? 'primary' : 'default'}>{roleLabel(m.role, m.customRole)}</Badge>
                   </li>
                 ))}
               </ul>

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Loader2, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
-import { FARM_TYPE_INFO, ROLE_INFO, type InvitationPreview } from '@kit/shared';
+import { FARM_TYPE_INFO, roleLabel, type InvitationPreview } from '@kit/shared';
 import { Alert } from '@/components/ui/alert';
 import { Button, buttonClasses } from '@/components/ui/button';
 import { api, errorMessage } from '@/lib/api';
@@ -70,7 +70,7 @@ export function AcceptInvite({ token, user }: { token: string; user: { name: str
         <h1 className="mt-1 text-2xl font-bold tracking-tight">Join {invitation.farm.name}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {invitation.invitedBy ? `${invitation.invitedBy} invited you` : 'You were invited'} to join as{' '}
-          <strong className="text-foreground">{ROLE_INFO[invitation.role].label.toLowerCase()}</strong>.
+          <strong className="text-foreground">{roleLabel(invitation.role, invitation.customRole).toLowerCase()}</strong>.
         </p>
       </div>
 
