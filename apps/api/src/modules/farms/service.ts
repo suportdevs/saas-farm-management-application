@@ -312,32 +312,61 @@ export async function createFarm(user: User, input: CreateFarmData) {
   }
   const slug = await uniqueSlug(input.name);
   return db.transaction(async (tx) => {
-    const [farm] = await tx
-      .insert(farms)
-      .values({
-        name: input.name,
-        slug,
-        type: input.type,
-        country: input.country,
-        region: input.region ?? null,
-        city: input.city ?? null,
-        timezone: input.timezone,
-        currency: input.currency,
-        locale: input.locale,
-        unitSystem: input.unitSystem,
-        milkUnit: input.milkUnit,
-        weightUnit: input.weightUnit,
-        areaUnit: input.areaUnit,
-        totalArea: input.totalArea ?? null,
-        herdSize: input.herdSize === null || input.herdSize === undefined ? null : Math.round(input.herdSize),
-        goals: input.goals,
-        createdById: user.id,
-      })
-      .returning();
+    const [farm] = await tx.insert(farms).values(farmValues(input, slug, user.id)).returning();
     await tx.insert(farmMembers).values({ farmId: farm!.id, userId: user.id, role: 'owner', lastAccessedAt: new Date() });
     await farmExtensions.created(farm!, tx);
     return farm!;
   });
+}
+
+const farmValues = (input: CreateFarmData, slug: string, createdById: string) => ({
+  name: input.name,
+  slug,
+  type: input.type,
+  country: input.country,
+  region: input.region ?? null,
+  city: input.city ?? null,
+  timezone: input.timezone,
+  currency: input.currency,
+  locale: input.locale,
+  unitSystem: input.unitSystem,
+  milkUnit: input.milkUnit,
+  weightUnit: input.weightUnit,
+  areaUnit: input.areaUnit,
+  totalArea: input.totalArea ?? null,
+  herdSize: input.herdSize === null || input.herdSize === undefined ? null : Math.round(input.herdSize),
+  goals: input.goals,
+  createdById,
+});
+
+/**
+ * A tenant created by the platform team for a client. The owner joins at once
+ * when they already have an account; otherwise they get an owner invitation by
+ * email (the farm has no members until they accept). Farm-owning limits don't apply.
+ */
+export async function createFarmForClient(staff: User, input: CreateFarmData & { ownerEmail: string }) {
+  const owner = await db.query.users.findFirst({ where: eq(users.email, input.ownerEmail) });
+  const slug = await uniqueSlug(input.name);
+  const farm = await db.transaction(async (tx) => {
+    const [farm] = await tx.insert(farms).values(farmValues(input, slug, staff.id)).returning();
+    if (owner) await tx.insert(farmMembers).values({ farmId: farm!.id, userId: owner.id, role: 'owner', title: 'Farm owner' });
+    await farmExtensions.created(farm!, tx);
+    return farm!;
+  });
+  if (!owner) {
+    const token = randomToken();
+    await db.insert(farmInvitations).values({
+      farmId: farm.id,
+      email: input.ownerEmail,
+      role: 'owner',
+      title: 'Farm owner',
+      tokenHash: sha256(token),
+      invitedById: staff.id,
+      expiresAt: new Date(Date.now() + INVITE_TTL),
+    });
+    await sendInvitationEmail({ to: input.ownerEmail, token, farm, inviter: staff, roleLabel: ROLE_INFO.owner.label });
+  }
+  return { farm, owner: owner ?? null, invited: !owner };
 }
 
 /** Resolves a farm by id or slug together with the user's membership and effective permissions. */

@@ -111,6 +111,18 @@ ones live in `platform_roles` and `users.staff_role` holds the key. New staff st
 re-scopes staff who can do more than they can. `npm run db:seed` creates a login per built-in staff role:
 `support@example.com`, `billing@example.com`, `analyst@example.com` (password `SEED_STAFF_PASSWORD`, default the admin password).
 
+**Manual clients (no Stripe).** The operator console covers the whole manual flow:
+
+| Need | Where |
+| --- | --- |
+| Create a tenant for a client | **Tenants → New tenant** (`POST /api/admin/farms`): existing user becomes owner, otherwise an owner invitation is emailed; optional manual plan + paid-through date |
+| Who is on which plan | **Subscriptions** (`GET /api/admin/farms/subscriptions`): plan, state, Stripe/manual, renewal date, limits, deal flag, MRR, unpaid/overdue balance; CSV export |
+| Custom terms (seats, animals, modules) | Tenant page → **Deal & limits** (`PATCH /api/admin/farms/:id/entitlements`): stored on `farm_subscriptions`, applied on top of any plan, survives plan changes |
+| Bill and get paid offline | Tenant page → **Manual invoices**: numbered `INV-<year>-00001`, partial payments, void; an invoice that "pays for" a plan moves the tenant to it through its period end once paid in full. **Invoices** lists all of them (CSV export). The tenant sees them on its own billing page |
+| Who may do it | `platform.tenants.create`, `platform.billing.view`, `platform.billing.manage` (staff roles) |
+
+Staff roles have a list with modal create/edit, delete and CSV import / export / template (`POST /api/admin/staff-roles/import`, all rows or none).
+
 **Platform staff** have per-action `platform.*` keys by staff role (`packages/shared/src/platform/access.ts`):
 `super_admin` (everything, incl. `platform.staff.manage`), `support`, `billing`, `analyst`. Admins without a
 staff role are super admins. Guard operator routes with `requirePlatform('platform.tenants.suspend')`.

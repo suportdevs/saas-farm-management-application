@@ -71,6 +71,13 @@
       "when": 1792580507083,
       "tag": "0009_custom_roles",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792585640899,
+      "tag": "0010_manual_billing",
+      "breakpoints": true
     }
   ]
 }

@@ -13,6 +13,7 @@ export { getFarm, hasPermission, requireFarm, type FarmAccess } from './access';
 export { farmExtensions, type Tx } from './extensions';
 export { farmInvitations, farmMembers, farmRolePermissions, farms, type Farm, type FarmMemberRow } from './schema';
 export {
+  createFarmForClient,
   deleteFarm,
   findFarm,
   listActivity,

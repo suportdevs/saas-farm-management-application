@@ -1,8 +1,7 @@
-import { PLANS } from '@kit/shared';
 import { defineModule } from '../../core';
 import { farmExtensions } from '../farms';
 import { billingEnabled, config, trialPlan } from './config';
-import { assertWithinLimit, findSubscription, findSubscriptions, snapshotOf, subscriptionOf } from './entitlements';
+import { assertWithinLimit, entitlementsOf, findSubscription, findSubscriptions, snapshotOf, subscriptionOf } from './entitlements';
 import { scheduleTrialReminders } from './reminders';
 import { router, webhookRouter } from './routes';
 import { cancelFarmSubscription, startTrial } from './service';
@@ -13,9 +12,21 @@ import { cancelFarmSubscription, startTrial } from './service';
  *
  * Public API for other modules (import from '../subscriptions' only):
  */
-export { assertWithinLimit, findSubscription, planOf, requireCapability, snapshotOf, subscriptionOf } from './entitlements';
+export { assertWithinLimit, entitlementsOf, findSubscription, findSubscriptions, planOf, requireCapability, snapshotOf, subscriptionOf } from './entitlements';
 export { cancelFarmSubscription, extendTrial, setManualPlan } from './service';
-export { farmSubscriptions, type FarmSubscriptionRow } from './schema';
+export {
+  createManualInvoice,
+  deleteManualPayment,
+  entitlementsFor,
+  getManualInvoice,
+  listManualInvoices,
+  recordManualPayment,
+  setEntitlements,
+  unpaidByFarm,
+  unpaidFarmIds,
+  voidManualInvoice,
+} from './manual-billing';
+export { farmSubscriptions, manualInvoices, type FarmSubscriptionRow } from './schema';
 
 export default defineModule({
   name: 'subscriptions',
@@ -33,7 +44,7 @@ export default defineModule({
     // Module permissions follow the plan: a farm only gets the keys of modules its plan includes.
     farmExtensions.provideCapabilities(async (farmIds) => {
       const rows = await findSubscriptions(farmIds);
-      return new Map(farmIds.map((id) => [id, [...PLANS[subscriptionOf(rows.get(id)).planId].capabilities]]));
+      return new Map(farmIds.map((id) => [id, entitlementsOf(rows.get(id)).capabilities]));
     });
     farmExtensions.extendSummaries(async (farmIds) => {
       const rows = await findSubscriptions(farmIds);

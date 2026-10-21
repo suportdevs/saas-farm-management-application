@@ -2,7 +2,7 @@ import type { Express } from 'express';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app';
 import { pool } from '../src/db/client';
-import { createFarm } from './farm-helpers';
+import { createFarm, farmInput, sentInvites } from './farm-helpers';
 import { signUp } from './helpers';
 
 // Capture invitation tokens instead of sending email.
@@ -152,5 +152,122 @@ describe('platform admin', () => {
     expect((await user.c.patch(`/api/admin/users/${superAdmin.id}`, { role: 'user' })).body.error.code).toBe('PERMISSION_ESCALATION');
     expect((await user.c.post('/api/admin/staff-roles', { name: 'Billing twin', permissions: ['platform.billing.manage'] })).body.error.code).toBe('PERMISSION_ESCALATION');
     expect((await user.c.patch(`/api/admin/staff-roles/${key}`, { permissions: ['platform.users.view'] })).body.error.code).toBe('SELF_ACTION');
+  });
+
+  it('runs a manual client: tenant, deal, invoice, payment', async () => {
+    const admin = await signUp(app, { admin: true });
+    const client = await signUp(app);
+    const name = `Manual Client Farm ${Date.now()}`;
+
+    // Create the tenant for an existing user, straight onto a manual Growth plan.
+    const created = await admin.c.post('/api/admin/farms', {
+      ...farmInput(name),
+      ownerEmail: client.email,
+      planId: 'growth',
+      currentPeriodEnd: new Date(Date.now() + 86_400_000).toISOString(),
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.invited).toBe(false);
+    const farmId = created.body.farm.id;
+    const slug = created.body.farm.slug;
+    const ctx = await client.c.get(`/api/farms/${slug}`);
+    expect(ctx.body.membership.role).toBe('owner');
+    expect(ctx.body.subscription).toMatchObject({ planId: 'growth', source: 'manual' });
+
+    // An owner without an account gets an invitation instead.
+    const invitedEmail = `new-owner-${Date.now()}@example.com`;
+    const invited = await admin.c.post('/api/admin/farms', { ...farmInput(`Invited Farm ${Date.now()}`), ownerEmail: invitedEmail });
+    expect(invited.body.invited).toBe(true);
+    expect(sentInvites.some((i) => i.to === invitedEmail)).toBe(true);
+
+    // The deal: 40 seats instead of 10, advanced reports added, finance removed.
+    const deal = await admin.c.patch(`/api/admin/farms/${farmId}/entitlements`, {
+      limits: { members: 40 },
+      capabilities: { advanced_reports: true, finance: false },
+      notes: 'Contract #42',
+    });
+    expect(deal.status).toBe(200);
+    expect(deal.body.effective.limits.members).toBe(40);
+    expect(deal.body.effective.capabilities).toContain('advanced_reports');
+    expect(deal.body.effective.capabilities).not.toContain('finance');
+    const dealCtx = await client.c.get(`/api/farms/${slug}`);
+    expect(dealCtx.body.limits.members).toBe(40);
+    expect(dealCtx.body.modules).toMatchObject({ reports: 'enabled', finance: 'plan' });
+
+    // Invoice for a year of Pro, paid in two instalments.
+    const periodEnd = `${new Date().getFullYear() + 1}-12-31`;
+    const invoice = await admin.c.post(`/api/admin/farms/${farmId}/invoices`, {
+      description: 'Pro plan, annual',
+      amount: '1,000.00',
+      currency: 'usd',
+      issuedAt: '1999-12-01',
+      dueAt: '2000-01-01',
+      planId: 'pro',
+      periodEnd,
+    });
+    expect(invoice.status).toBe(201);
+    expect(invoice.body.invoice).toMatchObject({ amount: 100000, currency: 'USD', status: 'overdue', balance: 100000 });
+    expect(invoice.body.invoice.number).toMatch(/^INV-1999-\d{5}$/);
+    const invoiceId = invoice.body.invoice.id;
+
+    const subs = await admin.c.get(`/api/admin/farms/subscriptions?q=${encodeURIComponent(name)}`);
+    expect(subs.body.subscriptions[0]).toMatchObject({ subscription: { planId: 'growth' }, hasOverrides: true, unpaid: { count: 1, overdue: 1 } });
+    const overdue = await admin.c.get('/api/admin/farms/subscriptions?billing=overdue&pageSize=1000');
+    expect(overdue.body.subscriptions.map((r: { farm: { id: string } }) => r.farm.id)).toContain(farmId);
+
+    const pay = (body: object) => admin.c.post(`/api/admin/farms/${farmId}/invoices/${invoiceId}/payments`, body);
+    expect((await pay({ amount: 400, method: 'bank_transfer', reference: 'TT-1' })).body).toMatchObject({ paidInFull: false, invoice: { paid: 40000, balance: 60000 } });
+    expect((await pay({ amount: 700, method: 'cash' })).body.error.code).toBe('OVERPAYMENT');
+    const rest = await pay({ amount: 600, method: 'cash' });
+    expect(rest.body).toMatchObject({ paidInFull: true, planApplied: { planId: 'pro', periodEnd }, invoice: { status: 'paid', balance: 0 } });
+    const paidCtx = await client.c.get(`/api/farms/${slug}`);
+    expect(paidCtx.body.subscription).toMatchObject({ planId: 'pro', source: 'manual', state: 'active' });
+    expect(paidCtx.body.subscription.currentPeriodEnd.slice(0, 10)).toBe(periodEnd);
+    // The deal survives the plan change.
+    expect(paidCtx.body.limits.members).toBe(40);
+
+    // The client sees the invoice on their own billing page.
+    const own = await client.c.get(`/api/farms/${slug}/billing/invoices`);
+    expect(own.body.invoices[0]).toMatchObject({ number: invoice.body.invoice.number, status: 'paid' });
+
+    // Voiding: only unpaid invoices.
+    expect((await admin.c.post(`/api/admin/farms/${farmId}/invoices/${invoiceId}/void`)).body.error.code).toBe('INVOICE_HAS_PAYMENTS');
+    const second = await admin.c.post(`/api/admin/farms/${farmId}/invoices`, { description: 'Setup', amount: 50, currency: 'USD', dueAt: periodEnd });
+    expect((await admin.c.post(`/api/admin/farms/${farmId}/invoices/${second.body.invoice.id}/void`)).body.invoice.status).toBe('void');
+    const all = await admin.c.get(`/api/admin/farms/invoices?q=${encodeURIComponent(name)}&status=paid`);
+    expect(all.body.invoices.map((i: { id: string }) => i.id)).toEqual([invoiceId]);
+
+    // Analysts can look but not bill or create tenants.
+    const analyst = await signUp(app, { admin: true });
+    await admin.c.patch(`/api/admin/users/${analyst.id}`, { staffRole: 'analyst' });
+    expect((await analyst.c.get('/api/admin/farms/subscriptions')).status).toBe(200);
+    expect((await analyst.c.post(`/api/admin/farms/${farmId}/invoices`, { description: 'x', amount: 1, currency: 'USD', dueAt: periodEnd })).status).toBe(403);
+    expect((await analyst.c.post('/api/admin/farms', { ...farmInput('Nope Farm'), ownerEmail: 'x@example.com' })).status).toBe(403);
+  });
+
+  it('imports staff roles from CSV rows, all or nothing', async () => {
+    const admin = await signUp(app, { admin: true });
+    const key = `imported-${Date.now()}`;
+    const bad = await admin.c.post('/api/admin/staff-roles/import', {
+      rows: [
+        { key, name: 'Imported', permissions: 'platform.stats.view platform.tenants.view' },
+        { key: 'support', name: 'Not allowed', permissions: '' },
+        { key: `${key}-2`, name: 'Typo', permissions: 'platform.nope' },
+      ],
+    });
+    expect(bad.status).toBe(422);
+    expect(Object.keys(bad.body.error.details)).toEqual(expect.arrayContaining(['rows.2.permissions']));
+    expect((await admin.c.get(`/api/admin/staff-roles/${key}`)).status).toBe(404);
+
+    const badKey = await admin.c.post('/api/admin/staff-roles/import', { rows: [{ key: 'support', name: 'Not allowed', permissions: '' }] });
+    expect(Object.keys(badKey.body.error.details)).toEqual(['rows.0.key']);
+
+    const ok = await admin.c.post('/api/admin/staff-roles/import', {
+      rows: [{ key, name: 'Imported', description: 'From CSV', permissions: 'platform.stats.view;platform.tenants.view' }],
+    });
+    expect(ok.body).toEqual({ created: 1, updated: 0 });
+    const again = await admin.c.post('/api/admin/staff-roles/import', { rows: [{ key, name: 'Imported v2', permissions: 'platform.stats.view' }] });
+    expect(again.body).toEqual({ created: 0, updated: 1 });
+    expect((await admin.c.get(`/api/admin/staff-roles/${key}`)).body.role).toMatchObject({ name: 'Imported v2', permissions: ['platform.stats.view'] });
   });
 });

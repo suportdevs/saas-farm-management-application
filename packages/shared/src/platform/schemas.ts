@@ -1,11 +1,12 @@
 import { z } from 'zod';
-import { PLAN_IDS } from '../subscriptions/plans';
+import { CAPABILITIES, PLAN_IDS } from '../subscriptions/plans';
+import { createFarmSchema } from '../farms/schemas';
 import { PLATFORM_PERMISSIONS } from './access';
 
 
 export const adminFarmListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  pageSize: z.coerce.number().int().min(1).max(1000).default(20),
   q: z.string().trim().max(100).optional(),
   plan: z.enum(PLAN_IDS).optional(),
   status: z.enum(['trialing', 'paying', 'free', 'past_due', 'suspended']).optional(),
@@ -57,3 +58,158 @@ export const updatePlatformRoleSchema = z
   .partial()
   .refine((v) => Object.keys(v).length > 0, 'Nothing to update');
 export type UpdatePlatformRoleInput = z.input<typeof updatePlatformRoleSchema>;
+
+// ─── Staff role import ───────────────────────────────────────────
+
+export const STAFF_ROLE_IMPORT_LIMIT = 200;
+
+/** One CSV row: `permissions` is a list of keys separated by spaces, commas, semicolons or pipes. */
+export const staffRoleImportRowSchema = z.object({
+  key: staffRoleKeySchema,
+  name: z.string().trim().min(2, 'Use at least 2 characters').max(60),
+  description: staffRoleText,
+  permissions: z
+    .string()
+    .default('')
+    .transform((v, ctx) => {
+      const keys = v.split(/[\s,;|]+/).filter(Boolean);
+      const unknown = keys.filter((k) => !(PLATFORM_PERMISSIONS as readonly string[]).includes(k));
+      if (unknown.length) {
+        ctx.addIssue({ code: 'custom', message: `Unknown permission ${unknown.join(', ')}` });
+        return z.NEVER;
+      }
+      return [...new Set(keys)] as (typeof PLATFORM_PERMISSIONS)[number][];
+    }),
+});
+
+/** POST /admin/staff-roles/import — all rows or none; existing custom keys are updated. */
+export const staffRoleImportSchema = z.object({
+  rows: z.array(staffRoleImportRowSchema).min(1, 'The file has no rows').max(STAFF_ROLE_IMPORT_LIMIT),
+});
+export type StaffRoleImportInput = z.input<typeof staffRoleImportSchema>;
+
+// ─── Tenants (manual) ────────────────────────────────────────────
+
+/** POST /admin/farms — a tenant created for a client. The owner is added now, or invited when they have no account. */
+export const adminCreateFarmSchema = createFarmSchema.extend({
+  ownerEmail: z.string().trim().toLowerCase().max(254).pipe(z.email('Enter a valid email address')),
+  /** Plan to start on. Empty = the normal free trial. */
+  planId: z.enum(PLAN_IDS).optional(),
+  /** Manual plans end on this date (paid-through); empty = open-ended. */
+  currentPeriodEnd: z.iso.datetime({ offset: true }).nullable().optional(),
+});
+export type AdminCreateFarmInput = z.input<typeof adminCreateFarmSchema>;
+
+/** Accepts numbers or numeric strings; empty → null (= use the plan's value). */
+const limitValue = z
+  .union([z.number(), z.string()])
+  .transform((v, ctx) => {
+    if (v === '' || v === null) return null;
+    const n = typeof v === 'number' ? v : Number(v);
+    if (!Number.isInteger(n) || n < 0 || n > 10_000_000) {
+      ctx.addIssue({ code: 'custom', message: 'Enter a whole number' });
+      return z.NEVER;
+    }
+    return n;
+  })
+  .nullable();
+
+/**
+ * PATCH /admin/farms/:id/entitlements — per-tenant deals on top of the plan.
+ * A limit set to a number replaces the plan's; `unlimited: true` lifts it; omitted = the plan's.
+ * Capabilities: true adds a module to the plan, false takes it away.
+ */
+export const adminEntitlementsSchema = z.object({
+  limits: z
+    .object({
+      members: limitValue.optional(),
+      animals: limitValue.optional(),
+      unlimitedMembers: z.boolean().optional(),
+      unlimitedAnimals: z.boolean().optional(),
+    })
+    .default({}),
+  capabilities: z.partialRecord(z.enum(CAPABILITIES), z.boolean()).default({}),
+  notes: z
+    .string()
+    .trim()
+    .max(2000)
+    .transform((v) => (v === '' ? null : v))
+    .nullable()
+    .optional(),
+});
+export type AdminEntitlementsInput = z.input<typeof adminEntitlementsSchema>;
+
+// ─── Manual invoices & payments ──────────────────────────────────
+
+export const PAYMENT_METHODS = ['bank_transfer', 'cash', 'cheque', 'card', 'mobile_money', 'other'] as const;
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
+  bank_transfer: 'Bank transfer',
+  cash: 'Cash',
+  cheque: 'Cheque',
+  card: 'Card (offline)',
+  mobile_money: 'Mobile money',
+  other: 'Other',
+};
+
+/** Money typed in major units ("1,250.50") → integer minor units (125050). */
+const money = z.union([z.number(), z.string()]).transform((v, ctx) => {
+  const n = typeof v === 'number' ? v : Number(String(v).replace(/[,\s]/g, ''));
+  if (!Number.isFinite(n) || n <= 0 || n > 100_000_000) {
+    ctx.addIssue({ code: 'custom', message: 'Enter an amount greater than 0' });
+    return z.NEVER;
+  }
+  return Math.round(n * 100);
+});
+
+const isoDate = z.iso.date('Enter a date (YYYY-MM-DD)');
+
+/** POST /admin/farms/:id/invoices */
+export const manualInvoiceSchema = z.object({
+  description: z.string().trim().min(2, 'Describe what the invoice is for').max(255),
+  amount: money,
+  currency: z.string().trim().toUpperCase().length(3, 'Use a 3-letter currency code'),
+  issuedAt: isoDate.optional(),
+  dueAt: isoDate,
+  /** When paid in full, the tenant moves to this plan… */
+  planId: z.enum(PLAN_IDS).nullable().optional(),
+  /** …paid through this date. */
+  periodEnd: isoDate.nullable().optional(),
+  notes: z.string().trim().max(2000).optional(),
+});
+export type ManualInvoiceInput = z.input<typeof manualInvoiceSchema>;
+
+/** POST /admin/farms/:id/invoices/:invoiceId/payments */
+export const manualPaymentSchema = z.object({
+  amount: money,
+  method: z.enum(PAYMENT_METHODS),
+  reference: z.string().trim().max(120).optional(),
+  paidAt: isoDate.optional(),
+  notes: z.string().trim().max(1000).optional(),
+});
+export type ManualPaymentInput = z.input<typeof manualPaymentSchema>;
+
+export const INVOICE_STATUSES = ['open', 'overdue', 'paid', 'void'] as const;
+export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
+
+/** GET /admin/farms/subscriptions */
+export const adminSubscriptionListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(1000).default(25),
+  q: z.string().trim().max(100).optional(),
+  plan: z.enum(PLAN_IDS).optional(),
+  state: z.enum(['free', 'trialing', 'active', 'past_due', 'canceled']).optional(),
+  source: z.enum(['stripe', 'manual', 'none']).optional(),
+  /** Tenants with unpaid / overdue manual invoices. */
+  billing: z.enum(['unpaid', 'overdue']).optional(),
+});
+export type AdminSubscriptionListQuery = z.infer<typeof adminSubscriptionListQuerySchema>;
+
+/** GET /admin/farms/invoices */
+export const adminInvoiceListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(1000).default(25),
+  q: z.string().trim().max(100).optional(),
+  status: z.enum(INVOICE_STATUSES).optional(),
+});
+export type AdminInvoiceListQuery = z.infer<typeof adminInvoiceListQuerySchema>;

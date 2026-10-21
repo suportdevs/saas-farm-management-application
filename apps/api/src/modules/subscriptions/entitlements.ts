@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { eq, inArray } from 'drizzle-orm';
 import {
+  CAPABILITIES,
   isPlanId,
   PLANS,
   type BillingInterval,
@@ -70,10 +71,37 @@ export async function findSubscriptions(farmIds: string[]): Promise<Map<string, 
   return new Map(rows.map((r) => [r.farmId, r]));
 }
 
-export function snapshotOf(row: Row): SubscriptionSnapshot {
+const LIMIT_KEYS: (keyof PlanLimits)[] = ['animals', 'members'];
+
+/** Stored limit overrides, minus unknown keys: a number replaces the plan's limit, null lifts it. */
+export function limitOverridesOf(row: Row): Partial<Record<keyof PlanLimits, number | null>> {
+  const raw = row?.limitOverrides ?? {};
+  return Object.fromEntries(
+    LIMIT_KEYS.filter((k) => k in raw && (raw[k] === null || Number.isInteger(raw[k]))).map((k) => [k, raw[k] as number | null]),
+  );
+}
+
+export function capabilityOverridesOf(row: Row): Partial<Record<Capability, boolean>> {
+  const raw = row?.capabilityOverrides ?? {};
+  return Object.fromEntries(Object.entries(raw).filter(([k, v]) => (CAPABILITIES as readonly string[]).includes(k) && typeof v === 'boolean'));
+}
+
+/**
+ * What a farm actually gets: its plan, with any per-tenant deal applied
+ * (custom limits, modules added or removed by the platform team).
+ */
+export function entitlementsOf(row: Row) {
   const subscription = subscriptionOf(row);
   const plan = PLANS[subscription.planId];
-  return { subscription, limits: plan.limits, capabilities: [...plan.capabilities] };
+  const limits: PlanLimits = { ...plan.limits, ...limitOverridesOf(row) };
+  const overrides = capabilityOverridesOf(row);
+  const capabilities = CAPABILITIES.filter((c) => overrides[c] ?? plan.capabilities.includes(c));
+  return { subscription, plan, limits, capabilities };
+}
+
+export function snapshotOf(row: Row): SubscriptionSnapshot {
+  const { subscription, limits, capabilities } = entitlementsOf(row);
+  return { subscription, limits, capabilities };
 }
 
 /** The plan in effect for a farm. */
@@ -82,12 +110,12 @@ export const planOf = async (farmId: string) => PLANS[subscriptionOf(await findS
 const LIMIT_LABELS: Record<keyof PlanLimits, string> = { animals: 'animals', members: 'team members' };
 
 /**
- * Throws 402 when adding `adding` more of a resource would exceed the plan.
+ * Throws 402 when adding `adding` more of a resource would exceed the farm's limit (plan or deal).
  *   await assertWithinLimit(farm.id, 'animals', currentCount);
  */
 export async function assertWithinLimit(farmId: string, resource: keyof PlanLimits, current: number, adding = 1) {
-  const plan = await planOf(farmId);
-  const max = plan.limits[resource];
+  const { plan, limits } = entitlementsOf(await findSubscription(farmId));
+  const max = limits[resource];
   if (max !== null && current + adding > max) {
     throw new AppError(
       402,
@@ -97,11 +125,11 @@ export async function assertWithinLimit(farmId: string, resource: keyof PlanLimi
   }
 }
 
-/** Requires the farm's plan to include a capability. Use after `requireFarm()`. */
+/** Requires the farm's plan (or deal) to include a capability. Use after `requireFarm()`. */
 export function requireCapability(capability: Capability) {
   return async (_req: Request, res: Response, next: NextFunction) => {
-    const plan = await planOf(getFarm(res).farm.id);
-    if (!plan.capabilities.includes(capability)) {
+    const { plan, capabilities } = entitlementsOf(await findSubscription(getFarm(res).farm.id));
+    if (!capabilities.includes(capability)) {
       throw new AppError(402, 'PLAN_UPGRADE_REQUIRED', `This feature isn't included in the ${plan.name} plan. Upgrade to unlock it.`);
     }
     next();

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { checkoutSchema } from '@kit/shared';
 import { audit, forbidImpersonation, logger, validate } from '../../core';
 import { getFarm, requireFarm } from '../farms';
+import { manualInvoicesForTenant } from './manual-billing';
 import { billingOverview, createCheckout, createPortal, handleEvent, listInvoices, verifyWebhook } from './service';
 
 /** Mounted at /api/farms — farm-scoped billing lives at /api/farms/:farm/billing. */
@@ -13,7 +14,10 @@ router.get('/:farm/billing', requireFarm('billing.view', { allowSuspended: true 
 });
 
 router.get('/:farm/billing/invoices', requireFarm('billing.view', { allowSuspended: true }), async (_req, res) => {
-  res.json({ invoices: await listInvoices(getFarm(res).farm) });
+  const { farm } = getFarm(res);
+  // Invoices issued by hand (bank transfer, cash…) next to the Stripe ones, newest first.
+  const [manual, stripe] = await Promise.all([manualInvoicesForTenant(farm.id), listInvoices(farm)]);
+  res.json({ invoices: [...manual, ...stripe].sort((a, b) => b.createdAt.localeCompare(a.createdAt)) });
 });
 
 router.post(

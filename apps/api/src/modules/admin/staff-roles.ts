@@ -8,6 +8,7 @@ import {
   STAFF_ROLE_INFO,
   STAFF_ROLE_PERMISSIONS,
   STAFF_ROLES,
+  staffRoleImportSchema,
   updatePlatformRoleSchema,
   type CreatePlatformRoleInput,
   type PlatformPermission,
@@ -17,7 +18,7 @@ import { audit } from '../../core/audit';
 import { resolveStaff } from '../../core/staff';
 import { db } from '../../db/client';
 import { platformRoles, users, type PlatformRoleRow } from '../../db/schema';
-import { badRequest, conflict, forbidden, notFound } from '../../lib/errors';
+import { badRequest, conflict, forbidden, notFound, validationError } from '../../lib/errors';
 import { requirePlatform } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 
@@ -132,6 +133,40 @@ staffRolesRouter.post('/', validate(createPlatformRoleSchema), async (req, res) 
     .returning();
   await audit(req, { action: 'admin.staff_role.created', targetType: 'staff_role', targetId: row!.id, metadata: { key, name: row!.name, permissions } });
   res.status(201).json({ role: serialize(row!, await userCounts()) });
+});
+
+/**
+ * CSV import: every row valid or nothing is saved. New keys are created,
+ * existing custom keys updated; built-in keys are rejected per row.
+ */
+staffRolesRouter.post('/import', validate(staffRoleImportSchema), async (req, res) => {
+  const { rows } = req.body as { rows: { key: string; name: string; description?: string | null; permissions: PlatformPermission[] }[] };
+  const actor = (await resolveStaff(req.auth!.user))!;
+  const existing = new Map((await db.select().from(platformRoles)).map((r) => [r.key, r]));
+  const details: Record<string, string[]> = {};
+  const seen = new Set<string>();
+  rows.forEach((row, i) => {
+    if (isStaffRole(row.key)) details[`rows.${i}.key`] = ['Built-in staff roles can’t be imported'];
+    else if (seen.has(row.key)) details[`rows.${i}.key`] = ['This key appears more than once in the file'];
+    else if (row.key === actor.key) details[`rows.${i}.key`] = ["You can't change your own staff role"];
+    seen.add(row.key);
+    const missing = actor.key === 'super_admin' ? [] : row.permissions.filter((p) => !actor.permissions.includes(p));
+    if (missing.length) details[`rows.${i}.permissions`] = [`You can't grant ${missing.join(', ')}`];
+  });
+  const creating = rows.filter((r) => !existing.has(r.key)).length;
+  if (existing.size + creating > MAX_PLATFORM_ROLES) details.rows = [`Up to ${MAX_PLATFORM_ROLES} custom staff roles`];
+  if (Object.keys(details).length) throw validationError(details);
+
+  await db.transaction(async (tx) => {
+    for (const row of rows) {
+      const values = { name: row.name, description: row.description ?? null, permissions: cleanPlatformPermissions(row.permissions) };
+      if (existing.has(row.key)) await tx.update(platformRoles).set(values).where(eq(platformRoles.key, row.key));
+      else await tx.insert(platformRoles).values({ key: row.key, ...values, createdById: req.auth!.user.id });
+    }
+  });
+  const updated = rows.length - creating;
+  await audit(req, { action: 'admin.staff_role.imported', targetType: 'staff_role', metadata: { created: creating, updated, keys: rows.map((r) => r.key) } });
+  res.status(201).json({ created: creating, updated });
 });
 
 staffRolesRouter.get('/:key', async (req, res) => {

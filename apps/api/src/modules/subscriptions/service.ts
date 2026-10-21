@@ -5,7 +5,7 @@ import { AppError, audit, badRequest, db, defineJob, env, logger, type User } fr
 import { farms, findFarm, listMembers, usageOf, type Farm, type Tx } from '../farms';
 import { sendPaymentFailedEmail } from './emails';
 import { billingEnabled, config, planForPrice, stripe, stripePrices } from './config';
-import { ENTITLED_STATUSES, findSubscription, subscriptionOf } from './entitlements';
+import { ENTITLED_STATUSES, entitlementsOf, findSubscription, subscriptionOf } from './entitlements';
 import { billingEvents, farmSubscriptions, type FarmSubscriptionRow } from './schema';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -70,7 +70,7 @@ export async function billingOverview(farm: Farm): Promise<BillingOverview> {
     enabled: billingEnabled(),
     subscription,
     usage: await usageOf(farm.id),
-    limits: PLANS[subscription.planId].limits,
+    limits: entitlementsOf(row).limits,
     plans: publicPlans(),
     hasBillingAccount: Boolean(row?.stripeCustomerId),
   };

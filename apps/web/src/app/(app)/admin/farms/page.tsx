@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Search, Tractor } from 'lucide-react';
 import { FARM_TYPE_INFO, PLAN_LIST, type Pagination as PaginationInfo, type PlatformFarm } from '@kit/shared';
+import { TenantsExport } from '@/components/admin/list-exports';
+import { NewTenantButton } from '@/components/admin/new-tenant-dialog';
 import { Pagination } from '@/components/app/pagination';
 import { SubscriptionBadge } from '@/modules/platform/components/subscription-badge';
 import { Button } from '@/components/ui/button';
@@ -12,12 +14,12 @@ import { Select } from '@/components/ui/select';
 import { countryName, flag, formatDate } from '@/lib/format';
 import { requireAdmin, serverFetch } from '@/lib/session';
 
-export const metadata: Metadata = { title: 'Farms · Admin' };
+export const metadata: Metadata = { title: 'Tenants · Admin' };
 
 type Search = { q?: string; plan?: string; status?: string; country?: string; page?: string };
 
 export default async function AdminFarmsPage({ searchParams }: { searchParams: Promise<Search> }) {
-  await requireAdmin('platform.tenants.view');
+  const me = await requireAdmin('platform.tenants.view');
   const params = await searchParams;
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]);
   const data = await serverFetch<{ farms: PlatformFarm[]; pagination: PaginationInfo }>(`/admin/farms?${qs}`);
@@ -25,7 +27,8 @@ export default async function AdminFarmsPage({ searchParams }: { searchParams: P
 
   return (
     <div className="space-y-4">
-      <form className="flex flex-wrap gap-2" action="/admin/farms">
+      <div className="flex flex-wrap items-start gap-2">
+      <form className="flex flex-1 flex-wrap gap-2" action="/admin/farms">
         <div className="relative min-w-60 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input name="q" defaultValue={params.q} placeholder="Search farm, town or owner email…" className="pl-9" />
@@ -51,15 +54,20 @@ export default async function AdminFarmsPage({ searchParams }: { searchParams: P
           Filter
         </Button>
       </form>
+        <div className="flex gap-2">
+          <TenantsExport query={qs.toString()} />
+          {me.platformPermissions?.includes('platform.tenants.create') && <NewTenantButton />}
+        </div>
+      </div>
 
       {farms.length === 0 ? (
-        <EmptyState icon={Tractor} title="No farms found" description="Try a different search or filter." />
+        <EmptyState icon={Tractor} title="No tenants found" description="Try a different search or filter." />
       ) : (
         <Card className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-5 py-3 font-medium">Farm</th>
+                <th className="px-5 py-3 font-medium">Tenant</th>
                 <th className="px-5 py-3 font-medium">Owner</th>
                 <th className="px-5 py-3 font-medium">Plan</th>
                 <th className="px-5 py-3 text-right font-medium">Team</th>

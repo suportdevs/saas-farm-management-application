@@ -19,11 +19,14 @@ import {
 import { audit, db, notFound, requirePlatform, requireRole, users, validate } from '../../core';
 import { deleteFarm, farmMembers, farms, findFarm, listActivity, listMembers, serializeFarm, setSuspended, type Farm } from '../farms';
 import { extendTrial, farmSubscriptions, findSubscription, setManualPlan, subscriptionOf, type FarmSubscriptionRow } from '../subscriptions';
+import { billingRouter } from './billing-routes';
 import { sendFarmSuspendedEmail } from './emails';
 
 /** Mounted at /api/admin/farms. */
 export const router = Router();
 router.use(requireRole('admin'));
+// Tenant creation, subscriptions, deals and manual invoices — before the /:id routes.
+router.use(billingRouter);
 
 const DAY = 24 * 60 * 60 * 1000;
 const s = farmSubscriptions;

@@ -2,8 +2,21 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
-import { FARM_TYPE_INFO, roleLabel, type FarmActivityEntry, type FarmMember, type FarmProfile, type PlatformFarm } from '@kit/shared';
+import {
+  FARM_TYPE_INFO,
+  PLANS,
+  roleLabel,
+  type FarmActivityEntry,
+  type FarmMember,
+  type FarmProfile,
+  type ManualInvoice,
+  type PlanId,
+  type PlanLimits,
+  type PlatformFarm,
+  type TenantEntitlements,
+} from '@kit/shared';
 import { FarmAdminActions } from '@/modules/platform/components/farm-admin-actions';
+import { TenantBilling } from '@/modules/platform/components/tenant-billing';
 import { SubscriptionBadge } from '@/modules/platform/components/subscription-badge';
 import { Avatar } from '@/components/app/user-menu';
 import { Badge } from '@/components/ui/badge';
@@ -25,7 +38,12 @@ interface Detail {
 export default async function AdminFarmPage({ params }: { params: Promise<{ id: string }> }) {
   const me = await requireAdmin('platform.tenants.view');
   const { id } = await params;
-  const data = await serverFetch<Detail>(`/admin/farms/${id}`);
+  const canSeeBilling = me.platformPermissions?.includes('platform.billing.view');
+  const [data, deal, invoices] = await Promise.all([
+    serverFetch<Detail>(`/admin/farms/${id}`),
+    serverFetch<{ entitlements: TenantEntitlements; effective: { planId: PlanId; limits: PlanLimits } }>(`/admin/farms/${id}/entitlements`),
+    canSeeBilling ? serverFetch<ManualInvoice[]>(`/admin/farms/${id}/invoices`) : null,
+  ]);
   if (!data) notFound();
   const { farm, profile, billing, members, activity } = data;
   const sub = farm.subscription;
@@ -53,7 +71,7 @@ export default async function AdminFarmPage({ params }: { params: Promise<{ id: 
   return (
     <div className="space-y-6">
       <Link href="/admin/farms" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="h-4 w-4" /> All farms
+        <ArrowLeft className="h-4 w-4" /> All tenants
       </Link>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -84,6 +102,18 @@ export default async function AdminFarmPage({ params }: { params: Promise<{ id: 
           </CardContent>
         </Card>
       </div>
+
+      {deal && (
+        <TenantBilling
+          farmId={farm.id}
+          currency={profile.currency}
+          planId={deal.effective.planId}
+          planLimits={PLANS[deal.effective.planId].limits}
+          entitlements={deal.entitlements}
+          invoices={invoices ?? []}
+          permissions={me.platformPermissions ?? []}
+        />
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
