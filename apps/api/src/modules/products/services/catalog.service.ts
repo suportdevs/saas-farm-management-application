@@ -28,7 +28,7 @@ import {
   type CatalogResource,
   type ImageType,
 } from '@kit/shared';
-import { conflict, db, notFound, storage, validationError } from '../../../core';
+import { conflict, db, escapeLike, notFound, storage, validationError } from '../../../core';
 import type { Tx } from '../../farms';
 import { imageFileName, imageTypeOf } from './image.service';
 
@@ -97,7 +97,6 @@ export interface CatalogConfig {
   onCreated?: (tx: Tx, tenantId: string, userId: string, rows: Values[]) => Promise<void>;
 }
 
-const escapeLike = (term: string) => term.replace(/[\\%_]/g, (c) => `\\${c}`);
 const lower = (column: PgColumn) => sql<string>`lower(${column})`;
 const plural = (n: number, word: string) => (n === 1 ? word : `${word}s`);
 

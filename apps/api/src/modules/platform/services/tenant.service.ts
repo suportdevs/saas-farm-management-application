@@ -9,7 +9,7 @@ import {
   type PlatformFarm,
   type PlatformStats,
 } from '@kit/shared';
-import { db, notFound, users } from '../../../core';
+import { db, escapeLike, notFound, users } from '../../../core';
 import { farmMembers, farms, findFarm, listActivity, listMembers, serializeFarm, type Farm } from '../../farms';
 import { farmSubscriptions, findSubscription, subscriptionOf, type FarmSubscriptionRow } from '../../subscriptions';
 
@@ -130,7 +130,7 @@ export async function platformStats(): Promise<PlatformStats> {
 export async function listTenants({ page, pageSize, q, plan, status, country }: AdminFarmListQuery) {
   const filters: SQL[] = [];
   if (q) {
-    const pattern = `%${q.replace(/[%_\\]/g, '\\$&')}%`;
+    const pattern = `%${escapeLike(q)}%`;
     filters.push(or(ilike(farms.name, pattern), ilike(farms.slug, pattern), ilike(farms.city, pattern), ilike(ownerOf.email, pattern))!);
   }
   if (plan) filters.push(plan === 'free' ? sql`not ${isEntitled}` : and(isEntitled, eq(s.plan, plan))!);

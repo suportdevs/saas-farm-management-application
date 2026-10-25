@@ -1,6 +1,6 @@
 import { and, count, desc, eq, ilike, inArray, not, or, sql, type SQL } from 'drizzle-orm';
 import { monthlyValue, type AdminSubscriptionListQuery, type BillingInterval, type PlatformSubscription } from '@kit/shared';
-import { db, users } from '../../../core';
+import { db, escapeLike, users } from '../../../core';
 import { farmMembers, farms } from '../../farms';
 import { entitlementsOf, farmSubscriptions, subscriptionOf, unpaidByFarm, unpaidFarmIds } from '../../subscriptions';
 
@@ -32,7 +32,7 @@ const memberCounts = db.select({ farmId: farmMembers.farmId, total: count().as('
 export async function listSubscriptions({ page, pageSize, q, plan, state, source, billing }: AdminSubscriptionListQuery) {
   const filters: SQL[] = [];
   if (q) {
-    const pattern = `%${q.replace(/[%_\\]/g, '\\$&')}%`;
+    const pattern = `%${escapeLike(q)}%`;
     filters.push(or(ilike(farms.name, pattern), ilike(farms.slug, pattern), ilike(owners.email, pattern))!);
   }
   if (plan) filters.push(plan === 'free' ? sql`not ${entitled}` : and(entitled, eq(s.plan, plan))!);

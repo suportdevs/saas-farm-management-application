@@ -1,6 +1,6 @@
 import { and, count, desc, eq, gt, sql } from 'drizzle-orm';
 import { ROLE_INFO, type FarmRole } from '@kit/shared';
-import { badRequest, conflict, db, forbidden, notFound, randomToken, sha256, users, type User } from '../../../core';
+import { badRequest, conflict, db, forbidden, isUuid, notFound, randomToken, sha256, users, type User } from '../../../core';
 import { farmCustomRoles, farmInvitations, farmMembers, farms, type Farm } from '../models';
 import { sendInvitationEmail } from './email.service';
 import { farmExtensions } from './farm.extensions';
@@ -9,8 +9,6 @@ import { customRoleRef, type PermissionActor } from './role.service';
 
 const DAY = 24 * 60 * 60 * 1000;
 const INVITE_TTL = 7 * DAY;
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /** Members plus pending invitations — both take a seat. */
 export async function seatCount(farmId: string): Promise<number> {
   const [[members], [invites]] = await Promise.all([
@@ -114,7 +112,7 @@ export async function inviteOwner(farm: Farm, email: string, staff: User) {
 }
 
 export async function revokeInvitation(farmId: string, invitationId: string) {
-  if (!uuidPattern.test(invitationId)) throw notFound('Invitation not found');
+  if (!isUuid(invitationId)) throw notFound('Invitation not found');
   const [deleted] = await db
     .delete(farmInvitations)
     .where(and(eq(farmInvitations.farmId, farmId), eq(farmInvitations.id, invitationId)))

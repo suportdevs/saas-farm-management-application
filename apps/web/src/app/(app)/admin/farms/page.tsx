@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { Search, Tractor } from 'lucide-react';
 import { FARM_TYPE_INFO, PLAN_LIST, type Pagination as PaginationInfo, type PlatformFarm } from '@kit/shared';
 import { TenantsExport } from '@/components/admin/list-exports';
-import { NewTenantButton } from '@/components/admin/new-tenant-dialog';
+import { NewTenantButton } from '@/modules/platform/components/new-tenant-dialog';
 import { Pagination } from '@/components/app/pagination';
 import { SubscriptionBadge } from '@/modules/platform/components/subscription-badge';
 import { Button } from '@/components/ui/button';

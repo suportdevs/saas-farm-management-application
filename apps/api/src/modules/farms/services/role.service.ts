@@ -9,11 +9,10 @@ import {
   type FarmRole,
   type Permission,
 } from '@kit/shared';
-import { badRequest, conflict, db, forbidden, notFound } from '../../../core';
+import { badRequest, conflict, db, forbidden, isUuid, notFound } from '../../../core';
 import { farmCustomRoles, farmInvitations, farmMembers, type FarmCustomRoleRow } from '../models';
 
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-export const isRoleId = (v: string) => uuidPattern.test(v);
+export const isRoleId = (v: string) => isUuid(v);
 
 // ─── Escalation rules (shared by role, custom-role and member edits) ──
 

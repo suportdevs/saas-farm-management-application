@@ -15,6 +15,7 @@ export { forbidImpersonation, requireAuth, requireChallenge, requirePlatform, re
 export { validate } from '../middleware/validate';
 export { sendMail, renderEmail } from '../lib/mailer';
 export { encrypt, decrypt, randomToken, sha256, safeEqual, sign } from '../lib/crypto';
+export { escapeLike, isUuid } from '../lib/text';
 export { hashPassword, verifyPassword } from '../lib/password';
 export { db } from '../db/client';
 export { users, sessions } from '../db/schema';

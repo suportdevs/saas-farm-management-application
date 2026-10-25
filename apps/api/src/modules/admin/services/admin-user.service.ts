@@ -7,12 +7,11 @@ import { deleteUserSessions } from '../../../core/session';
 import { resolveStaff } from '../../../core/staff';
 import { serializeUser } from '../../../core/user';
 import { badRequest, forbidden, notFound } from '../../../lib/errors';
+import { escapeLike, isUuid } from '../../../lib/text';
 import { sendAccountSuspendedEmail } from '../../auth/services/email.service';
 import { platformRoleExists } from './staff-role.service';
 
 const DAY = 24 * 60 * 60 * 1000;
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export async function serializeAdminUser(user: User): Promise<AdminUser> {
   return {
     ...(await serializeUser(user)),
@@ -25,7 +24,7 @@ export async function serializeAdminUser(user: User): Promise<AdminUser> {
 
 /** A user by id, or 404. */
 export async function findUser(id: string): Promise<User> {
-  if (!uuidPattern.test(id)) throw notFound('User not found');
+  if (!isUuid(id)) throw notFound('User not found');
   const user = await db.query.users.findFirst({ where: eq(users.id, id) });
   if (!user) throw notFound('User not found');
   return user;
@@ -91,7 +90,7 @@ export async function adminStats(): Promise<AdminStats> {
 export async function listUsers({ page, pageSize, q, role, status }: AdminUserListQuery) {
   const filters: SQL[] = [];
   if (q) {
-    const pattern = `%${q.replace(/[%_\\]/g, '\\$&')}%`;
+    const pattern = `%${escapeLike(q)}%`;
     filters.push(or(ilike(users.email, pattern), ilike(users.name, pattern))!);
   }
   if (role) filters.push(eq(users.role, role));

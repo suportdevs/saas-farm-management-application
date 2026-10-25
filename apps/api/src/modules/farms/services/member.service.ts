@@ -10,12 +10,10 @@ import {
   type FarmRole,
   type PermissionOverrides,
 } from '@kit/shared';
-import { badRequest, db, forbidden, notFound, users } from '../../../core';
+import { badRequest, db, forbidden, isUuid, notFound, users } from '../../../core';
 import { farmCustomRoles, farmMembers, farmRolePermissions, farms, type FarmMemberRow } from '../models';
 import { gateOf, roleOverridesOf } from './permission.service';
 import { assertMayAssign, assertMayChange, findCustomRole, type PermissionActor } from './role.service';
-
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Resolves a farm by id or slug together with the user's membership and effective permissions. */
 export async function findMembership(key: string, userId: string) {
@@ -25,7 +23,7 @@ export async function findMembership(key: string, userId: string) {
     .innerJoin(farmMembers, and(eq(farmMembers.farmId, farms.id), eq(farmMembers.userId, userId)))
     .leftJoin(farmRolePermissions, and(eq(farmRolePermissions.farmId, farms.id), eq(farmRolePermissions.role, farmMembers.role)))
     .leftJoin(farmCustomRoles, eq(farmCustomRoles.id, farmMembers.customRoleId))
-    .where(uuidPattern.test(key) ? eq(farms.id, key) : eq(farms.slug, key.toLowerCase()))
+    .where(isUuid(key) ? eq(farms.id, key) : eq(farms.slug, key.toLowerCase()))
     .limit(1);
   if (!row) return undefined;
   /** What the member's role and overrides grant, before the farm's plan and module switches. */

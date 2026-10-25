@@ -10,7 +10,7 @@ import {
   type PlanId,
   type TenantEntitlements,
 } from '@kit/shared';
-import { badRequest, db, notFound, users, type User } from '../../../core';
+import { badRequest, db, escapeLike, notFound, users, type User } from '../../../core';
 import { farms, type Farm } from '../../farms';
 import { capabilityOverridesOf, findSubscription, limitOverridesOf } from './entitlement.service';
 import { farmSubscriptions, manualInvoices, manualPayments, type ManualInvoiceRow, type ManualPaymentRow } from '../models';
@@ -113,7 +113,7 @@ export async function listManualInvoices(opts: { farmId?: string; q?: string; st
   if (opts.farmId) filters.push(eq(manualInvoices.farmId, opts.farmId));
   if (opts.status) filters.push(statusWhere[opts.status]);
   if (opts.q) {
-    const pattern = `%${opts.q.replace(/[%_\\]/g, '\\$&')}%`;
+    const pattern = `%${escapeLike(opts.q)}%`;
     filters.push(or(ilike(manualInvoices.number, pattern), ilike(manualInvoices.description, pattern), ilike(farms.name, pattern))!);
   }
   const where = filters.length ? and(...filters) : undefined;

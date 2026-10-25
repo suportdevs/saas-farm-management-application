@@ -14,15 +14,13 @@ import {
   type FarmUsage,
   type UnitSystem,
 } from '@kit/shared';
-import { badRequest, conflict, db, forbidden, randomToken, users, type User } from '../../../core';
+import { badRequest, conflict, db, forbidden, isUuid, randomToken, users, type User } from '../../../core';
 import { config } from '../config';
 import { farmCustomRoles, farmMembers, farmRolePermissions, farms, type Farm, type FarmMemberRow } from '../models';
 import { farmExtensions } from './farm.extensions';
 import { inviteOwner, seatCount } from './invitation.service';
 import { gateOf, roleOverridesOf } from './permission.service';
 import { customRoleRef, listCustomRoles } from './role.service';
-
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Slugs that would collide with app routes. */
 export const RESERVED_SLUGS = new Set(['new', 'invitations', 'settings', 'api', 'admin', 'billing', 'onboarding']);
@@ -242,7 +240,7 @@ export async function createFarmForClient(staff: User, input: CreateFarmData & {
 }
 
 export async function findFarm(id: string) {
-  if (!uuidPattern.test(id)) return undefined;
+  if (!isUuid(id)) return undefined;
   const [farm] = await db.select().from(farms).where(eq(farms.id, id)).limit(1);
   return farm;
 }
