@@ -54,9 +54,9 @@ every `models/*.model.ts` automatically.
 
 | Module | Responsibility | Depends on |
 | --- | --- | --- |
-| `farms` | Tenant core: farms, members, roles & permissions, invitations, activity log, localisation. Exposes `requireFarm()`, `getFarm()`, `registerUsageCounter()` and **`farmExtensions`** (hooks other modules plug into). | core |
-| `subscriptions` | Plans, trials, limits & capabilities, Stripe checkout/portal/invoices/webhooks, trial reminder emails. Owns the `farm_subscriptions` table. | farms |
-| `platform` | Operator console: MRR/ARR and growth stats, tenant directory, manual plans, trial extensions, suspensions. | farms, subscriptions |
+| `farms` | Tenant core: organizations (clients), farms (tenants), members, roles & permissions, invitations, activity log, localisation. Exposes `requireFarm()`, `getFarm()`, `registerUsageCounter()` and **`farmExtensions`** (hooks other modules plug into). | core |
+| `subscriptions` | Plans (database-managed), trials, limits & capabilities, Stripe checkout/portal/invoices/webhooks, manual invoices, trial reminder emails. Owns `plans` and `farm_subscriptions`. | farms |
+| `platform` | Operator console: stats, clients and tenants, plan management, client accounts and teams, manual plans and invoices, suspensions. | farms, subscriptions |
 
 Rules that keep modules independent:
 
@@ -96,6 +96,37 @@ Rules that keep modules independent:
    `apps/web/src/modules/farms/navigation.ts`. Client components read the tenant with `useFarm()`,
    `useCan('herd.create')` and `useHasCapability('herd')` from `@/modules/farms/context`.
 4. `apps/api/test/herd.test.ts`.
+
+### SaaS model: user → organization → farm → subscription
+
+```
+User ── member of ──> Organization (client: company, co-op, family business)   owner · admin · member
+                          └── Farm (tenant)  ── own team, roles & permissions
+                                 └── Subscription → Plan (limits + modules) + per-tenant deal
+```
+
+- **Organization** (`organizations`, `organization_members`) — the client. A user's first farm creates one; later farms join it.
+  Org **owners** act as owner on every farm of the organization, **admins** as manager; **members** get farm access only from
+  each farm's team. API: `/api/organizations[/:org[/members/:userId]]`. UI: **Organizations** (sidebar) and the farm switcher.
+- **Farm** — the tenant. Data, team, subscription and billing stay per farm (`farms.organization_id` links it to its client).
+- **Plan** (`plans` table) — price, limits, modules (capabilities), public / online checkout / archived. Managed in
+  **Platform admin → Plans** (`/api/admin/plans`, permission `platform.plans.manage`); edits apply to the plan's farms at once.
+  `free` is the fallback and the trial plan (`FARM_TRIAL_PLAN`) can't be archived; a plan in use can only be archived.
+  Stripe price ids live on the plan (the old `STRIPE_PRICE_*` env vars still work as a fallback). Public list: `GET /api/billing/plans`.
+- **Module** — a capability in code (`CAPABILITIES`, `MODULE_CAPABILITIES`). Plans include modules; a tenant's deal adds or
+  removes one for that farm; the farm can switch its own modules off.
+
+**Client flow (self-serve):** sign up → farm wizard (creates the organization) → trial of the trial plan → checkout in
+**Plan & billing** → more farms and organization members from **Organizations**.
+
+**Platform flow (manual, for any client):**
+
+| Step | Where |
+| --- | --- |
+| Client account | **Users → New client account** (`POST /api/admin/users`): the client gets an email to set a password (7 days) |
+| Organization + farm | **Tenants → New tenant**: new client (new organization) or an existing one from **Clients**; the owner joins or is invited and takes over the organization on accepting |
+| Plan, deal, invoices | Tenant page → plan, trial, **Deal & limits** (modules on/off, limits), **Manual invoices**; moving a farm to free also cancels a live Stripe subscription |
+| Team | Tenant page → **Team**: add (account joins / others invited), change role, remove, transfer ownership, resend or revoke invitations, move the farm to another organization (`platform.tenants.manage`) |
 
 ### Roles & permissions
 

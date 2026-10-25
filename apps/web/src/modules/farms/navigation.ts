@@ -207,4 +207,12 @@ export const ACTIVITY_LABELS: Record<string, string> = {
   'admin.farm.trial_extended': 'extended the trial (support)',
   'admin.farm.suspended': 'suspended the farm (support)',
   'admin.farm.unsuspended': 'restored the farm (support)',
+  'admin.farm.member_added': 'added a team member (support)',
+  'admin.farm.member_invited': 'invited a team member (support)',
+  'admin.farm.member_role_changed': "changed a member's role (support)",
+  'admin.farm.member_removed': 'removed a team member (support)',
+  'admin.farm.ownership_transferred': 'transferred ownership (support)',
+  'admin.farm.organization_changed': 'moved the farm to another organization (support)',
+  'admin.farm.invitation_resent': 'resent an invitation (support)',
+  'admin.farm.invitation_revoked': 'revoked an invitation (support)',
 };

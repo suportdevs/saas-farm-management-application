@@ -6,11 +6,13 @@ import { Ban, CircleDollarSign, FilePlus2, Handshake, Trash2 } from 'lucide-reac
 import { toast } from 'sonner';
 import {
   CAPABILITIES,
+  CAPABILITY_LABELS,
+  DEFAULT_PLANS,
   PAYMENT_METHOD_LABELS,
   PAYMENT_METHODS,
-  PLAN_LIST,
-  PLANS,
-  type Capability,
+  planName,
+  type AdminPlan,
+  type Plan,
   type ManualInvoice,
   type PaymentMethod,
   type PlanId,
@@ -31,20 +33,6 @@ import { ApiError, api, errorMessage } from '@/lib/api';
 import { formatDate, formatMoney } from '@/lib/format';
 import { InvoiceStatusBadge } from './invoice-status-badge';
 
-export const CAPABILITY_LABELS: Record<Capability, string> = {
-  herd: 'Herd',
-  milk: 'Milk',
-  health: 'Health',
-  breeding: 'Breeding',
-  feed: 'Feed',
-  finance: 'Finance',
-  advanced_reports: 'Advanced reports',
-  data_export: 'Data exports',
-  api_access: 'API access',
-  priority_support: 'Priority support',
-  sso: 'Single sign-on',
-};
-
 const fieldErrors = (err: unknown) =>
   err instanceof ApiError && err.details ? Object.fromEntries(Object.entries(err.details).map(([k, v]) => [k, v[0] ?? 'Invalid'])) : null;
 
@@ -56,7 +44,7 @@ export function TenantBilling({
   farmId,
   currency,
   planId,
-  planLimits,
+  plans,
   entitlements,
   invoices,
   permissions,
@@ -65,40 +53,30 @@ export function TenantBilling({
   /** The farm's own currency, the default for new invoices. */
   currency: string;
   planId: PlanId;
-  planLimits: PlanLimits;
+  /** Every plan (Admin → Plans), for names, defaults and the invoice plan picker. */
+  plans: AdminPlan[];
   entitlements: TenantEntitlements;
   invoices: ManualInvoice[];
   permissions: PlatformPermission[];
 }) {
   const canBill = permissions.includes('platform.billing.manage');
+  // The plan in effect; the built-in free plan stands in if it can't be found.
+  const plan: Plan = plans.find((p) => p.id === planId) ?? DEFAULT_PLANS.free!;
   return (
     <div className="grid gap-6 xl:grid-cols-[22rem_1fr]">
-      <DealCard farmId={farmId} planId={planId} planLimits={planLimits} entitlements={entitlements} canEdit={canBill} />
-      <InvoicesCard farmId={farmId} currency={currency} invoices={invoices} canBill={canBill} />
+      <DealCard farmId={farmId} plan={plan} entitlements={entitlements} canEdit={canBill} />
+      <InvoicesCard farmId={farmId} currency={currency} invoices={invoices} plans={plans} canBill={canBill} />
     </div>
   );
 }
 
 // ─── Deal ────────────────────────────────────────────────────────
 
-function DealCard({
-  farmId,
-  planId,
-  planLimits,
-  entitlements,
-  canEdit,
-}: {
-  farmId: string;
-  planId: PlanId;
-  planLimits: PlanLimits;
-  entitlements: TenantEntitlements;
-  canEdit: boolean;
-}) {
+function DealCard({ farmId, plan, entitlements, canEdit }: { farmId: string; plan: Plan; entitlements: TenantEntitlements; canEdit: boolean }) {
   const router = useRouter();
-  const plan = PLANS[planId];
   const [open, setOpen] = useState(false);
   const limit = (key: keyof PlanLimits) => {
-    const v = key in entitlements.limits ? entitlements.limits[key] : planLimits[key];
+    const v = key in entitlements.limits ? entitlements.limits[key] : plan.limits[key];
     return v === null || v === undefined ? 'Unlimited' : v.toLocaleString();
   };
   const added = CAPABILITIES.filter((c) => entitlements.capabilities[c] === true);
@@ -173,7 +151,7 @@ function DealDialog({
   onSaved,
 }: {
   farmId: string;
-  plan: (typeof PLANS)[PlanId];
+  plan: Plan;
   entitlements: TenantEntitlements;
   onClose: () => void;
   onSaved: () => void;
@@ -302,7 +280,19 @@ function DealDialog({
 
 // ─── Invoices ────────────────────────────────────────────────────
 
-function InvoicesCard({ farmId, currency, invoices, canBill }: { farmId: string; currency: string; invoices: ManualInvoice[]; canBill: boolean }) {
+function InvoicesCard({
+  farmId,
+  currency,
+  invoices,
+  plans,
+  canBill,
+}: {
+  farmId: string;
+  currency: string;
+  invoices: ManualInvoice[];
+  plans: AdminPlan[];
+  canBill: boolean;
+}) {
   const router = useRouter();
   const [creating, setCreating] = useState(false);
   const [paying, setPaying] = useState<ManualInvoice | null>(null);
@@ -355,7 +345,7 @@ function InvoicesCard({ farmId, currency, invoices, canBill }: { farmId: string;
                   </p>
                   <p className="text-xs text-muted-foreground">
                     Issued {formatDate(i.issuedAt)} · due {formatDate(i.dueAt)}
-                    {i.planId && i.periodEnd && ` · pays for ${PLANS[i.planId].name} through ${formatDate(i.periodEnd)}`}
+                    {i.planId && i.periodEnd && ` · pays for ${planName(plans, i.planId)} through ${formatDate(i.periodEnd)}`}
                   </p>
                 </div>
                 <div className="text-right">
@@ -415,6 +405,7 @@ function InvoicesCard({ farmId, currency, invoices, canBill }: { farmId: string;
         <InvoiceDialog
           farmId={farmId}
           currency={currency}
+          plans={plans}
           onClose={() => setCreating(false)}
           onSaved={() => {
             setCreating(false);
@@ -426,6 +417,7 @@ function InvoicesCard({ farmId, currency, invoices, canBill }: { farmId: string;
         <PaymentDialog
           farmId={farmId}
           invoice={paying}
+          plans={plans}
           onClose={() => setPaying(null)}
           onSaved={() => {
             setPaying(null);
@@ -439,7 +431,19 @@ function InvoicesCard({ farmId, currency, invoices, canBill }: { farmId: string;
 
 const inDays = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
 
-function InvoiceDialog({ farmId, currency, onClose, onSaved }: { farmId: string; currency: string; onClose: () => void; onSaved: () => void }) {
+function InvoiceDialog({
+  farmId,
+  currency,
+  plans,
+  onClose,
+  onSaved,
+}: {
+  farmId: string;
+  currency: string;
+  plans: AdminPlan[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
   const [form, setForm] = useState({
     description: '',
     amount: '',
@@ -514,7 +518,7 @@ function InvoiceDialog({ farmId, currency, onClose, onSaved }: { farmId: string;
         <Field id="inv-plan" label="Pays for plan (optional)" hint="When paid in full, the tenant moves to this plan.">
           <Select id="inv-plan" className="w-full" value={form.planId} onChange={(e) => set('planId', e.target.value)}>
             <option value="">— Nothing automatic —</option>
-            {PLAN_LIST.filter((p) => p.id !== 'free').map((p) => (
+            {plans.filter((p) => p.id !== 'free' && !p.archived).map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
               </option>
@@ -536,7 +540,19 @@ function InvoiceDialog({ farmId, currency, onClose, onSaved }: { farmId: string;
   );
 }
 
-function PaymentDialog({ farmId, invoice, onClose, onSaved }: { farmId: string; invoice: ManualInvoice; onClose: () => void; onSaved: () => void }) {
+function PaymentDialog({
+  farmId,
+  invoice,
+  plans,
+  onClose,
+  onSaved,
+}: {
+  farmId: string;
+  invoice: ManualInvoice;
+  plans: AdminPlan[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
   const [amount, setAmount] = useState((invoice.balance / 100).toFixed(2));
   const [method, setMethod] = useState<PaymentMethod>('bank_transfer');
   const [reference, setReference] = useState('');
@@ -556,7 +572,7 @@ function PaymentDialog({ farmId, invoice, onClose, onSaved }: { farmId: string; 
       );
       toast.success(
         res.planApplied
-          ? `Paid in full — ${PLANS[res.planApplied.planId].name} active through ${formatDate(res.planApplied.periodEnd)}`
+          ? `Paid in full — ${planName(plans, res.planApplied.planId)} active through ${formatDate(res.planApplied.periodEnd)}`
           : res.paidInFull
             ? `${invoice.number} paid in full`
             : 'Payment recorded',
@@ -616,7 +632,7 @@ function PaymentDialog({ farmId, invoice, onClose, onSaved }: { farmId: string; 
           <label className="flex items-start gap-2 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm sm:col-span-2">
             <Checkbox className="mt-0.5" checked={confirmFull} onChange={(e) => setConfirmFull(e.target.checked)} />
             <span>
-              This pays the invoice in full: the tenant moves to <strong>{PLANS[invoice.planId].name}</strong> through{' '}
+              This pays the invoice in full: the tenant moves to <strong>{planName(plans, invoice.planId)}</strong> through{' '}
               <strong>{formatDate(invoice.periodEnd)}</strong>.
             </span>
           </label>

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Download } from 'lucide-react';
 import { toast } from 'sonner';
-import { PLANS, type ManualInvoice, type PlatformFarm, type PlatformSubscription } from '@kit/shared';
+import { planName, type Plan, type ManualInvoice, type PlatformFarm, type PlatformSubscription } from '@kit/shared';
 import { Button } from '@/components/ui/button';
 import { api, errorMessage } from '@/lib/api';
 import { downloadFile, toCsv } from '@/lib/csv';
@@ -118,7 +118,7 @@ export function SubscriptionsExport({ query }: { query: string }) {
   );
 }
 
-export function InvoicesExport({ query }: { query: string }) {
+export function InvoicesExport({ query, plans }: { query: string; plans: Pick<Plan, 'id' | 'name'>[] }) {
   return (
     <ExportButton<ManualInvoice>
       filename="invoices"
@@ -136,7 +136,7 @@ export function InvoicesExport({ query }: { query: string }) {
           money(i.balance),
           i.issuedAt,
           i.dueAt,
-          i.planId ? PLANS[i.planId].name : '',
+          planName(plans, i.planId),
           i.periodEnd ?? '',
           day(i.paidAt),
           i.payments.map((p) => `${money(p.amount)} ${p.method}${p.reference ? ` (${p.reference})` : ''} ${p.paidAt}`).join('; '),

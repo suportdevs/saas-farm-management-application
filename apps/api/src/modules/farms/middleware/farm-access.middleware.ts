@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
-import { MODULE_CAPABILITIES, PERMISSION_MODULES, permissionBlock, type FarmRole, type Permission, type PermissionModule } from '@kit/shared';
+import { MODULE_CAPABILITIES, PERMISSION_MODULES, permissionBlock, type FarmRole, type OrgRole, type Permission, type PermissionModule } from '@kit/shared';
 import { AppError, forbidden, notFound, unauthorized } from '../../../core';
 import type { Farm, FarmMemberRow } from '../models';
 import { findMembership, touchAccess } from '../services/member.service';
@@ -8,6 +8,8 @@ export interface FarmAccess {
   farm: Farm;
   member: FarmMemberRow;
   role: FarmRole;
+  /** The user's role in the farm's organization (it can raise their farm role). */
+  orgRole: OrgRole | null;
   /** Effective permissions: role defaults → farm role overrides → member overrides, limited to the farm's plan and enabled modules. */
   permissions: Permission[];
   /** The same before the plan and module switches — what the member may configure for others. */
@@ -58,6 +60,7 @@ export function requireFarm(permission?: Permission, opts: { allowSuspended?: bo
       farm: row.farm,
       member: row.member,
       role: row.member.role,
+      orgRole: row.orgRole,
       permissions: row.permissions,
       granted: row.granted,
     } satisfies FarmAccess;

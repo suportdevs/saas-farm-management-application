@@ -68,7 +68,7 @@ export function forbidImpersonation(req: Request, _res: Response, next: NextFunc
 }
 
 // Reachable while EMAIL_VERIFICATION=required and the address isn't verified yet.
-const UNVERIFIED_ALLOWED = ['/auth/', '/features', '/users/me/email', '/billing/plans', '/organizations/invitations/lookup', '/farms/invitations/lookup'];
+const UNVERIFIED_ALLOWED = ['/auth/', '/features', '/users/me/email', '/billing/plans', '/farms/invitations/lookup'];
 
 /** Global: with EMAIL_VERIFICATION=required, unverified users can only use auth/account endpoints. */
 export function enforceEmailVerification(req: Request, _res: Response, next: NextFunction) {

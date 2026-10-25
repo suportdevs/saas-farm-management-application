@@ -6,9 +6,10 @@ import { hooks } from '../../../core/hooks';
 import { deleteUserSessions } from '../../../core/session';
 import { resolveStaff } from '../../../core/staff';
 import { serializeUser } from '../../../core/user';
-import { badRequest, forbidden, notFound } from '../../../lib/errors';
+import { issueToken } from '../../../core/tokens';
+import { badRequest, conflict, forbidden, notFound } from '../../../lib/errors';
 import { escapeLike, isUuid } from '../../../lib/text';
-import { sendAccountSuspendedEmail } from '../../auth/services/email.service';
+import { sendAccountCreatedEmail, sendAccountSuspendedEmail } from '../../auth/services/email.service';
 import { platformRoleExists } from './staff-role.service';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -153,6 +154,19 @@ export async function updateUser(actorUser: User, target: User, input: AdminUpda
     patch.emailVerifiedAt = input.emailVerified ? (target.emailVerifiedAt ?? new Date()) : null;
   }
   const [user] = await db.update(users).set(patch).where(eq(users.id, target.id)).returning();
+  return user!;
+}
+
+/**
+ * Creates an account for a client (no password yet) and emails a link to set
+ * one. Setting it also verifies the email address.
+ */
+export async function createClientUser(input: { name: string; email: string }): Promise<User> {
+  const existing = await db.query.users.findFirst({ where: eq(users.email, input.email) });
+  if (existing) throw conflict('An account with that email already exists', 'EMAIL_TAKEN');
+  const [user] = await db.insert(users).values({ name: input.name, email: input.email }).returning();
+  const token = await issueToken(user!.id, 'password_reset', 7 * DAY);
+  await sendAccountCreatedEmail(user!.email, user!.name, token);
   return user!;
 }
 

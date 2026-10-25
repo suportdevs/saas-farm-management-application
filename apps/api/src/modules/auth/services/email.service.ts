@@ -29,6 +29,21 @@ export function sendPasswordResetEmail(to: string, name: string, token: string) 
   });
 }
 
+/** An account the platform team created for a client: they choose a password to sign in. */
+export function sendAccountCreatedEmail(to: string, name: string, token: string) {
+  const url = `${env.WEB_URL}/reset-password?token=${encodeURIComponent(token)}`;
+  return sendMail({
+    to,
+    subject: `Your ${env.APP_NAME} account is ready`,
+    ...renderEmail({
+      heading: `Welcome to ${env.APP_NAME}`,
+      body: [`Hi ${name},`, `Our team has created a ${env.APP_NAME} account for you. Choose a password to sign in.`],
+      action: { label: 'Set your password', url },
+      note: 'This link expires in 7 days and can be used once. You can always ask for a new one from the sign-in page ("Forgot password").',
+    }),
+  });
+}
+
 export function sendPasswordChangedEmail(to: string, name: string) {
   return sendMail({
     to,

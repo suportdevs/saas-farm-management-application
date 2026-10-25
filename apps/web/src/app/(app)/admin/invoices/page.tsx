@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Receipt, Search } from 'lucide-react';
-import { PAYMENT_METHOD_LABELS, PLANS, type ManualInvoice, type Pagination as PaginationInfo } from '@kit/shared';
+import { PAYMENT_METHOD_LABELS, planName, type ManualInvoice, type Pagination as PaginationInfo } from '@kit/shared';
 import { InvoicesExport } from '@/components/admin/list-exports';
 import { Pagination } from '@/components/app/pagination';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { formatDate, formatMoney } from '@/lib/format';
 import { requireAdmin, serverFetch } from '@/lib/session';
+import { getAdminPlans } from '@/modules/subscriptions/server';
 import { InvoiceStatusBadge } from '@/modules/platform/components/invoice-status-badge';
 
 export const metadata: Metadata = { title: 'Invoices · Admin' };
@@ -22,7 +23,10 @@ export default async function AdminInvoicesPage({ searchParams }: { searchParams
   await requireAdmin('platform.billing.view');
   const params = await searchParams;
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]);
-  const data = await serverFetch<{ invoices: ManualInvoice[]; pagination: PaginationInfo }>(`/admin/farms/invoices?${qs}`);
+  const [data, plans] = await Promise.all([
+    serverFetch<{ invoices: ManualInvoice[]; pagination: PaginationInfo }>(`/admin/farms/invoices?${qs}`),
+    getAdminPlans(),
+  ]);
   const invoices = data?.invoices ?? [];
 
   return (
@@ -44,7 +48,7 @@ export default async function AdminInvoicesPage({ searchParams }: { searchParams
             Filter
           </Button>
         </form>
-        <InvoicesExport query={qs.toString()} />
+        <InvoicesExport query={qs.toString()} plans={plans} />
       </div>
 
       {invoices.length === 0 ? (
@@ -74,7 +78,7 @@ export default async function AdminInvoicesPage({ searchParams }: { searchParams
                     <p className="font-medium">{i.number}</p>
                     <p className="text-xs text-muted-foreground">
                       {i.description}
-                      {i.planId && i.periodEnd && ` · ${PLANS[i.planId].name} through ${formatDate(i.periodEnd)}`}
+                      {i.planId && i.periodEnd && ` · ${planName(plans, i.planId)} through ${formatDate(i.periodEnd)}`}
                     </p>
                   </td>
                   <td className="px-5 py-3">

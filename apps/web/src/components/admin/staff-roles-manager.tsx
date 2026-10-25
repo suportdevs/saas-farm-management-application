@@ -24,6 +24,7 @@ const GROUPS: { label: string; prefix: string }[] = [
   { label: 'Users', prefix: 'platform.users.' },
   { label: 'Tenants', prefix: 'platform.tenants.' },
   { label: 'Billing', prefix: 'platform.billing.' },
+  { label: 'Plans', prefix: 'platform.plans.' },
   { label: 'Audit', prefix: 'platform.audit.' },
   { label: 'Staff', prefix: 'platform.staff.' },
 ];

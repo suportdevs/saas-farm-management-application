@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { CreditCard, Search } from 'lucide-react';
-import { PLAN_LIST, type Pagination as PaginationInfo, type PlatformSubscription } from '@kit/shared';
+import { type Pagination as PaginationInfo, type PlatformSubscription } from '@kit/shared';
 import { SubscriptionsExport } from '@/components/admin/list-exports';
 import { Pagination } from '@/components/app/pagination';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { flag, formatDate, formatMoney } from '@/lib/format';
 import { requireAdmin, serverFetch } from '@/lib/session';
+import { getAdminPlans } from '@/modules/subscriptions/server';
 
 export const metadata: Metadata = { title: 'Subscriptions · Admin' };
 
@@ -30,7 +31,10 @@ export default async function AdminSubscriptionsPage({ searchParams }: { searchP
   await requireAdmin('platform.billing.view');
   const params = await searchParams;
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]);
-  const data = await serverFetch<{ subscriptions: PlatformSubscription[]; pagination: PaginationInfo }>(`/admin/farms/subscriptions?${qs}`);
+  const [data, plans] = await Promise.all([
+    serverFetch<{ subscriptions: PlatformSubscription[]; pagination: PaginationInfo }>(`/admin/farms/subscriptions?${qs}`),
+    getAdminPlans(),
+  ]);
   const rows = data?.subscriptions ?? [];
 
   return (
@@ -43,7 +47,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: { searchP
           </div>
           <Select name="plan" defaultValue={params.plan ?? ''} aria-label="Plan">
             <option value="">All plans</option>
-            {PLAN_LIST.map((p) => (
+            {plans.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
               </option>

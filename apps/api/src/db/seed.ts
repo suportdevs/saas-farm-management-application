@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { STAFF_ROLE_INFO, STAFF_ROLES } from '@kit/shared';
 import { hashPassword } from '../lib/password';
-import { farmMembers, farms } from '../modules/farms/models';
+import { farmMembers, farms, organizationMembers, organizations } from '../modules/farms/models';
 import { farmSubscriptions } from '../modules/subscriptions/models';
 import { db, pool } from './client';
 import { users } from './schema';
@@ -37,10 +37,13 @@ async function main() {
     console.log('ℹ️  Demo farm already exists — skipping');
     return;
   }
+  const [org] = await db.insert(organizations).values({ name: 'Green Valley Group', createdById: admin!.id }).returning();
+  await db.insert(organizationMembers).values({ organizationId: org!.id, userId: admin!.id, role: 'owner' });
   const [farm] = await db
     .insert(farms)
     .values({
       name: 'Green Valley Dairy',
+      organizationId: org!.id,
       slug: DEMO_FARM_SLUG,
       type: 'dairy',
       description: 'Demo farm created by the seed script.',

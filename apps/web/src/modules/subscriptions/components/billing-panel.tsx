@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { CalendarClock, CreditCard, Download, ExternalLink, Info, Receipt } from 'lucide-react';
 import { toast } from 'sonner';
-import { PLANS, type BillingInterval, type BillingOverview, type FarmInvoice, type PlanId } from '@kit/shared';
+import { type BillingInterval, type BillingOverview, type FarmInvoice, type PlanId } from '@kit/shared';
 import { PageHeader } from '@/components/app/page-header';
 import { Badge, type BadgeVariant } from '@/components/ui/badge';
 import { Button, buttonClasses } from '@/components/ui/button';
@@ -128,7 +128,7 @@ export function BillingPanel({ overview, invoices }: { overview: BillingOverview
               <Badge variant={status.variant}>{status.label}</Badge>
               {sub.source === 'manual' && <Badge variant="outline">Invoiced</Badge>}
             </div>
-            <CardDescription>{PLANS[sub.planId].tagline}</CardDescription>
+            <CardDescription>{plans.find((p) => p.id === sub.planId)?.tagline}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap gap-x-8 gap-y-3 text-sm">

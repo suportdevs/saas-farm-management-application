@@ -74,6 +74,8 @@ export const createFarmSchema = z.object({
   totalArea: amount(10_000_000),
   herdSize: amount(1_000_000),
   goals: z.array(z.string().max(50)).max(12).default([]),
+  /** The organization to add the farm to; empty = the user's own (created when they have none). */
+  organizationId: z.uuid().optional(),
 });
 export type CreateFarmInput = z.input<typeof createFarmSchema>;
 export type CreateFarmData = z.output<typeof createFarmSchema>;

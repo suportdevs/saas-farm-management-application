@@ -4,9 +4,8 @@ import { notFound } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import {
   FARM_TYPE_INFO,
-  PLANS,
-  roleLabel,
   type FarmActivityEntry,
+  type FarmInvitation,
   type FarmMember,
   type FarmProfile,
   type ManualInvoice,
@@ -17,13 +16,13 @@ import {
 } from '@kit/shared';
 import { FarmAdminActions } from '@/modules/platform/components/farm-admin-actions';
 import { TenantBilling } from '@/modules/platform/components/tenant-billing';
+import { TenantTeam } from '@/modules/platform/components/tenant-team';
 import { SubscriptionBadge } from '@/modules/platform/components/subscription-badge';
-import { Avatar } from '@/components/app/user-menu';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ACTIVITY_LABELS } from '@/modules/farms/navigation';
 import { countryName, flag, formatDate, timeAgo } from '@/lib/format';
 import { requireAdmin, serverFetch } from '@/lib/session';
+import { getAdminPlans } from '@/modules/subscriptions/server';
 
 export const metadata: Metadata = { title: 'Farm · Admin' };
 
@@ -39,10 +38,12 @@ export default async function AdminFarmPage({ params }: { params: Promise<{ id: 
   const me = await requireAdmin('platform.tenants.view');
   const { id } = await params;
   const canSeeBilling = me.platformPermissions?.includes('platform.billing.view');
-  const [data, deal, invoices] = await Promise.all([
+  const [data, deal, invoices, plans, team] = await Promise.all([
     serverFetch<Detail>(`/admin/farms/${id}`),
     serverFetch<{ entitlements: TenantEntitlements; effective: { planId: PlanId; limits: PlanLimits } }>(`/admin/farms/${id}/entitlements`),
     canSeeBilling ? serverFetch<ManualInvoice[]>(`/admin/farms/${id}/invoices`) : null,
+    getAdminPlans(),
+    serverFetch<{ invitations: FarmInvitation[] }>(`/admin/farms/${id}/team`),
   ]);
   if (!data) notFound();
   const { farm, profile, billing, members, activity } = data;
@@ -81,7 +82,7 @@ export default async function AdminFarmPage({ params }: { params: Promise<{ id: 
           </div>
           {farm.suspendedReason && <p className="mt-2 text-sm text-destructive">Suspended: {farm.suspendedReason}</p>}
         </div>
-        <FarmAdminActions farm={farm} permissions={me.platformPermissions ?? []} />
+        <FarmAdminActions farm={farm} plans={plans} permissions={me.platformPermissions ?? []} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -108,7 +109,7 @@ export default async function AdminFarmPage({ params }: { params: Promise<{ id: 
           farmId={farm.id}
           currency={profile.currency}
           planId={deal.effective.planId}
-          planLimits={PLANS[deal.effective.planId].limits}
+          plans={plans}
           entitlements={deal.entitlements}
           invoices={invoices ?? []}
           permissions={me.platformPermissions ?? []}
@@ -116,25 +117,13 @@ export default async function AdminFarmPage({ params }: { params: Promise<{ id: 
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Team ({members.length})</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-3">
-              {members.map((m) => (
-                <li key={m.userId} className="flex items-center gap-3">
-                  <Avatar user={m} size={32} />
-                  <Link href={`/admin/users/${m.userId}`} className="min-w-0 flex-1 hover:text-primary">
-                    <p className="truncate text-sm font-medium">{m.name}</p>
-                    <p className="truncate text-xs text-muted-foreground">{m.email}</p>
-                  </Link>
-                  <Badge variant={m.role === 'owner' ? 'primary' : 'default'}>{roleLabel(m.role, m.customRole)}</Badge>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
+        <TenantTeam
+          farmId={farm.id}
+          organization={farm.organization}
+          members={members}
+          invitations={team?.invitations ?? []}
+          canManage={Boolean(me.platformPermissions?.includes('platform.tenants.manage'))}
+        />
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Recent activity</CardTitle>

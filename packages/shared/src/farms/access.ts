@@ -179,6 +179,7 @@ export const MODULE_CAPABILITIES: Partial<Record<PermissionModule, Capability>> 
   health: 'health',
   breeding: 'breeding',
   feed: 'feed',
+  products: 'products',
   finance: 'finance',
   reports: 'advanced_reports',
 };

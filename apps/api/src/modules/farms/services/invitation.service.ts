@@ -5,6 +5,7 @@ import { farmCustomRoles, farmInvitations, farmMembers, farms, type Farm } from 
 import { sendInvitationEmail } from './email.service';
 import { farmExtensions } from './farm.extensions';
 import { resolveAssignment } from './member.service';
+import { claimOrganizationIfOwnerless } from './organization.service';
 import { customRoleRef, type PermissionActor } from './role.service';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -167,6 +168,8 @@ export async function acceptInvitation(token: string, user: User) {
         lastAccessedAt: new Date(),
       })
       .onConflictDoNothing();
+    // The client the platform team set up a farm for takes over its (still ownerless) organization.
+    if (row.invitation.role === 'owner') await claimOrganizationIfOwnerless(row.farm.organizationId, user.id, tx);
     await tx.delete(farmInvitations).where(eq(farmInvitations.id, row.invitation.id));
   });
   return { farm: row.farm, role: row.customRole?.name ?? row.invitation.role };

@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Ban, CalendarPlus, Crown, PlayCircle, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { PLAN_LIST, type PlanId, type PlatformFarm, type PlatformPermission } from '@kit/shared';
+import type { Plan, PlanId, PlatformFarm, PlatformPermission } from '@kit/shared';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
@@ -16,12 +16,16 @@ type Action = 'plan' | 'trial' | 'suspend' | 'delete' | null;
 
 /** Support actions for a tenant: manual plans, trial extensions, suspension, deletion. */
 /** Tenant actions, each shown only to staff whose role allows it. */
-export function FarmAdminActions({ farm, permissions }: { farm: PlatformFarm; permissions: PlatformPermission[] }) {
+export function FarmAdminActions({ farm, plans, permissions }: { farm: PlatformFarm; plans: Plan[]; permissions: PlatformPermission[] }) {
   const can = (p: PlatformPermission) => permissions.includes(p);
   const router = useRouter();
   const [open, setOpen] = useState<Action>(null);
   const [busy, setBusy] = useState(false);
-  const [planId, setPlanId] = useState<PlanId>(farm.subscription.source === 'manual' ? farm.subscription.planId : 'enterprise');
+  // Archived plans can't be given out, except to keep a farm on the one it already has.
+  const choices = plans.filter((p) => !p.archived || p.id === farm.subscription.planId);
+  const [planId, setPlanId] = useState<PlanId>(
+    farm.subscription.source === 'manual' ? farm.subscription.planId : (choices.find((p) => p.custom)?.id ?? choices[0]?.id ?? 'free'),
+  );
   const [periodEnd, setPeriodEnd] = useState('');
   const [days, setDays] = useState('14');
   const [reason, setReason] = useState('');
@@ -92,7 +96,7 @@ export function FarmAdminActions({ farm, permissions }: { farm: PlatformFarm; pe
         <div className="space-y-4">
           <Field id="plan" label="Plan">
             <Select id="plan" className="w-full" value={planId} onChange={(e) => setPlanId(e.target.value as PlanId)}>
-              {PLAN_LIST.map((p) => (
+              {choices.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>

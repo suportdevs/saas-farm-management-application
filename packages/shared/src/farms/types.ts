@@ -1,3 +1,4 @@
+import type { OrganizationRef, OrgRole } from './organizations';
 import type { FarmRole, ModuleStatus, Permission, PermissionModule, PermissionOverrides, ToggleableModule } from './access';
 import type { AreaUnit, MilkUnit, UnitSystem, WeightUnit } from './geo';
 import type { FarmType } from './schemas';
@@ -14,6 +15,8 @@ export interface FarmSummary {
   /** Set when the user has one of the farm's custom roles. */
   customRole: CustomRoleRef | null;
   planId: PlanId;
+  planName: string;
+  organization: OrganizationRef;
   memberCount: number;
   suspended: boolean;
   /** The user's effective permissions on this farm. */
@@ -62,6 +65,7 @@ export interface FarmProfile {
  */
 export interface FarmContext extends SubscriptionSnapshot {
   farm: FarmProfile;
+  organization: OrganizationRef & { role: OrgRole | null };
   membership: { role: FarmRole; customRole: CustomRoleRef | null; title: string | null; permissions: Permission[] };
   /** What each role can do on this farm (defaults plus the farm's role overrides). */
   rolePermissions: Record<FarmRole, Permission[]>;

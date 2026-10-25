@@ -3,6 +3,7 @@ import { checkoutSchema } from '@kit/shared';
 import { forbidImpersonation, validate } from '../../../core';
 import { requireFarm } from '../../farms';
 import * as billing from '../controllers/billing.controller';
+import * as plans from '../controllers/plan.controller';
 import * as webhook from '../controllers/webhook.controller';
 
 /** Mounted at /api/farms — farm-scoped billing lives at /api/farms/:farm/billing. */
@@ -16,7 +17,11 @@ router.get('/:farm/billing/invoices', canView, billing.invoices);
 router.post('/:farm/billing/checkout', canManage, forbidImpersonation, validate(checkoutSchema), billing.checkout);
 router.post('/:farm/billing/portal', canManage, forbidImpersonation, billing.portal);
 
-/** Mounted at /api/billing before CSRF/session middleware: Stripe signs its requests instead. */
-export const webhookRouter = Router();
+/**
+ * Mounted at /api/billing before CSRF/session middleware: public reads and
+ * Stripe webhooks (Stripe signs its requests instead).
+ */
+export const publicRouter = Router();
 
-webhookRouter.post('/webhook', webhook.stripe);
+publicRouter.get('/plans', plans.list);
+publicRouter.post('/webhook', webhook.stripe);

@@ -10,6 +10,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { requireAdmin, serverFetch } from '@/lib/session';
+import { NewClientAccountButton } from '@/modules/platform/components/new-client-account';
 
 export const metadata: Metadata = { title: 'Users' };
 
@@ -21,7 +22,7 @@ interface UsersResponse {
 type Search = { q?: string; page?: string; role?: string; status?: string };
 
 export default async function AdminUsersPage({ searchParams }: { searchParams: Promise<Search> }) {
-  await requireAdmin('platform.users.view');
+  const me = await requireAdmin('platform.users.view');
   const { q = '', page = '1', role = '', status = '' } = await searchParams;
   const filters = { q, role, status };
   const qs = new URLSearchParams({ page });
@@ -48,6 +49,11 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
         <Button type="submit" variant="outline">
           Filter
         </Button>
+        {me.platformPermissions?.includes('platform.tenants.create') && (
+          <div className="ml-auto">
+            <NewClientAccountButton />
+          </div>
+        )}
       </form>
       <p className="mb-2 text-sm text-muted-foreground">{pagination.total.toLocaleString()} users</p>
       <Card className="overflow-x-auto">

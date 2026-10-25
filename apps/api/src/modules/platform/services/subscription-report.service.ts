@@ -2,7 +2,7 @@ import { and, count, desc, eq, ilike, inArray, not, or, sql, type SQL } from 'dr
 import { monthlyValue, type AdminSubscriptionListQuery, type BillingInterval, type PlatformSubscription } from '@kit/shared';
 import { db, escapeLike, users } from '../../../core';
 import { farmMembers, farms } from '../../farms';
-import { entitlementsOf, farmSubscriptions, subscriptionOf, unpaidByFarm, unpaidFarmIds } from '../../subscriptions';
+import { entitlementsOf, farmSubscriptions, getPlan, subscriptionOf, unpaidByFarm, unpaidFarmIds } from '../../subscriptions';
 
 const s = farmSubscriptions;
 
@@ -77,7 +77,7 @@ export async function listSubscriptions({ page, pageSize, q, plan, state, source
       farm: { id: farm.id, name: farm.name, slug: farm.slug, country: farm.country, suspended: Boolean(farm.suspendedAt) },
       owner: ownerId ? { id: ownerId, name: ownerName!, email: ownerEmail! } : null,
       subscription,
-      mrr: paying ? monthlyValue(subscription.planId, (subscription.interval as BillingInterval | null) ?? 'month') : 0,
+      mrr: paying ? monthlyValue(getPlan(subscription.planId), (subscription.interval as BillingInterval | null) ?? 'month') : 0,
       limits,
       hasOverrides: Object.keys(row?.limitOverrides ?? {}).length + Object.keys(row?.capabilityOverrides ?? {}).length > 0,
       unpaid: unpaid.get(farm.id) ?? { count: 0, overdue: 0, balances: [] },

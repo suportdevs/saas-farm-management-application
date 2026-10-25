@@ -1,8 +1,7 @@
 import { eq, inArray } from 'drizzle-orm';
 import {
   CAPABILITIES,
-  isPlanId,
-  PLANS,
+  FREE_PLAN_ID,
   type BillingInterval,
   type Capability,
   type FarmSubscription,
@@ -11,8 +10,8 @@ import {
   type SubscriptionSnapshot,
 } from '@kit/shared';
 import { AppError, db } from '../../../core';
-import { trialPlan } from '../config';
 import { farmSubscriptions, type FarmSubscriptionRow } from '../models';
+import { getPlan, planExists, trialPlan } from './plan.service';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -22,7 +21,7 @@ export const ENTITLED_STATUSES = ['active', 'trialing', 'past_due'];
 type Row = FarmSubscriptionRow | undefined;
 
 function paidPlan(row: Row, now: Date): PlanId | null {
-  if (!row || !isPlanId(row.plan) || row.plan === 'free') return null;
+  if (!row || !planExists(row.plan) || row.plan === FREE_PLAN_ID) return null;
   if (!row.status || !ENTITLED_STATUSES.includes(row.status)) return null;
   // Manual (invoiced) plans lapse at the end of the agreed period.
   if (row.source === 'manual' && row.currentPeriodEnd && row.currentPeriodEnd <= now) return null;
@@ -33,7 +32,7 @@ function paidPlan(row: Row, now: Date): PlanId | null {
 export function subscriptionOf(row: Row, now = new Date()): FarmSubscription {
   const paid = paidPlan(row, now);
   const onTrial = !paid && !!row?.trialEndsAt && row.trialEndsAt > now;
-  const planId: PlanId = paid ?? (onTrial ? trialPlan : 'free');
+  const planId: PlanId = paid ?? (onTrial ? trialPlan() : FREE_PLAN_ID);
   const state: FarmSubscription['state'] = paid
     ? row!.status === 'past_due'
       ? 'past_due'
@@ -47,7 +46,7 @@ export function subscriptionOf(row: Row, now = new Date()): FarmSubscription {
         : 'free';
   return {
     planId,
-    planName: PLANS[planId].name,
+    planName: getPlan(planId).name,
     state,
     source: paid ? ((row!.source as 'stripe' | 'manual' | null) ?? 'stripe') : null,
     interval: paid ? ((row!.interval as BillingInterval | null) ?? null) : null,
@@ -90,7 +89,7 @@ export function capabilityOverridesOf(row: Row): Partial<Record<Capability, bool
  */
 export function entitlementsOf(row: Row) {
   const subscription = subscriptionOf(row);
-  const plan = PLANS[subscription.planId];
+  const plan = getPlan(subscription.planId);
   const limits: PlanLimits = { ...plan.limits, ...limitOverridesOf(row) };
   const overrides = capabilityOverridesOf(row);
   const capabilities = CAPABILITIES.filter((c) => overrides[c] ?? plan.capabilities.includes(c));
@@ -103,7 +102,7 @@ export function snapshotOf(row: Row): SubscriptionSnapshot {
 }
 
 /** The plan in effect for a farm. */
-export const planOf = async (farmId: string) => PLANS[subscriptionOf(await findSubscription(farmId)).planId];
+export const planOf = async (farmId: string) => getPlan(subscriptionOf(await findSubscription(farmId)).planId);
 
 const LIMIT_LABELS: Record<keyof PlanLimits, string> = { animals: 'animals', members: 'team members' };
 

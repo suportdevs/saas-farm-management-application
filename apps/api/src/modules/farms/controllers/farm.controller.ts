@@ -4,6 +4,7 @@ import type { CreateFarmData, deleteFarmSchema, UpdateFarmData } from '@kit/shar
 import { audit, badRequest } from '../../../core';
 import { getFarm } from '../middleware/farm-access.middleware';
 import * as farms from '../services/farm.service';
+import { orgRoleOf } from '../services/organization.service';
 import { farmEvent } from './helpers';
 
 /** GET / — farms the signed-in user belongs to. */
@@ -16,22 +17,22 @@ export async function create(req: Request, res: Response) {
   const input = req.body as CreateFarmData;
   const farm = await farms.createFarm(req.auth!.user, input);
   await audit(req, { action: 'farm.created', ...farmEvent(farm.id), metadata: { name: farm.name, type: farm.type, country: farm.country } });
-  res.status(201).json(await farms.contextOf(farm, { role: 'owner', title: null, permissionOverrides: {}, customRoleId: null }));
+  res.status(201).json(await farms.contextOf(farm, { role: 'owner', title: null, permissionOverrides: {}, customRoleId: null }, await orgRoleOf(farm.organizationId, req.auth!.user.id)));
 }
 
 /** GET /:farm — the farm workspace context. */
 export async function show(_req: Request, res: Response) {
-  const { farm, member } = getFarm(res);
-  res.json(await farms.contextOf(farm, member));
+  const { farm, member, orgRole } = getFarm(res);
+  res.json(await farms.contextOf(farm, member, orgRole));
 }
 
 /** PATCH /:farm */
 export async function update(req: Request, res: Response) {
-  const { farm, member } = getFarm(res);
+  const { farm, member, orgRole } = getFarm(res);
   const patch = req.body as UpdateFarmData;
   const updated = await farms.updateFarm(farm, patch);
   await audit(req, { action: 'farm.updated', ...farmEvent(farm.id), metadata: { fields: Object.keys(patch) } });
-  res.json(await farms.contextOf(updated, member));
+  res.json(await farms.contextOf(updated, member, orgRole));
 }
 
 /** DELETE /:farm — the user retypes the farm name to confirm. */

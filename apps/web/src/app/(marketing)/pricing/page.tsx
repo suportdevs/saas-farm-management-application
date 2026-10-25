@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { PricingTable } from '@/modules/subscriptions/components/pricing-table';
+import { getPlans } from '@/modules/subscriptions/server';
 
 export const metadata: Metadata = {
   title: 'Pricing',
@@ -16,7 +17,8 @@ const FAQ = [
   ['Who owns the data?', 'You do. Your records are private to your farm team, and owners can export them at any time on paid plans.'],
 ];
 
-export default function PricingPage() {
+export default async function PricingPage() {
+  const plans = await getPlans();
   return (
     <div className="relative">
       <div className="bg-dots pointer-events-none absolute inset-x-0 top-0 h-[28rem] opacity-60 [mask-image:radial-gradient(ellipse_at_top,black,transparent_70%)]" />
@@ -27,7 +29,7 @@ export default function PricingPage() {
           <p className="mt-4 text-lg text-muted-foreground">Start free. Upgrade when you need more animals, more people or deeper insight.</p>
         </div>
         <div className="mt-12">
-          <PricingTable />
+          <PricingTable plans={plans} />
         </div>
 
         <section id="faq" className="mx-auto mt-28 max-w-3xl scroll-mt-24">

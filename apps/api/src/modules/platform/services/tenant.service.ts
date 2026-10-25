@@ -1,17 +1,18 @@
 import { and, count, desc, eq, gt, ilike, isNotNull, or, sql, type SQL } from 'drizzle-orm';
 import {
-  isPlanId,
   monthlyValue,
   type AdminFarmListQuery,
+  type AdminOrganizationListQuery,
   type BillingInterval,
   type FarmType,
   type PlanId,
   type PlatformFarm,
+  type PlatformOrganization,
   type PlatformStats,
 } from '@kit/shared';
 import { db, escapeLike, notFound, users } from '../../../core';
-import { farmMembers, farms, findFarm, listActivity, listMembers, serializeFarm, type Farm } from '../../farms';
-import { farmSubscriptions, findSubscription, subscriptionOf, type FarmSubscriptionRow } from '../../subscriptions';
+import { farmMembers, farms, findFarm, findOrganization, listActivity, listMembers, organizationMembers, organizations, serializeFarm, type Farm } from '../../farms';
+import { farmSubscriptions, findSubscription, getPlan, planExists, subscriptionOf, type FarmSubscriptionRow } from '../../subscriptions';
 
 const DAY = 24 * 60 * 60 * 1000;
 const s = farmSubscriptions;
@@ -48,6 +49,7 @@ function serializePlatformFarm(
   sub: FarmSubscriptionRow | undefined | null,
   owner: { id: string; name: string; email: string } | null,
   memberCount: number,
+  organization: { id: string; name: string },
 ): PlatformFarm {
   return {
     id: farm.id,
@@ -56,6 +58,7 @@ function serializePlatformFarm(
     type: farm.type,
     country: farm.country,
     city: farm.city,
+    organization,
     subscription: subscriptionOf(sub ?? undefined),
     memberCount,
     owner,
@@ -109,14 +112,14 @@ export async function platformStats(): Promise<PlatformStats> {
   ]);
 
   const mrr = revenueRows.reduce(
-    (sum, r) => sum + (isPlanId(r.plan) ? monthlyValue(r.plan, (r.interval as BillingInterval | null) ?? 'month') * r.count : 0),
+    (sum, r) => sum + (planExists(r.plan) ? monthlyValue(getPlan(r.plan!), (r.interval as BillingInterval | null) ?? 'month') * r.count : 0),
     0,
   );
   const byDay = new Map(createdRows.map((r) => [r.day, r.count]));
   return {
     farms: totals!,
     mrr,
-    byPlan: planRows.filter((r) => isPlanId(r.plan)).map((r) => ({ planId: r.plan as PlanId, count: r.count })),
+    byPlan: planRows.filter((r) => planExists(r.plan)).map((r) => ({ planId: r.plan as PlanId, count: r.count })),
     byCountry: countryRows,
     byType: typeRows.map((r) => ({ type: r.type as FarmType, count: r.count })),
     created: Array.from({ length: 30 }, (_, i) => {
@@ -127,21 +130,23 @@ export async function platformStats(): Promise<PlatformStats> {
 }
 
 /** The farm directory: search and filter every tenant. */
-export async function listTenants({ page, pageSize, q, plan, status, country }: AdminFarmListQuery) {
+export async function listTenants({ page, pageSize, q, plan, status, country, organizationId }: AdminFarmListQuery) {
   const filters: SQL[] = [];
   if (q) {
     const pattern = `%${escapeLike(q)}%`;
-    filters.push(or(ilike(farms.name, pattern), ilike(farms.slug, pattern), ilike(farms.city, pattern), ilike(ownerOf.email, pattern))!);
+    filters.push(or(ilike(farms.name, pattern), ilike(farms.slug, pattern), ilike(farms.city, pattern), ilike(ownerOf.email, pattern), ilike(organizations.name, pattern))!);
   }
   if (plan) filters.push(plan === 'free' ? sql`not ${isEntitled}` : and(isEntitled, eq(s.plan, plan))!);
   if (status) filters.push(statusFilter[status]);
   if (country) filters.push(eq(farms.country, country));
+  if (organizationId) filters.push(eq(farms.organizationId, organizationId));
   const where = filters.length ? and(...filters) : undefined;
 
   const [rows, [total]] = await Promise.all([
     db
       .select()
       .from(farms)
+      .innerJoin(organizations, eq(organizations.id, farms.organizationId))
       .leftJoin(s, eq(s.farmId, farms.id))
       .leftJoin(ownerOf, eq(ownerOf.farmId, farms.id))
       .leftJoin(memberCounts, eq(memberCounts.farmId, farms.id))
@@ -152,6 +157,7 @@ export async function listTenants({ page, pageSize, q, plan, status, country }: 
     db
       .select({ value: sql<number>`count(distinct ${farms.id})`.mapWith(Number) })
       .from(farms)
+      .innerJoin(organizations, eq(organizations.id, farms.organizationId))
       .leftJoin(s, eq(s.farmId, farms.id))
       .leftJoin(ownerOf, eq(ownerOf.farmId, farms.id))
       .where(where),
@@ -166,6 +172,7 @@ export async function listTenants({ page, pageSize, q, plan, status, country }: 
         r.farm_subscriptions,
         r.owner ? { id: r.owner.id, name: r.owner.name, email: r.owner.email } : null,
         Number(r.members?.total ?? 0),
+        { id: r.organizations.id, name: r.organizations.name },
       ),
     ),
     pagination: { page, pageSize, total: total?.value ?? 0 },
@@ -174,10 +181,21 @@ export async function listTenants({ page, pageSize, q, plan, status, country }: 
 
 /** One tenant: profile, billing, team and recent activity. */
 export async function tenantDetail(farm: Farm) {
-  const [members, activity, sub] = await Promise.all([listMembers(farm.id), listActivity(farm.id, { limit: 20, offset: 0 }), findSubscription(farm.id)]);
+  const [members, activity, sub, org] = await Promise.all([
+    listMembers(farm.id),
+    listActivity(farm.id, { limit: 20, offset: 0 }),
+    findSubscription(farm.id),
+    findOrganization(farm.organizationId),
+  ]);
   const owner = members.find((m) => m.role === 'owner');
   return {
-    farm: serializePlatformFarm(farm, sub, owner ? { id: owner.userId, name: owner.name, email: owner.email } : null, members.length),
+    farm: serializePlatformFarm(
+      farm,
+      sub,
+      owner ? { id: owner.userId, name: owner.name, email: owner.email } : null,
+      members.length,
+      { id: farm.organizationId, name: org?.name ?? '' },
+    ),
     profile: serializeFarm(farm),
     billing: {
       plan: sub?.plan ?? 'free',
@@ -189,4 +207,44 @@ export async function tenantDetail(farm: Farm) {
     members,
     activity: activity.entries,
   };
+}
+
+/** Client organizations: search by name or owner email. */
+export async function listClientOrganizations({ page, pageSize, q }: AdminOrganizationListQuery) {
+  const farmCounts = db.select({ organizationId: farms.organizationId, total: count().as('farm_total') }).from(farms).groupBy(farms.organizationId).as('farm_counts');
+  const memberTotals = db
+    .select({ organizationId: organizationMembers.organizationId, total: count().as('member_total') })
+    .from(organizationMembers)
+    .groupBy(organizationMembers.organizationId)
+    .as('member_totals');
+  const owners = db
+    .selectDistinctOn([organizationMembers.organizationId], { organizationId: organizationMembers.organizationId, id: users.id, name: users.name, email: users.email })
+    .from(organizationMembers)
+    .innerJoin(users, eq(users.id, organizationMembers.userId))
+    .where(eq(organizationMembers.role, 'owner'))
+    .orderBy(organizationMembers.organizationId, organizationMembers.createdAt)
+    .as('org_owner');
+  const where = q ? or(ilike(organizations.name, `%${escapeLike(q)}%`), ilike(owners.email, `%${escapeLike(q)}%`)) : undefined;
+  const [rows, [total]] = await Promise.all([
+    db
+      .select({ org: organizations, farms: farmCounts.total, members: memberTotals.total, ownerId: owners.id, ownerName: owners.name, ownerEmail: owners.email })
+      .from(organizations)
+      .leftJoin(farmCounts, eq(farmCounts.organizationId, organizations.id))
+      .leftJoin(memberTotals, eq(memberTotals.organizationId, organizations.id))
+      .leftJoin(owners, eq(owners.organizationId, organizations.id))
+      .where(where)
+      .orderBy(desc(organizations.createdAt))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize),
+    db.select({ value: count() }).from(organizations).leftJoin(owners, eq(owners.organizationId, organizations.id)).where(where),
+  ]);
+  const list: PlatformOrganization[] = rows.map((r) => ({
+    id: r.org.id,
+    name: r.org.name,
+    farmCount: Number(r.farms ?? 0),
+    memberCount: Number(r.members ?? 0),
+    owner: r.ownerId ? { id: r.ownerId, name: r.ownerName!, email: r.ownerEmail! } : null,
+    createdAt: r.org.createdAt.toISOString(),
+  }));
+  return { organizations: list, pagination: { page, pageSize, total: total?.value ?? 0 } };
 }

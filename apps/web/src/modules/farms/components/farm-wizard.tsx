@@ -10,13 +10,13 @@ import {
   FARM_TYPE_INFO,
   FARM_TYPES,
   MILK_UNITS,
-  PLANS,
   UNIT_LABELS,
   WEIGHT_UNITS,
   type AreaUnit,
   type FarmContext,
   type FarmType,
   type MilkUnit,
+  type OrganizationRef,
   type UnitSystem,
   type WeightUnit,
 } from '@kit/shared';
@@ -75,9 +75,25 @@ const initial: FormState = {
   goals: [],
 };
 
-export function FarmWizard({ firstName, isFirstFarm, trialDays }: { firstName: string; isFirstFarm: boolean; trialDays: number }) {
+export function FarmWizard({
+  firstName,
+  isFirstFarm,
+  trialDays,
+  trialPlanName,
+  organizations,
+  organizationId: initialOrg,
+}: {
+  firstName: string;
+  isFirstFarm: boolean;
+  trialDays: number;
+  trialPlanName: string;
+  /** Organizations the user may add farms to (owner or admin). */
+  organizations: OrganizationRef[];
+  organizationId?: string;
+}) {
   const router = useRouter();
   const [step, setStep] = useState(0);
+  const [organizationId, setOrganizationId] = useState(initialOrg ?? organizations[0]?.id ?? '');
   const [form, setForm] = useState<FormState>(initial);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -122,7 +138,12 @@ export function FarmWizard({ firstName, isFirstFarm, trialDays }: { firstName: s
   const submit = async () => {
     setSubmitting(true);
     try {
-      const ctx = await api.post<FarmContext>('/farms', { ...form, unitSystem: form.weightUnit === 'lb' ? 'imperial' : 'metric' });
+      const ctx = await api.post<FarmContext>('/farms', {
+        ...form,
+        unitSystem: form.weightUnit === 'lb' ? 'imperial' : 'metric',
+        // Empty: the farm goes to the user's own organization (created for a first farm).
+        ...(organizationId ? { organizationId } : {}),
+      });
       toast.success(`${ctx.farm.name} is ready`);
       router.push(`/farms/${ctx.farm.slug}?welcome=1`);
       router.refresh();
@@ -149,7 +170,7 @@ export function FarmWizard({ firstName, isFirstFarm, trialDays }: { firstName: s
         <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{isFirstFarm ? "Let's set up your farm" : 'Add another farm'}</h1>
         <p className="mt-2 text-muted-foreground">
           It takes about a minute. Everything can be changed later in farm settings.
-          {trialDays > 0 && ` Every new farm gets ${trialDays} days of ${PLANS.pro.name} free — no card needed.`}
+          {trialDays > 0 && ` Every new farm gets ${trialDays} days of ${trialPlanName} free — no card needed.`}
         </p>
 
         <ol className="mt-8 grid grid-cols-3 gap-2" aria-label="Progress">
@@ -187,6 +208,17 @@ export function FarmWizard({ firstName, isFirstFarm, trialDays }: { firstName: s
                   className="h-12 text-base"
                 />
               </Field>
+              {organizations.length > 1 && (
+                <Field id="organization" label="Organization" hint="The client or business this farm belongs to." error={errors.organizationId}>
+                  <Select id="organization" className="w-full" value={organizationId} onChange={(e) => setOrganizationId(e.target.value)}>
+                    {organizations.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              )}
               <fieldset>
                 <legend className="text-sm font-medium">What kind of operation is it?</legend>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

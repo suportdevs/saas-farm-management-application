@@ -2,10 +2,10 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, Check, Lock, Rocket } from 'lucide-react';
-import { PLAN_LIST } from '@kit/shared';
 import { Badge } from '@/components/ui/badge';
 import { buttonClasses } from '@/components/ui/button';
 import { getFarmContext } from '@/modules/farms/server';
+import { getPlans } from '@/modules/subscriptions/server';
 import { findModule } from '@/modules/farms/navigation';
 
 type Props = { params: Promise<{ farm: string; module: string }> };
@@ -23,11 +23,11 @@ export default async function ModulePage({ params }: Props) {
   const { farm: slug, module } = await params;
   const mod = findModule(module);
   if (!mod) notFound();
-  const ctx = await getFarmContext(slug);
+  const [ctx, plans] = await Promise.all([getFarmContext(slug), getPlans()]);
   const Icon = mod.icon;
   const included = !mod.capability || ctx.capabilities.includes(mod.capability);
   const disabled = (ctx.modules as Record<string, string>)[mod.slug] === 'disabled';
-  const cheapest = mod.capability ? PLAN_LIST.find((p) => p.capabilities.includes(mod.capability!)) : undefined;
+  const cheapest = mod.capability ? plans.find((p) => p.capabilities.includes(mod.capability!)) : undefined;
 
   return (
     <div className="mx-auto max-w-3xl">

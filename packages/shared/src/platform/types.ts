@@ -10,6 +10,8 @@ export interface PlatformFarm {
   type: FarmType;
   country: string;
   city: string | null;
+  /** The client the farm belongs to. */
+  organization: { id: string; name: string };
   subscription: FarmSubscription;
   memberCount: number;
   owner: { id: string; name: string; email: string } | null;
@@ -85,4 +87,14 @@ export interface PlatformSubscription {
   /** Open manual invoices: count and the balance per currency. */
   unpaid: { count: number; overdue: number; balances: { currency: string; amount: number }[] };
   memberCount: number;
+}
+
+/** A client organization as the operator console lists it. */
+export interface PlatformOrganization {
+  id: string;
+  name: string;
+  farmCount: number;
+  memberCount: number;
+  owner: { id: string; name: string; email: string } | null;
+  createdAt: string;
 }

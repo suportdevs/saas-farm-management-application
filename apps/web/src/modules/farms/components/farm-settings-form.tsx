@@ -13,7 +13,6 @@ import {
   WEIGHT_UNITS,
   MODULE_CAPABILITIES,
   PERMISSION_MODULES,
-  PLAN_LIST,
   TOGGLEABLE_MODULES,
   type ToggleableModule,
   type FarmContext,
@@ -28,6 +27,7 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { ApiError, api, errorMessage } from '@/lib/api';
 import { useFarm } from '@/modules/farms/context';
+import { usePlans } from '@/modules/subscriptions/use-plans';
 import { formatMoney } from '@/lib/format';
 import { siteUrl } from '@/lib/utils';
 import { CountryOptions, CurrencyOptions, LocaleOptions, TimeZoneOptions } from '@/modules/farms/components/locale-options';
@@ -293,6 +293,7 @@ function Section({ icon: Icon, title, description, children }: { icon: typeof Gl
 function ModulesSection() {
   const router = useRouter();
   const { farm, modules } = useFarm();
+  const plans = usePlans();
   const [busy, setBusy] = useState<ToggleableModule | null>(null);
 
   const toggle = async (module: ToggleableModule, on: boolean) => {
@@ -317,7 +318,7 @@ function ModulesSection() {
             const on = !farm.disabledModules.includes(m);
             const capability = MODULE_CAPABILITIES[m];
             const inPlan = modules[m] !== 'plan';
-            const cheapest = capability ? PLAN_LIST.find((p) => p.capabilities.includes(capability)) : undefined;
+            const cheapest = capability ? plans.find((p) => p.capabilities.includes(capability)) : undefined;
             return (
               <li key={m} className="flex items-center gap-4 px-4 py-3">
                 <div className="min-w-0 flex-1">

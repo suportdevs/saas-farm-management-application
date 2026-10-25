@@ -1,5 +1,7 @@
 import { z } from 'zod';
-import { CAPABILITIES, PLAN_IDS } from '../subscriptions/plans';
+import { CAPABILITIES } from '../subscriptions/plans';
+import { planIdSchema } from '../subscriptions/schemas';
+import { FARM_ROLES } from '../farms/access';
 import { createFarmSchema } from '../farms/schemas';
 import { PLATFORM_PERMISSIONS } from './access';
 
@@ -8,14 +10,16 @@ export const adminFarmListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(1000).default(20),
   q: z.string().trim().max(100).optional(),
-  plan: z.enum(PLAN_IDS).optional(),
+  plan: planIdSchema.optional(),
   status: z.enum(['trialing', 'paying', 'free', 'past_due', 'suspended']).optional(),
   country: z.string().length(2).toUpperCase().optional(),
+  /** Only the farms of one client organization. */
+  organizationId: z.uuid().optional(),
 });
 export type AdminFarmListQuery = z.infer<typeof adminFarmListQuerySchema>;
 
 export const adminSetPlanSchema = z.object({
-  planId: z.enum(PLAN_IDS),
+  planId: planIdSchema,
   /** Manual (invoiced) subscriptions may end on a date; empty = open-ended. */
   currentPeriodEnd: z.iso.datetime({ offset: true }).nullable().optional(),
 });
@@ -93,8 +97,10 @@ export type StaffRoleImportInput = z.input<typeof staffRoleImportSchema>;
 /** POST /admin/farms — a tenant created for a client. The owner is added now, or invited when they have no account. */
 export const adminCreateFarmSchema = createFarmSchema.extend({
   ownerEmail: z.string().trim().toLowerCase().max(254).pipe(z.email('Enter a valid email address')),
+  /** A new client's organization name (empty = the farm's name). Ignored when `organizationId` picks an existing one. */
+  organizationName: z.string().trim().max(100).optional(),
   /** Plan to start on. Empty = the normal free trial. */
-  planId: z.enum(PLAN_IDS).optional(),
+  planId: planIdSchema.optional(),
   /** Manual plans end on this date (paid-through); empty = open-ended. */
   currentPeriodEnd: z.iso.datetime({ offset: true }).nullable().optional(),
 });
@@ -172,7 +178,7 @@ export const manualInvoiceSchema = z.object({
   issuedAt: isoDate.optional(),
   dueAt: isoDate,
   /** When paid in full, the tenant moves to this plan… */
-  planId: z.enum(PLAN_IDS).nullable().optional(),
+  planId: planIdSchema.nullable().optional(),
   /** …paid through this date. */
   periodEnd: isoDate.nullable().optional(),
   notes: z.string().trim().max(2000).optional(),
@@ -197,7 +203,7 @@ export const adminSubscriptionListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(1000).default(25),
   q: z.string().trim().max(100).optional(),
-  plan: z.enum(PLAN_IDS).optional(),
+  plan: planIdSchema.optional(),
   state: z.enum(['free', 'trialing', 'active', 'past_due', 'canceled']).optional(),
   source: z.enum(['stripe', 'manual', 'none']).optional(),
   /** Tenants with unpaid / overdue manual invoices. */
@@ -213,3 +219,35 @@ export const adminInvoiceListQuerySchema = z.object({
   status: z.enum(INVOICE_STATUSES).optional(),
 });
 export type AdminInvoiceListQuery = z.infer<typeof adminInvoiceListQuerySchema>;
+
+// ─── Client accounts & teams (platform-managed) ──────────────────
+
+/** Admin → Users: create an account for a client. They set their password from the emailed link. */
+export const adminCreateUserSchema = z.object({
+  name: z.string().trim().min(1, 'Enter a name').max(100),
+  email: z.string().trim().toLowerCase().max(254).pipe(z.email('Enter a valid email address')),
+});
+export type AdminCreateUserInput = z.input<typeof adminCreateUserSchema>;
+
+/** Admin → a tenant → Team: add someone (an existing account joins now, anyone else is invited). */
+export const adminAddMemberSchema = z.object({
+  email: z.string().trim().toLowerCase().max(254).pipe(z.email('Enter a valid email address')),
+  role: z.enum(FARM_ROLES).default('worker'),
+});
+export const adminUpdateMemberSchema = z.object({ role: z.enum(FARM_ROLES) });
+
+/** Makes a member the farm's owner; the previous owners stay on as managers unless `keepOwners`. */
+export const adminTransferOwnershipSchema = z.object({
+  userId: z.uuid(),
+  keepOwners: z.boolean().default(false),
+});
+
+export const adminOrganizationListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(1000).default(20),
+  q: z.string().trim().max(100).optional(),
+});
+export type AdminOrganizationListQuery = z.infer<typeof adminOrganizationListQuerySchema>;
+
+/** Moves a farm to another client organization (e.g. the farm was sold). */
+export const adminMoveFarmSchema = z.object({ organizationId: z.uuid() });

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { History } from 'lucide-react';
-import { CATALOG, isCatalogResource, isPlanId, PLANS, ROLE_INFO, type FarmActivityEntry, type FarmRole, type Pagination as PaginationInfo } from '@kit/shared';
+import { CATALOG, isCatalogResource, planName, ROLE_INFO, type FarmActivityEntry, type PublicPlan, type FarmRole, type Pagination as PaginationInfo } from '@kit/shared';
 import { PageHeader } from '@/components/app/page-header';
 import { Pagination } from '@/components/app/pagination';
 import { Avatar } from '@/components/app/user-menu';
@@ -11,10 +11,11 @@ import { getFarmContext } from '@/modules/farms/server';
 import { ACTIVITY_LABELS } from '@/modules/farms/navigation';
 import { formatFarmDate } from '@/lib/format';
 import { serverFetch } from '@/lib/session';
+import { getPlans } from '@/modules/subscriptions/server';
 
 export const metadata: Metadata = { title: 'Activity' };
 
-function detail(e: FarmActivityEntry): string | null {
+function detail(e: FarmActivityEntry, plans: PublicPlan[]): string | null {
   const m = e.metadata;
   if (e.action === 'farm.member_invited' && typeof m.email === 'string') return `${m.email} as ${typeof m.roleLabel === 'string' ? m.roleLabel : (ROLE_INFO[m.role as FarmRole]?.label ?? m.role)}`;
   if (e.action === 'farm.member_role_changed' && typeof m.to === 'string') return `${ROLE_INFO[m.from as FarmRole]?.label ?? m.from} → ${ROLE_INFO[m.to as FarmRole]?.label ?? m.to}`;
@@ -23,8 +24,8 @@ function detail(e: FarmActivityEntry): string | null {
   if (e.action.startsWith('farm.role_permissions_') && Array.isArray(m.changed)) return `${ROLE_INFO[m.role as FarmRole]?.label ?? m.role} · ${m.changed.join(', ')}`;
   if (e.action === 'farm.member_permissions_changed' && Array.isArray(m.changed)) return m.changed.join(', ');
   if (e.action.startsWith('farm.role_') && typeof m.name === 'string') return typeof m.from === 'string' ? `${m.from} → ${m.name}` : m.name;
-  if (e.action === 'farm.subscription_changed' && isPlanId(m.to) && isPlanId(m.from)) {
-    return m.from === m.to ? `${PLANS[m.to].name} · ${m.fromState} → ${m.toState}` : `${PLANS[m.from].name} → ${PLANS[m.to].name}`;
+  if (e.action === 'farm.subscription_changed' && typeof m.to === 'string' && typeof m.from === 'string') {
+    return m.from === m.to ? `${planName(plans, m.to)} · ${m.fromState} → ${m.toState}` : `${planName(plans, m.from)} → ${planName(plans, m.to)}`;
   }
   if (e.action.startsWith('farm.payment_') && typeof m.amount === 'string') return m.amount;
   if (e.action === 'admin.farm.plan_changed' && typeof m.to === 'string') return `${m.from} → ${m.to}`;
@@ -41,7 +42,10 @@ export default async function ActivityPage({ params, searchParams }: { params: P
   const { page = '1' } = await searchParams;
   const ctx = await getFarmContext(slug);
   if (!ctx.membership.permissions.includes('activity.view')) notFound();
-  const data = await serverFetch<{ entries: FarmActivityEntry[]; pagination: PaginationInfo }>(`/farms/${slug}/activity?page=${Number(page) || 1}&pageSize=30`);
+  const [data, plans] = await Promise.all([
+    serverFetch<{ entries: FarmActivityEntry[]; pagination: PaginationInfo }>(`/farms/${slug}/activity?page=${Number(page) || 1}&pageSize=30`),
+    getPlans(),
+  ]);
   const entries = data?.entries ?? [];
 
   // Group entries by day in the farm's time zone.
@@ -63,7 +67,7 @@ export default async function ActivityPage({ params, searchParams }: { params: P
               <h2 className="mb-3 text-sm font-semibold text-muted-foreground">{day}</h2>
               <Card className="divide-y">
                 {items.map((e) => {
-                  const extra = detail(e);
+                  const extra = detail(e, plans);
                   return (
                     <div key={e.id} className="flex items-start gap-4 px-5 py-4">
                       {e.actor ? <Avatar user={{ name: e.actor.name, image: null }} size={32} /> : <span className="h-8 w-8 rounded-full bg-muted" />}

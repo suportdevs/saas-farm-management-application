@@ -1,4 +1,4 @@
-import { and, asc, count, eq, sql } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, isNotNull, or, sql } from 'drizzle-orm';
 import {
   cleanOverrides,
   FARM_ROLES,
@@ -12,13 +12,16 @@ import {
   type FarmProfile,
   type FarmSummary,
   type FarmUsage,
+  type OrgRole,
   type UnitSystem,
 } from '@kit/shared';
-import { badRequest, conflict, db, forbidden, isUuid, randomToken, users, type User } from '../../../core';
+import { badRequest, conflict, db, forbidden, isUuid, notFound, randomToken, users, type User } from '../../../core';
 import { config } from '../config';
-import { farmCustomRoles, farmMembers, farmRolePermissions, farms, type Farm, type FarmMemberRow } from '../models';
+import { farmCustomRoles, farmMembers, farmRolePermissions, farms, organizationMembers, organizations, type Farm, type FarmMemberRow } from '../models';
 import { farmExtensions } from './farm.extensions';
 import { inviteOwner, seatCount } from './invitation.service';
+import { effectiveMember } from './member.service';
+import { createClientOrganization, findOrganization, organizationForNewFarm } from './organization.service';
 import { gateOf, roleOverridesOf } from './permission.service';
 import { customRoleRef, listCustomRoles } from './role.service';
 
@@ -82,13 +85,15 @@ export async function usageOf(farmId: string): Promise<FarmUsage> {
 export async function contextOf(
   farm: Farm,
   member: Pick<FarmMemberRow, 'role' | 'title' | 'permissionOverrides' | 'customRoleId'>,
+  orgRole: OrgRole | null,
 ): Promise<FarmContext> {
-  const [usage, extra, roleOverrides, gate, customRoles] = await Promise.all([
+  const [usage, extra, roleOverrides, gate, customRoles, org] = await Promise.all([
     usageOf(farm.id),
     farmExtensions.context(farm),
     roleOverridesOf(farm.id),
     gateOf(farm),
     listCustomRoles(farm.id),
+    findOrganization(farm.organizationId),
   ]);
   const customRole = (member.customRoleId && customRoles.find((r) => r.id === member.customRoleId)) || null;
   const permissions = resolvePermissions(member.role, {
@@ -99,6 +104,7 @@ export async function contextOf(
   return {
     ...extra,
     farm: serializeFarm(farm),
+    organization: { id: farm.organizationId, name: org?.name ?? '', role: orgRole },
     membership: { role: member.role, customRole: customRoleRef(customRole), title: member.title, permissions: gatePermissions(permissions, gate) },
     // Role settings as configured (not plan-gated), so they survive plan changes.
     rolePermissions: Object.fromEntries(FARM_ROLES.map((r) => [r, rolePermissions(r, roleOverrides[r])])),
@@ -136,6 +142,7 @@ async function uniqueSlug(name: string): Promise<string> {
   return `${base}-${Date.now().toString(36)}`;
 }
 
+/** Farms the user can open: their farm teams, plus every farm of an organization they own or run. */
 export async function listUserFarms(userId: string): Promise<FarmSummary[]> {
   const memberCount = db
     .select({ farmId: farmMembers.farmId, total: count().as('total') })
@@ -143,43 +150,51 @@ export async function listUserFarms(userId: string): Promise<FarmSummary[]> {
     .groupBy(farmMembers.farmId)
     .as('member_count');
   const rows = await db
-    .select({
-      farm: farms,
-      role: farmMembers.role,
-      members: memberCount.total,
-      memberOverrides: farmMembers.permissionOverrides,
-      roleOverrides: farmRolePermissions.overrides,
-      customRole: { id: farmCustomRoles.id, name: farmCustomRoles.name, permissions: farmCustomRoles.permissions },
-    })
-    .from(farmMembers)
-    .innerJoin(farms, eq(farms.id, farmMembers.farmId))
-    .innerJoin(memberCount, eq(memberCount.farmId, farms.id))
-    .leftJoin(farmRolePermissions, and(eq(farmRolePermissions.farmId, farmMembers.farmId), eq(farmRolePermissions.role, farmMembers.role)))
-    .leftJoin(farmCustomRoles, eq(farmCustomRoles.id, farmMembers.customRoleId))
-    .where(eq(farmMembers.userId, userId))
+    .select({ farm: farms, member: farmMembers, orgRole: organizationMembers.role, orgName: organizations.name, members: memberCount.total })
+    .from(farms)
+    .innerJoin(organizations, eq(organizations.id, farms.organizationId))
+    .leftJoin(farmMembers, and(eq(farmMembers.farmId, farms.id), eq(farmMembers.userId, userId)))
+    .leftJoin(
+      organizationMembers,
+      and(eq(organizationMembers.organizationId, farms.organizationId), eq(organizationMembers.userId, userId), inArray(organizationMembers.role, ['owner', 'admin'])),
+    )
+    .leftJoin(memberCount, eq(memberCount.farmId, farms.id))
+    .where(or(isNotNull(farmMembers.userId), isNotNull(organizationMembers.userId)))
     .orderBy(sql`${farmMembers.lastAccessedAt} desc nulls last`, asc(farms.name));
+
   const ids = rows.map((r) => r.farm.id);
-  const [extra, capabilities] = await Promise.all([farmExtensions.summaries(ids), farmExtensions.capabilities(ids)]);
-  return rows.map(({ farm, role, members, memberOverrides, roleOverrides, customRole }) => {
+  const customRoleIds = rows.map((r) => r.member?.customRoleId).filter((id): id is string => Boolean(id));
+  const [extra, capabilities, roleRows, customRoles] = await Promise.all([
+    farmExtensions.summaries(ids),
+    farmExtensions.capabilities(ids),
+    ids.length ? db.select().from(farmRolePermissions).where(inArray(farmRolePermissions.farmId, ids)) : [],
+    customRoleIds.length ? db.select().from(farmCustomRoles).where(inArray(farmCustomRoles.id, customRoleIds)) : [],
+  ]);
+  const roleOverrides = (farmId: string, role: string) => roleRows.find((r) => r.farmId === farmId && r.role === role)?.overrides;
+
+  return rows.map(({ farm, member: teamRow, orgRole, orgName, members }) => {
+    const member = effectiveMember(farm.id, userId, teamRow, orgRole)!;
+    const customRole = member.customRoleId ? customRoles.find((r) => r.id === member.customRoleId) : undefined;
     const gate = { capabilities: capabilities(farm.id), disabledModules: farm.disabledModules };
-    const permissions = resolvePermissions(role, {
-      roleOverrides: cleanOverrides(roleOverrides),
-      memberOverrides: cleanOverrides(memberOverrides),
+    const permissions = resolvePermissions(member.role, {
+      roleOverrides: cleanOverrides(roleOverrides(farm.id, member.role)),
+      memberOverrides: cleanOverrides(member.permissionOverrides),
       customRole: customRole?.permissions,
     });
     return {
-    ...extra(farm.id),
-    id: farm.id,
-    name: farm.name,
-    slug: farm.slug,
-    type: farm.type,
-    country: farm.country,
-    role,
-    customRole: customRoleRef(customRole),
-    memberCount: Number(members),
-    suspended: Boolean(farm.suspendedAt),
-    permissions: gatePermissions(permissions, gate),
-    modules: moduleStatuses(gate),
+      ...extra(farm.id),
+      id: farm.id,
+      name: farm.name,
+      slug: farm.slug,
+      type: farm.type,
+      country: farm.country,
+      organization: { id: farm.organizationId, name: orgName },
+      role: member.role,
+      customRole: customRoleRef(customRole),
+      memberCount: Number(members ?? 0),
+      suspended: Boolean(farm.suspendedAt),
+      permissions: gatePermissions(permissions, gate),
+      modules: moduleStatuses(gate),
     };
   }) as FarmSummary[];
 }
@@ -194,7 +209,8 @@ export async function createFarm(user: User, input: CreateFarmData) {
   }
   const slug = await uniqueSlug(input.name);
   return db.transaction(async (tx) => {
-    const [farm] = await tx.insert(farms).values(farmValues(input, slug, user.id)).returning();
+    const org = await organizationForNewFarm(user, input.organizationId, input.name, tx);
+    const [farm] = await tx.insert(farms).values({ ...farmValues(input, slug, user.id), organizationId: org.id }).returning();
     await tx.insert(farmMembers).values({ farmId: farm!.id, userId: user.id, role: 'owner', lastAccessedAt: new Date() });
     await farmExtensions.created(farm!, tx);
     return farm!;
@@ -226,11 +242,15 @@ const farmValues = (input: CreateFarmData, slug: string, createdById: string) =>
  * when they already have an account; otherwise they get an owner invitation by
  * email (the farm has no members until they accept). Farm-owning limits don't apply.
  */
-export async function createFarmForClient(staff: User, input: CreateFarmData & { ownerEmail: string }) {
+export async function createFarmForClient(staff: User, input: CreateFarmData & { ownerEmail: string; organizationName?: string }) {
   const owner = await db.query.users.findFirst({ where: eq(users.email, input.ownerEmail) });
+  const existingOrg = input.organizationId ? await findOrganization(input.organizationId) : undefined;
+  if (input.organizationId && !existingOrg) throw notFound('Organization not found', 'ORGANIZATION_NOT_FOUND');
   const slug = await uniqueSlug(input.name);
   const farm = await db.transaction(async (tx) => {
-    const [farm] = await tx.insert(farms).values(farmValues(input, slug, staff.id)).returning();
+    // A new client gets a new organization; the owner joins it now, or when they accept the invitation.
+    const org = existingOrg ?? (await createClientOrganization(staff, input.organizationName || input.name, owner ?? null, tx));
+    const [farm] = await tx.insert(farms).values({ ...farmValues(input, slug, staff.id), organizationId: org.id }).returning();
     if (owner) await tx.insert(farmMembers).values({ farmId: farm!.id, userId: owner.id, role: 'owner', title: 'Farm owner' });
     await farmExtensions.created(farm!, tx);
     return farm!;

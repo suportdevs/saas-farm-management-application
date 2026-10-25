@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { ChevronDown, Lock, LogOut, Moon, Settings, Shield, ShieldCheck, Sun, UserRound } from 'lucide-react';
+import { Building2, ChevronDown, Lock, LogOut, Moon, Settings, Shield, ShieldCheck, Sun, UserRound } from 'lucide-react';
 import type { FarmSummary, PublicUser } from '@kit/shared';
 import { Avatar } from '@/components/app/user-menu';
 import { LogoBadge } from '@/components/logo';
@@ -35,6 +35,7 @@ export function SidebarContent({ user, farms, onNavigate }: ShellProps & { onNav
   const accountLinks: NavLink[] = [
     // Items contributed by installed kit modules.
     ...moduleNavItems.map((item) => ({ ...item, icon: item.icon ?? Settings })),
+    { href: '/organizations', label: 'Organizations', icon: Building2 },
     { href: '/settings', label: 'Account', icon: UserRound },
     ...(user.role === 'admin' ? [{ href: '/admin', label: 'Platform admin', icon: Shield }] : []),
   ];

@@ -3,37 +3,65 @@ import {
   cleanOverrides,
   CUSTOM_ROLE_BASE,
   gatePermissions,
+  ORG_FARM_ROLE,
   PERMISSIONS,
   resolvePermissions,
   ROLE_INFO,
   rolePermissions,
   type FarmRole,
+  type OrgRole,
   type PermissionOverrides,
 } from '@kit/shared';
 import { badRequest, db, forbidden, isUuid, notFound, users } from '../../../core';
-import { farmCustomRoles, farmMembers, farmRolePermissions, farms, type FarmMemberRow } from '../models';
+import { farmCustomRoles, farmMembers, farms, organizationMembers, type FarmMemberRow } from '../models';
 import { gateOf, roleOverridesOf } from './permission.service';
 import { assertMayAssign, assertMayChange, findCustomRole, type PermissionActor } from './role.service';
+
+/**
+ * The membership a user acts with on a farm: their farm team row, raised by
+ * their organization role (org owner → farm owner, org admin → at least manager).
+ * Returns null when they have neither. A role given by the organization drops
+ * the member's custom role and overrides.
+ */
+export function effectiveMember(farmId: string, userId: string, member: FarmMemberRow | null, orgRole: OrgRole | null): FarmMemberRow | null {
+  const fromOrg = orgRole ? ORG_FARM_ROLE[orgRole] : null;
+  if (!fromOrg || member?.role === 'owner') return member;
+  if (member && fromOrg === 'manager' && member.role === 'manager' && !member.customRoleId) return member;
+  return {
+    farmId,
+    userId,
+    title: member?.title ?? `Organization ${orgRole}`,
+    lastAccessedAt: member?.lastAccessedAt ?? null,
+    createdAt: member?.createdAt ?? new Date(),
+    role: fromOrg,
+    customRoleId: null,
+    permissionOverrides: {},
+  };
+}
 
 /** Resolves a farm by id or slug together with the user's membership and effective permissions. */
 export async function findMembership(key: string, userId: string) {
   const [row] = await db
-    .select({ farm: farms, member: farmMembers, roleOverrides: farmRolePermissions.overrides, customRole: farmCustomRoles.permissions })
+    .select({ farm: farms, member: farmMembers, orgRole: organizationMembers.role })
     .from(farms)
-    .innerJoin(farmMembers, and(eq(farmMembers.farmId, farms.id), eq(farmMembers.userId, userId)))
-    .leftJoin(farmRolePermissions, and(eq(farmRolePermissions.farmId, farms.id), eq(farmRolePermissions.role, farmMembers.role)))
-    .leftJoin(farmCustomRoles, eq(farmCustomRoles.id, farmMembers.customRoleId))
+    .leftJoin(farmMembers, and(eq(farmMembers.farmId, farms.id), eq(farmMembers.userId, userId)))
+    .leftJoin(organizationMembers, and(eq(organizationMembers.organizationId, farms.organizationId), eq(organizationMembers.userId, userId)))
     .where(isUuid(key) ? eq(farms.id, key) : eq(farms.slug, key.toLowerCase()))
     .limit(1);
-  if (!row) return undefined;
+  const member = row && effectiveMember(row.farm.id, userId, row.member, row.orgRole);
+  if (!row || !member) return undefined;
+  const [roleOverrides, customRole] = await Promise.all([
+    roleOverridesOf(row.farm.id),
+    member.customRoleId ? findCustomRole(row.farm.id, member.customRoleId) : undefined,
+  ]);
   /** What the member's role and overrides grant, before the farm's plan and module switches. */
-  const granted = resolvePermissions(row.member.role, {
-    roleOverrides: cleanOverrides(row.roleOverrides),
-    memberOverrides: cleanOverrides(row.member.permissionOverrides),
-    customRole: row.customRole,
+  const granted = resolvePermissions(member.role, {
+    roleOverrides: roleOverrides[member.role],
+    memberOverrides: cleanOverrides(member.permissionOverrides),
+    customRole: customRole?.permissions,
   });
   const gate = await gateOf(row.farm);
-  return { farm: row.farm, member: row.member, granted, gate, permissions: gatePermissions(granted, gate) };
+  return { farm: row.farm, member, orgRole: row.orgRole, granted, gate, permissions: gatePermissions(granted, gate) };
 }
 
 /** Remembers the most recently used farm (at most once every 5 minutes). */

@@ -1,6 +1,5 @@
 import { and, count, desc, eq, ilike, inArray, isNotNull, isNull, or, sql, type SQL } from 'drizzle-orm';
 import {
-  isPlanId,
   type AdminEntitlementsInput,
   type FarmInvoice,
   type InvoiceStatus,
@@ -14,6 +13,7 @@ import { badRequest, db, escapeLike, notFound, users, type User } from '../../..
 import { farms, type Farm } from '../../farms';
 import { capabilityOverridesOf, findSubscription, limitOverridesOf } from './entitlement.service';
 import { farmSubscriptions, manualInvoices, manualPayments, type ManualInvoiceRow, type ManualPaymentRow } from '../models';
+import { planExists } from './plan.service';
 import { setManualPlan } from './subscription.service';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -94,7 +94,7 @@ async function hydrate(rows: { invoice: ManualInvoiceRow; farm: { id: string; na
       status: statusOf(i, paid),
       issuedAt: i.issuedAt,
       dueAt: i.dueAt,
-      planId: isPlanId(i.planId) ? i.planId : null,
+      planId: planExists(i.planId) ? i.planId : null,
       periodEnd: i.periodEnd,
       notes: i.notes,
       payments: own.map((p) => serializePayment(p, names)),
@@ -163,6 +163,7 @@ export async function createManualInvoice(
 ) {
   const issuedAt = input.issuedAt ?? today();
   if (input.dueAt < issuedAt) throw badRequest('The due date is before the issue date', 'INVALID_DUE_DATE');
+  if (input.planId && !planExists(input.planId)) throw badRequest('That plan does not exist', 'UNKNOWN_PLAN');
   if (input.planId && input.planId !== 'free' && !input.periodEnd) {
     throw badRequest('Set the paid-through date for the plan this invoice pays for', 'PERIOD_END_REQUIRED');
   }

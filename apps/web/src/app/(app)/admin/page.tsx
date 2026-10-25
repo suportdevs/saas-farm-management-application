@@ -1,16 +1,17 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { FARM_TYPE_INFO, PLANS, type AdminStats, type PlatformStats } from '@kit/shared';
+import { FARM_TYPE_INFO, planName, type AdminStats, type PlatformStats } from '@kit/shared';
 import { SignupsChart } from '@/components/admin/signups-chart';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { countryName, flag, formatMoney } from '@/lib/format';
 import { requireAdmin, serverFetch } from '@/lib/session';
+import { getAdminPlans } from '@/modules/subscriptions/server';
 
 export const metadata: Metadata = { title: 'Admin' };
 
 export default async function AdminOverviewPage() {
   await requireAdmin('platform.stats.view');
-  const [stats, platform] = await Promise.all([serverFetch<AdminStats>('/admin/stats'), serverFetch<PlatformStats>('/admin/farms/stats')]);
+  const [stats, platform, plans] = await Promise.all([serverFetch<AdminStats>('/admin/stats'), serverFetch<PlatformStats>('/admin/farms/stats'), getAdminPlans()]);
   if (!stats || !platform) throw new Error('Failed to load stats');
   const { users, signups, jobs } = stats;
   const { farms } = platform;
@@ -45,7 +46,7 @@ export default async function AdminOverviewPage() {
             <CardDescription>Plan in effect (trials count as Starter)</CardDescription>
           </CardHeader>
           <CardContent>
-            <BarList rows={platform.byPlan.map((r) => ({ key: r.planId, label: PLANS[r.planId].name, count: r.count, href: `/admin/farms?plan=${r.planId}` }))} />
+            <BarList rows={platform.byPlan.map((r) => ({ key: r.planId, label: planName(plans, r.planId), count: r.count, href: `/admin/farms?plan=${r.planId}` }))} />
           </CardContent>
         </Card>
       </div>

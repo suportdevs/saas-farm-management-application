@@ -1,12 +1,13 @@
 import type Stripe from 'stripe';
 import { eq } from 'drizzle-orm';
-import { PLAN_LIST, PLANS, type BillingOverview, type FarmInvoice, type FarmSubscription, type PlanId, type PublicPlan } from '@kit/shared';
+import { FREE_PLAN_ID, type BillingInterval, type BillingOverview, type FarmInvoice, type FarmSubscription, type PlanId } from '@kit/shared';
 import { AppError, audit, badRequest, db, defineJob, env, logger, type User } from '../../../core';
 import { farms, findFarm, listMembers, usageOf, type Farm, type Tx } from '../../farms';
 import { sendPaymentFailedEmail } from './email.service';
-import { billingEnabled, config, planForPrice, stripe, stripePrices } from '../config';
+import { billingEnabled, config, stripe } from '../config';
 import { ENTITLED_STATUSES, entitlementsOf, findSubscription, subscriptionOf } from './entitlement.service';
 import { billingEvents, farmSubscriptions, type FarmSubscriptionRow } from '../models';
+import { getPlan, planExists, planForPrice, publicPlans, stripePriceOf } from './plan.service';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -34,11 +35,36 @@ export async function extendTrial(farmId: string, days: number) {
   return trialEndsAt;
 }
 
-/** Manual (invoiced) plan assignment for enterprise deals and comps. `free` removes a manual plan. */
+/**
+ * Throws unless `planId` can be given to a farm: it must exist, and archived
+ * plans are only kept by farms already on them (`currentPlanId`).
+ */
+export function assertAssignable(planId: PlanId, currentPlanId?: PlanId) {
+  if (!planExists(planId)) throw badRequest('That plan does not exist', 'UNKNOWN_PLAN');
+  if (getPlan(planId).archived && planId !== currentPlanId) throw badRequest('That plan is archived', 'PLAN_ARCHIVED');
+}
+
+/**
+ * Manual (invoiced) plan assignment for enterprise deals and comps.
+ * `free` ends the paid plan, whichever way it is paid: a manual plan stops,
+ * a live Stripe subscription is cancelled at once.
+ */
 export async function setManualPlan(farm: Farm, planId: PlanId, currentPeriodEnd: Date | null) {
+  if (!planExists(planId)) throw badRequest('That plan does not exist', 'UNKNOWN_PLAN');
   const row = await findSubscription(farm.id);
-  if (planId === 'free') {
-    if (row?.source === 'manual') await upsert(farm.id, { plan: 'free', status: 'canceled', source: null });
+  if (planId === FREE_PLAN_ID) {
+    if (hasLiveStripeSubscription(row)) {
+      // Unlike farm deletion, a failure here must stop: the farm would keep being charged.
+      try {
+        await stripe().subscriptions.cancel(row!.stripeSubscriptionId!);
+      } catch (err) {
+        logger.error({ err, farmId: farm.id }, 'Failed to cancel Stripe subscription');
+        throw new AppError(502, 'STRIPE_CANCEL_FAILED', 'Stripe could not cancel the subscription. Try again, or cancel it in the Stripe dashboard.');
+      }
+    }
+    if (row?.source === 'manual' || hasLiveStripeSubscription(row)) {
+      await upsert(farm.id, { plan: FREE_PLAN_ID, status: 'canceled', source: null, cancelAtPeriodEnd: false });
+    }
     return;
   }
   await cancelFarmSubscription(farm);
@@ -46,22 +72,6 @@ export async function setManualPlan(farm: Farm, planId: PlanId, currentPeriodEnd
 }
 
 // ─── Catalogue & overview ────────────────────────────────────────
-
-export const publicPlans = (): PublicPlan[] =>
-  PLAN_LIST.map((p) => ({
-    id: p.id,
-    name: p.name,
-    tagline: p.tagline,
-    prices: p.prices,
-    custom: Boolean(p.custom),
-    highlighted: Boolean(p.highlighted),
-    limits: p.limits,
-    features: p.features,
-    checkout: {
-      month: billingEnabled() && Boolean(stripePrices[p.id]?.month),
-      year: billingEnabled() && Boolean(stripePrices[p.id]?.year),
-    },
-  }));
 
 export async function billingOverview(farm: Farm): Promise<BillingOverview> {
   const row = await findSubscription(farm.id);
@@ -96,8 +106,9 @@ async function customerFor(farm: Farm, row: FarmSubscriptionRow | undefined, use
 const hasLiveStripeSubscription = (row: FarmSubscriptionRow | undefined) =>
   row?.source === 'stripe' && Boolean(row.stripeSubscriptionId) && ENTITLED_STATUSES.includes(row.status ?? '');
 
-export async function createCheckout(farm: Farm, user: User, planId: 'growth' | 'pro', interval: 'month' | 'year') {
-  const priceId = stripePrices[planId]?.[interval];
+export async function createCheckout(farm: Farm, user: User, planId: PlanId, interval: BillingInterval) {
+  const plan = planExists(planId) ? getPlan(planId) : null;
+  const priceId = plan && plan.selfServe && !plan.archived ? stripePriceOf(planId, interval) : null;
   if (!priceId) throw badRequest('That plan is not available for online checkout yet', 'PLAN_UNAVAILABLE');
   const row = await findSubscription(farm.id);
   // Existing subscribers switch plans in the portal, which handles proration.

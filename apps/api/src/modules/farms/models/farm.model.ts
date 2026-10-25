@@ -1,5 +1,6 @@
 import { index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { users } from '../../../db/schema';
+import { organizations } from './organization.model';
 
 // NOTE: keep imports in model files relative — drizzle-kit loads them directly.
 
@@ -12,6 +13,10 @@ export const farms = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     name: varchar('name', { length: 100 }).notNull(),
     slug: varchar('slug', { length: 60 }).notNull().unique(),
+    /** The client (organization) that owns the farm. */
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
     type: farmType('type').notNull().default('dairy'),
     description: text('description'),
 
@@ -53,7 +58,7 @@ export const farms = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
-  (t) => [index('farms_created_at_idx').on(t.createdAt), index('farms_country_idx').on(t.country)],
+  (t) => [index('farms_created_at_idx').on(t.createdAt), index('farms_country_idx').on(t.country), index('farms_organization_idx').on(t.organizationId)],
 );
 
 export type Farm = typeof farms.$inferSelect;

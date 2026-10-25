@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Search, Tractor } from 'lucide-react';
-import { FARM_TYPE_INFO, PLAN_LIST, type Pagination as PaginationInfo, type PlatformFarm } from '@kit/shared';
+import { FARM_TYPE_INFO, type Pagination as PaginationInfo, type PlatformFarm } from '@kit/shared';
 import { TenantsExport } from '@/components/admin/list-exports';
 import { NewTenantButton } from '@/modules/platform/components/new-tenant-dialog';
 import { Pagination } from '@/components/app/pagination';
@@ -13,29 +13,35 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { countryName, flag, formatDate } from '@/lib/format';
 import { requireAdmin, serverFetch } from '@/lib/session';
+import { getAdminPlans } from '@/modules/subscriptions/server';
 
 export const metadata: Metadata = { title: 'Tenants · Admin' };
 
-type Search = { q?: string; plan?: string; status?: string; country?: string; page?: string };
+type Search = { q?: string; plan?: string; status?: string; country?: string; organizationId?: string; page?: string };
 
 export default async function AdminFarmsPage({ searchParams }: { searchParams: Promise<Search> }) {
   const me = await requireAdmin('platform.tenants.view');
   const params = await searchParams;
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]);
-  const data = await serverFetch<{ farms: PlatformFarm[]; pagination: PaginationInfo }>(`/admin/farms?${qs}`);
+  const [data, plans] = await Promise.all([
+    serverFetch<{ farms: PlatformFarm[]; pagination: PaginationInfo }>(`/admin/farms?${qs}`),
+    getAdminPlans(),
+  ]);
   const farms = data?.farms ?? [];
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start gap-2">
       <form className="flex flex-1 flex-wrap gap-2" action="/admin/farms">
+        {/* Keeps the client filter (from Admin → Clients) while searching. */}
+        {params.organizationId && <input type="hidden" name="organizationId" value={params.organizationId} />}
         <div className="relative min-w-60 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input name="q" defaultValue={params.q} placeholder="Search farm, town or owner email…" className="pl-9" />
         </div>
         <Select name="plan" defaultValue={params.plan ?? ''} aria-label="Plan">
           <option value="">All plans</option>
-          {PLAN_LIST.map((p) => (
+          {plans.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
             </option>
@@ -56,7 +62,7 @@ export default async function AdminFarmsPage({ searchParams }: { searchParams: P
       </form>
         <div className="flex gap-2">
           <TenantsExport query={qs.toString()} />
-          {me.platformPermissions?.includes('platform.tenants.create') && <NewTenantButton />}
+          {me.platformPermissions?.includes('platform.tenants.create') && <NewTenantButton plans={plans.filter((p) => !p.archived)} />}
         </div>
       </div>
 
@@ -84,6 +90,9 @@ export default async function AdminFarmsPage({ searchParams }: { searchParams: P
                     <p className="text-xs text-muted-foreground">
                       {flag(f.country)} {[f.city, countryName(f.country)].filter(Boolean).join(', ')} · {FARM_TYPE_INFO[f.type].label}
                     </p>
+                    <Link href={`/admin/farms?organizationId=${f.organization.id}`} className="text-xs text-muted-foreground hover:text-primary">
+                      {f.organization.name}
+                    </Link>
                   </td>
                   <td className="px-5 py-3">
                     {f.owner ? (
@@ -106,7 +115,7 @@ export default async function AdminFarmsPage({ searchParams }: { searchParams: P
           </table>
         </Card>
       )}
-      {data && <Pagination pagination={data.pagination} basePath="/admin/farms" params={{ q: params.q, plan: params.plan, status: params.status, country: params.country }} />}
+      {data && <Pagination pagination={data.pagination} basePath="/admin/farms" params={{ q: params.q, plan: params.plan, status: params.status, country: params.country, organizationId: params.organizationId }} />}
     </div>
   );
 }

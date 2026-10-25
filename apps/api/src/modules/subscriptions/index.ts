@@ -1,9 +1,10 @@
 import { defineModule } from '../../core';
 import { farmExtensions } from '../farms';
-import { billingEnabled, config, trialPlan } from './config';
+import { billingEnabled, config } from './config';
 import { assertWithinLimit, entitlementsOf, findSubscription, findSubscriptions, snapshotOf, subscriptionOf } from './services/entitlement.service';
+import { loadPlans, trialPlan, watchPlans } from './services/plan.service';
 import { scheduleTrialReminders } from './services/reminder.service';
-import { router, webhookRouter } from './routes/billing.routes';
+import { publicRouter, router } from './routes/billing.routes';
 import { cancelFarmSubscription, startTrial } from './services/subscription.service';
 
 /**
@@ -14,7 +15,19 @@ import { cancelFarmSubscription, startTrial } from './services/subscription.serv
  */
 export { assertWithinLimit, entitlementsOf, findSubscription, findSubscriptions, planOf, snapshotOf, subscriptionOf } from './services/entitlement.service';
 export { requireCapability } from './middleware/capability.middleware';
-export { cancelFarmSubscription, extendTrial, setManualPlan } from './services/subscription.service';
+export { assertAssignable, cancelFarmSubscription, extendTrial, setManualPlan } from './services/subscription.service';
+export {
+  allPlans,
+  createPlan,
+  deletePlan,
+  getAdminPlan,
+  getPlan,
+  listAdminPlans,
+  planExists,
+  publicPlans,
+  setArchived as setPlanArchived,
+  updatePlan,
+} from './services/plan.service';
 export {
   createManualInvoice,
   deleteManualPayment,
@@ -31,12 +44,15 @@ export { farmSubscriptions, manualInvoices, type FarmSubscriptionRow } from './m
 
 export default defineModule({
   name: 'subscriptions',
-  // Farm-scoped billing routes (/api/farms/:farm/billing…); Stripe webhooks at /api/billing/webhook.
+  // Farm-scoped billing routes (/api/farms/:farm/billing…); public plans and Stripe webhooks at /api/billing.
   basePath: 'farms',
   router,
   publicBasePath: 'billing',
-  publicRouter: webhookRouter,
-  setup({ hooks, logger }) {
+  publicRouter,
+  async setup({ hooks, logger }) {
+    // Plans are read on every request; keep them in memory.
+    await loadPlans();
+    watchPlans();
     if (!billingEnabled()) logger.info('STRIPE_SECRET_KEY not set — online checkout is disabled');
 
     farmExtensions.onCreated((farm, tx) => startTrial(farm, tx));
@@ -49,11 +65,11 @@ export default defineModule({
     });
     farmExtensions.extendSummaries(async (farmIds) => {
       const rows = await findSubscriptions(farmIds);
-      return new Map(farmIds.map((id) => [id, { planId: subscriptionOf(rows.get(id)).planId }]));
+      return new Map(farmIds.map((id) => [id, (({ planId, planName }) => ({ planId, planName }))(subscriptionOf(rows.get(id)))]));
     });
     farmExtensions.addSeatGuard((farm, seats) => assertWithinLimit(farm.id, 'members', seats));
 
-    hooks.addFeatures(() => ({ farms: { billing: billingEnabled(), trialDays: config.FARM_TRIAL_DAYS, trialPlan } }));
+    hooks.addFeatures(() => ({ farms: { billing: billingEnabled(), trialDays: config.FARM_TRIAL_DAYS, trialPlan: trialPlan() } }));
     scheduleTrialReminders();
   },
 });

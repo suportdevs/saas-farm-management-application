@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { PLAN_LIST, type BillingInterval } from '@kit/shared';
+import type { BillingInterval, PublicPlan } from '@kit/shared';
 import { buttonClasses } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { IntervalToggle, PlanCards } from '@/modules/subscriptions/components/plan-cards';
@@ -10,7 +10,7 @@ import { IntervalToggle, PlanCards } from '@/modules/subscriptions/components/pl
 const SALES_EMAIL = process.env.NEXT_PUBLIC_SALES_EMAIL ?? 'sales@herdsphere.app';
 
 /** Public pricing: every paid plan starts from a farm's free trial. */
-export function PricingTable() {
+export function PricingTable({ plans }: { plans: PublicPlan[] }) {
   const [interval, setInterval] = useState<BillingInterval>('year');
   return (
     <>
@@ -18,10 +18,10 @@ export function PricingTable() {
         <IntervalToggle value={interval} onChange={setInterval} />
       </div>
       <PlanCards
-        plans={PLAN_LIST}
+        plans={plans}
         interval={interval}
         action={(planId) => {
-          const plan = PLAN_LIST.find((p) => p.id === planId)!;
+          const plan = plans.find((p) => p.id === planId)!;
           if (plan.custom) {
             return (
               <a href={`mailto:${SALES_EMAIL}?subject=Enterprise%20plan`} className={cn(buttonClasses('outline'), 'w-full')}>

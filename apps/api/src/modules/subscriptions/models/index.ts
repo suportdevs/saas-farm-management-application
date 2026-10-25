@@ -2,3 +2,4 @@
 export * from './subscription.model';
 export * from './billing-event.model';
 export * from './invoice.model';
+export * from './plan.model';

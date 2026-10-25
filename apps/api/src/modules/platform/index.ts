@@ -9,6 +9,6 @@ import { router } from './routes/platform.routes';
  */
 export default defineModule({
   name: 'platform',
-  basePath: 'admin/farms',
+  basePath: 'admin',
   router,
 });

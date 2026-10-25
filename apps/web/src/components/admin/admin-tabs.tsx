@@ -7,9 +7,11 @@ import { cn } from '@/lib/utils';
 
 const tabs: { href: string; label: string; exact?: boolean; permission: PlatformPermission }[] = [
   { href: '/admin', label: 'Overview', exact: true, permission: 'platform.stats.view' },
+  { href: '/admin/organizations', label: 'Clients', permission: 'platform.tenants.view' },
   { href: '/admin/farms', label: 'Tenants', permission: 'platform.tenants.view' },
   { href: '/admin/subscriptions', label: 'Subscriptions', permission: 'platform.billing.view' },
   { href: '/admin/invoices', label: 'Invoices', permission: 'platform.billing.view' },
+  { href: '/admin/plans', label: 'Plans', permission: 'platform.billing.view' },
   { href: '/admin/users', label: 'Users', permission: 'platform.users.view' },
   { href: '/admin/audit-logs', label: 'Audit log', permission: 'platform.audit.view' },
   { href: '/admin/staff-roles', label: 'Staff roles', permission: 'platform.staff.manage' },

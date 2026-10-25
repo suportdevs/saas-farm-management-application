@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import { toast } from 'sonner';
-import { COUNTRY_CURRENCY, FARM_TYPE_INFO, FARM_TYPES, PLAN_LIST, type FarmType, type PlanId } from '@kit/shared';
+import { COUNTRY_CURRENCY, FARM_TYPE_INFO, FARM_TYPES, type FarmType, type Plan, type PlanId, type PlatformOrganization } from '@kit/shared';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { ApiError, api, errorMessage } from '@/lib/api';
 import { CountryOptions, CurrencyOptions, TimeZoneOptions } from '@/modules/farms/components/locale-options';
+import { OrganizationPicker } from './organization-picker';
 
 const inDays = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
 
@@ -19,7 +20,8 @@ const inDays = (days: number) => new Date(Date.now() + days * 86_400_000).toISOS
  * Creates a tenant for a client. The owner is added straight away when they
  * already have an account, or invited by email. Optionally starts on a manual plan.
  */
-export function NewTenantButton() {
+/** `plans`: the plans that can be given out (not archived). */
+export function NewTenantButton({ plans }: { plans: Plan[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
@@ -32,6 +34,10 @@ export function NewTenantButton() {
     planId: '' as PlanId | '',
     periodEnd: inDays(365),
   });
+  // A new client gets a new organization; an existing client's farm joins theirs.
+  const [orgMode, setOrgMode] = useState<'new' | 'existing'>('new');
+  const [orgName, setOrgName] = useState('');
+  const [org, setOrg] = useState<PlatformOrganization | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
@@ -54,6 +60,7 @@ export function NewTenantButton() {
         weightUnit: metric ? 'kg' : 'lb',
         areaUnit: metric ? 'ha' : 'ac',
         goals: [],
+        ...(orgMode === 'existing' && org ? { organizationId: org.id } : { organizationName: orgName.trim() || undefined }),
         ...(form.planId ? { planId: form.planId, currentPeriodEnd: new Date(`${form.periodEnd}T23:59:59.999Z`).toISOString() } : {}),
       });
       toast.success(res.invited ? `${res.farm.name} created — owner invitation sent to ${form.ownerEmail}` : `${res.farm.name} created`);
@@ -84,12 +91,28 @@ export function NewTenantButton() {
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button loading={saving} disabled={form.name.trim().length < 2 || !form.ownerEmail} onClick={save}>
+            <Button loading={saving} disabled={form.name.trim().length < 2 || !form.ownerEmail || (orgMode === 'existing' && !org)} onClick={save}>
               Create tenant
             </Button>
           </>
         }
       >
+        <fieldset className="mb-4 space-y-3">
+          <legend className="text-sm font-medium">Client organization</legend>
+          <div className="flex gap-4 text-sm">
+            <label className="flex items-center gap-2">
+              <input type="radio" name="org-mode" checked={orgMode === 'new'} onChange={() => setOrgMode('new')} /> New client
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="radio" name="org-mode" checked={orgMode === 'existing'} onChange={() => setOrgMode('existing')} /> Existing client
+            </label>
+          </div>
+          {orgMode === 'new' ? (
+            <Input aria-label="Organization name" maxLength={100} placeholder="Organization name (empty = the farm's name)" value={orgName} onChange={(e) => setOrgName(e.target.value)} />
+          ) : (
+            <OrganizationPicker value={org} onChange={(o) => { setOrg(o); if (o.owner && !form.ownerEmail) set('ownerEmail', o.owner.email); }} />
+          )}
+        </fieldset>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field id="t-name" label="Farm name" error={errors.name}>
             <Input id="t-name" autoFocus maxLength={100} value={form.name} onChange={(e) => set('name', e.target.value)} />
@@ -132,7 +155,7 @@ export function NewTenantButton() {
           <Field id="t-plan" label="Plan" hint="Empty = the normal free trial.">
             <Select id="t-plan" className="w-full" value={form.planId} onChange={(e) => set('planId', e.target.value as PlanId | '')}>
               <option value="">Free trial</option>
-              {PLAN_LIST.filter((p) => p.id !== 'free').map((p) => (
+              {plans.filter((p) => p.id !== 'free').map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name} (manual)
                 </option>

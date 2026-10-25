@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { adminUpdateUserSchema, adminUserListQuerySchema, auditLogQuerySchema, banUserSchema } from '@kit/shared';
+import { adminCreateUserSchema, adminUpdateUserSchema, adminUserListQuerySchema, auditLogQuerySchema, banUserSchema } from '@kit/shared';
 import { requirePlatform, requireRole } from '../../../middleware/auth';
 import { validate } from '../../../middleware/validate';
 import * as auditLogs from '../controllers/audit-log.controller';
@@ -14,6 +14,8 @@ adminRouter.use('/staff-roles', staffRolesRouter);
 adminRouter.get('/stats', requirePlatform('platform.stats.view'), users.stats);
 
 adminRouter.get('/users', requirePlatform('platform.users.view'), validate(adminUserListQuerySchema, 'query'), users.list);
+// Client accounts are part of onboarding a client, so they need the tenant-creation permission.
+adminRouter.post('/users', requirePlatform('platform.tenants.create'), validate(adminCreateUserSchema), users.create);
 adminRouter.get('/users/:id', requirePlatform('platform.users.view'), users.show);
 adminRouter.patch('/users/:id', requirePlatform('platform.users.update'), validate(adminUpdateUserSchema), users.update);
 adminRouter.post('/users/:id/ban', requirePlatform('platform.users.suspend'), validate(banUserSchema), users.ban);

@@ -1,4 +1,4 @@
-import type { BillingInterval, Capability, PlanId, PlanLimits } from './plans';
+import type { BillingInterval, Capability, Plan, PlanId, PlanLimits } from './plans';
 
 export type SubscriptionState = 'free' | 'trialing' | 'active' | 'past_due' | 'canceled';
 
@@ -22,17 +22,21 @@ export interface FarmUsage {
   members: number;
 }
 
-export interface PublicPlan {
-  id: PlanId;
-  name: string;
-  tagline: string;
-  prices: Partial<Record<BillingInterval, number>>;
-  custom: boolean;
-  highlighted: boolean;
-  limits: PlanLimits;
-  features: string[];
+/** A plan as customers see it (GET /billing/plans, the billing page). */
+export interface PublicPlan extends Omit<Plan, 'isPublic' | 'archived' | 'sortOrder'> {
   /** Whether self-serve checkout is set up for each interval. */
   checkout: Partial<Record<BillingInterval, boolean>>;
+}
+
+/** A plan as the platform team manages it (Admin → Plans). */
+export interface AdminPlan extends Plan {
+  stripePrices: Partial<Record<BillingInterval, string | null>>;
+  /** Farms whose subscription row points at this plan. */
+  subscriberCount: number;
+  /** The free plan and the trial plan can't be archived or deleted. */
+  locked: 'free' | 'trial' | null;
+  createdAt: string | null;
+  updatedAt: string | null;
 }
 
 export interface FarmInvoice {

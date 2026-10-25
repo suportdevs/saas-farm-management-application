@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import type { AdminUpdateUserInput, AdminUserListQuery, BanUserInput } from '@kit/shared';
+import type { AdminCreateUserInput, AdminUpdateUserInput, AdminUserListQuery, BanUserInput } from '@kit/shared';
 import { audit } from '../../../core/audit';
 import { createSession, deleteUserSessions, listUserSessions, setImpersonatorCookie, setSessionCookie } from '../../../core/session';
 import { badRequest, forbidden } from '../../../lib/errors';
@@ -15,6 +15,13 @@ export async function stats(_req: Request, res: Response) {
 /** GET /users */
 export async function list(req: Request, res: Response) {
   res.json(await users.listUsers(req.query as unknown as AdminUserListQuery));
+}
+
+/** POST /users — an account for a client; they get an email to set their password. */
+export async function create(req: Request, res: Response) {
+  const user = await users.createClientUser(req.body as Required<AdminCreateUserInput>);
+  await audit(req, { action: 'admin.user.created', targetType: 'user', targetId: user.id, metadata: { email: user.email } });
+  res.status(201).json({ user: await users.serializeAdminUser(user) });
 }
 
 /** GET /users/:id — the user and their active sessions. */
