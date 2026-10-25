@@ -1,5 +1,5 @@
-import { env, renderEmail, sendMail } from '../../core';
-import type { Farm } from '../farms';
+import { env, renderEmail, sendMail } from '../../../core';
+import type { Farm } from '../../farms';
 
 export function sendFarmSuspendedEmail(to: string, name: string, farm: Farm, reason: string | null) {
   return sendMail({

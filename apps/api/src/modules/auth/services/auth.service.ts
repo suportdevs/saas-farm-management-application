@@ -1,20 +1,20 @@
 import { eq } from 'drizzle-orm';
-import type { RegisterInput } from '@kit/shared';
-import { db } from '../../db/client';
-import { users, type User } from '../../db/schema';
-import { onAccountActivated } from '../../core/accounts';
-import { hooks } from '../../core/hooks';
-import { env } from '../../config/env';
-import { consumeToken, consumeTokenData, issueToken } from '../../core/tokens';
-import { deleteUserSessions } from '../../core/session';
-import { badRequest, conflict } from '../../lib/errors';
-import { fakePasswordVerify, hashPassword, verifyPassword } from '../../lib/password';
+import type { Impersonator, RegisterInput } from '@kit/shared';
+import { db } from '../../../db/client';
+import { users, type User } from '../../../db/schema';
+import { onAccountActivated } from '../../../core/accounts';
+import { hooks } from '../../../core/hooks';
+import { env } from '../../../config/env';
+import { consumeToken, consumeTokenData, issueToken } from '../../../core/tokens';
+import { deleteUserSessions } from '../../../core/session';
+import { badRequest, conflict } from '../../../lib/errors';
+import { fakePasswordVerify, hashPassword, verifyPassword } from '../../../lib/password';
 import {
   sendEmailChangeConfirmation,
   sendEmailChangeNotice,
   sendPasswordResetEmail,
   sendVerificationEmail,
-} from './emails';
+} from './email.service';
 
 const HOUR = 60 * 60 * 1000;
 
@@ -104,4 +104,11 @@ export async function confirmEmailChange(token: string): Promise<{ userId: strin
   // Clicking the link proves ownership of the new inbox.
   await db.update(users).set({ email, emailVerifiedAt: new Date() }).where(eq(users.id, user.id));
   return { userId: user.id, from: user.email, to: email };
+}
+
+/** The admin behind an impersonated session, shown in the impersonation banner. */
+export async function impersonatorOf(id: string | null): Promise<Impersonator | null> {
+  if (!id) return null;
+  const admin = await db.query.users.findFirst({ where: eq(users.id, id) });
+  return admin ? { id: admin.id, name: admin.name, email: admin.email } : null;
 }

@@ -1,5 +1,5 @@
-import { env, renderEmail, sendMail } from '../../core';
-import type { Farm } from '../farms';
+import { env, renderEmail, sendMail } from '../../../core';
+import type { Farm } from '../../farms';
 
 const billingUrl = (farm: Pick<Farm, 'slug'>) => `${env.WEB_URL}/farms/${farm.slug}/billing`;
 

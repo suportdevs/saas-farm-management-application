@@ -1,8 +1,8 @@
 import { and, eq, gt, isNull, lte, sql } from 'drizzle-orm';
-import { db, defineJob, logger, schedule, users } from '../../core';
-import { farmMembers, farms, findFarm } from '../farms';
-import { sendTrialEndedEmail, sendTrialEndingEmail } from './emails';
-import { farmSubscriptions } from './schema';
+import { db, defineJob, logger, schedule, users } from '../../../core';
+import { farmMembers, farms, findFarm } from '../../farms';
+import { sendTrialEndedEmail, sendTrialEndingEmail } from './email.service';
+import { farmSubscriptions } from '../models';
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;

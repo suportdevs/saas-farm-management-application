@@ -1,6 +1,6 @@
 import { CAPABILITIES, type Capability } from '@kit/shared';
-import type { db } from '../../core';
-import type { Farm } from './schema';
+import type { db } from '../../../core';
+import type { Farm } from '../models';
 
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 

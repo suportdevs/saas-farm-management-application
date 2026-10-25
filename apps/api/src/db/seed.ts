@@ -1,8 +1,8 @@
 import { eq } from 'drizzle-orm';
 import { STAFF_ROLE_INFO, STAFF_ROLES } from '@kit/shared';
 import { hashPassword } from '../lib/password';
-import { farmMembers, farms } from '../modules/farms/schema';
-import { farmSubscriptions } from '../modules/subscriptions/schema';
+import { farmMembers, farms } from '../modules/farms/models';
+import { farmSubscriptions } from '../modules/subscriptions/models';
 import { db, pool } from './client';
 import { users } from './schema';
 

@@ -1,8 +1,8 @@
 import type { NextFunction, Request, Response } from 'express';
 import { MODULE_CAPABILITIES, PERMISSION_MODULES, permissionBlock, type FarmRole, type Permission, type PermissionModule } from '@kit/shared';
-import { AppError, forbidden, notFound, unauthorized } from '../../core';
-import type { Farm, FarmMemberRow } from './schema';
-import { findMembership, touchAccess } from './service';
+import { AppError, forbidden, notFound, unauthorized } from '../../../core';
+import type { Farm, FarmMemberRow } from '../models';
+import { findMembership, touchAccess } from '../services/member.service';
 
 export interface FarmAccess {
   farm: Farm;

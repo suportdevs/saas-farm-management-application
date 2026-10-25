@@ -10,11 +10,11 @@ import {
   type PlanId,
   type TenantEntitlements,
 } from '@kit/shared';
-import { badRequest, db, notFound, users, type User } from '../../core';
-import { farms, type Farm } from '../farms';
-import { capabilityOverridesOf, findSubscription, limitOverridesOf } from './entitlements';
-import { farmSubscriptions, manualInvoices, manualPayments, type ManualInvoiceRow, type ManualPaymentRow } from './schema';
-import { setManualPlan } from './service';
+import { badRequest, db, notFound, users, type User } from '../../../core';
+import { farms, type Farm } from '../../farms';
+import { capabilityOverridesOf, findSubscription, limitOverridesOf } from './entitlement.service';
+import { farmSubscriptions, manualInvoices, manualPayments, type ManualInvoiceRow, type ManualPaymentRow } from '../models';
+import { setManualPlan } from './subscription.service';
 
 const today = () => new Date().toISOString().slice(0, 10);
 

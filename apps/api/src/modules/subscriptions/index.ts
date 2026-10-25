@@ -1,10 +1,10 @@
 import { defineModule } from '../../core';
 import { farmExtensions } from '../farms';
 import { billingEnabled, config, trialPlan } from './config';
-import { assertWithinLimit, entitlementsOf, findSubscription, findSubscriptions, snapshotOf, subscriptionOf } from './entitlements';
-import { scheduleTrialReminders } from './reminders';
-import { router, webhookRouter } from './routes';
-import { cancelFarmSubscription, startTrial } from './service';
+import { assertWithinLimit, entitlementsOf, findSubscription, findSubscriptions, snapshotOf, subscriptionOf } from './services/entitlement.service';
+import { scheduleTrialReminders } from './services/reminder.service';
+import { router, webhookRouter } from './routes/billing.routes';
+import { cancelFarmSubscription, startTrial } from './services/subscription.service';
 
 /**
  * Subscriptions — plans, trials, limits and Stripe billing for each farm.
@@ -12,8 +12,9 @@ import { cancelFarmSubscription, startTrial } from './service';
  *
  * Public API for other modules (import from '../subscriptions' only):
  */
-export { assertWithinLimit, entitlementsOf, findSubscription, findSubscriptions, planOf, requireCapability, snapshotOf, subscriptionOf } from './entitlements';
-export { cancelFarmSubscription, extendTrial, setManualPlan } from './service';
+export { assertWithinLimit, entitlementsOf, findSubscription, findSubscriptions, planOf, snapshotOf, subscriptionOf } from './services/entitlement.service';
+export { requireCapability } from './middleware/capability.middleware';
+export { cancelFarmSubscription, extendTrial, setManualPlan } from './services/subscription.service';
 export {
   createManualInvoice,
   deleteManualPayment,
@@ -25,8 +26,8 @@ export {
   unpaidByFarm,
   unpaidFarmIds,
   voidManualInvoice,
-} from './manual-billing';
-export { farmSubscriptions, manualInvoices, type FarmSubscriptionRow } from './schema';
+} from './services/manual-billing.service';
+export { farmSubscriptions, manualInvoices, type FarmSubscriptionRow } from './models';
 
 export default defineModule({
   name: 'subscriptions',

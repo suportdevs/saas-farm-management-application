@@ -1,5 +1,5 @@
-import { env } from '../../config/env';
-import { renderEmail, sendMail } from '../../lib/mailer';
+import { env } from '../../../config/env';
+import { renderEmail, sendMail } from '../../../lib/mailer';
 
 export function sendVerificationEmail(to: string, name: string, token: string) {
   const url = `${env.WEB_URL}/verify-email?token=${encodeURIComponent(token)}`;

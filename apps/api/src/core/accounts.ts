@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { env } from '../config/env';
 import { db } from '../db/client';
 import { users, type User } from '../db/schema';
-import { sendWelcomeEmail } from '../modules/auth/emails';
+import { sendWelcomeEmail } from '../modules/auth/services/email.service';
 import { audit } from './audit';
 import { currentRequest } from './context';
 import { hooks } from './hooks';

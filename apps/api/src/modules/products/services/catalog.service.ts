@@ -28,11 +28,11 @@ import {
   type CatalogResource,
   type ImageType,
 } from '@kit/shared';
-import { conflict, db, notFound, storage, validationError } from '../../core';
-import type { Tx } from '../farms';
-import { imageFileName, imageTypeOf } from './images';
+import { conflict, db, notFound, storage, validationError } from '../../../core';
+import type { Tx } from '../../farms';
+import { imageFileName, imageTypeOf } from './image.service';
 
-/** The columns every catalog table shares (see `base()` and `audit()` in schema.ts). */
+/** The columns every catalog table shares (see `base()` and `audit()` in models/columns.ts). */
 export type CatalogTable = PgTable & {
   id: PgColumn;
   key: PgColumn;
@@ -52,7 +52,7 @@ export type Values = Record<string, unknown>;
 type FieldErrors = Record<string, string[]>;
 
 export interface UniqueRule {
-  /** Unique index name, as declared in schema.ts. */
+  /** Unique index name, as declared in the model. */
   index: string;
   column: PgColumn;
   /** Body field the index guards. */

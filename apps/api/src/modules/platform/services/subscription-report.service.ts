@@ -1,82 +1,10 @@
-import { Router, type Request } from 'express';
 import { and, count, desc, eq, ilike, inArray, not, or, sql, type SQL } from 'drizzle-orm';
-import {
-  adminCreateFarmSchema,
-  adminEntitlementsSchema,
-  adminInvoiceListQuerySchema,
-  adminSubscriptionListQuerySchema,
-  manualInvoiceSchema,
-  manualPaymentSchema,
-  monthlyValue,
-  type AdminEntitlementsInput,
-  type AdminInvoiceListQuery,
-  type AdminSubscriptionListQuery,
-  type BillingInterval,
-  type PlatformSubscription,
-} from '@kit/shared';
-import { audit, badRequest, db, notFound, requirePlatform, users, validate } from '../../core';
-import { createFarmForClient, farmMembers, farms, findFarm, type Farm } from '../farms';
-import {
-  createManualInvoice,
-  deleteManualPayment,
-  entitlementsFor,
-  entitlementsOf,
-  farmSubscriptions,
-  findSubscription,
-  getManualInvoice,
-  listManualInvoices,
-  recordManualPayment,
-  setEntitlements,
-  setManualPlan,
-  subscriptionOf,
-  unpaidByFarm,
-  unpaidFarmIds,
-  voidManualInvoice,
-} from '../subscriptions';
-
-/**
- * Manual tenant management for the platform team (mounted under /api/admin/farms,
- * before the /:id routes):
- *
- *   POST   /                                  create a tenant for a client (owner joins or is invited)
- *   GET    /subscriptions                     every tenant's subscription, deal and unpaid invoices
- *   GET    /invoices                          every manual invoice (?status=open|overdue|paid|void)
- *   GET    /:id/entitlements                  the tenant's deal: custom limits and modules
- *   PATCH  /:id/entitlements
- *   GET    /:id/invoices                      the tenant's manual invoices
- *   POST   /:id/invoices                      issue one
- *   POST   /:id/invoices/:invoiceId/void
- *   POST   /:id/invoices/:invoiceId/payments  record a payment (paid in full → plan extended)
- *   DELETE /:id/invoices/:invoiceId/payments/:paymentId
- */
-export const billingRouter = Router();
+import { monthlyValue, type AdminSubscriptionListQuery, type BillingInterval, type PlatformSubscription } from '@kit/shared';
+import { db, users } from '../../../core';
+import { farmMembers, farms } from '../../farms';
+import { entitlementsOf, farmSubscriptions, subscriptionOf, unpaidByFarm, unpaidFarmIds } from '../../subscriptions';
 
 const s = farmSubscriptions;
-const event = (farm: Farm) => ({ targetType: 'farm', targetId: farm.id });
-
-async function loadFarm(req: Request): Promise<Farm> {
-  const farm = await findFarm(String(req.params.id));
-  if (!farm) throw notFound('Farm not found');
-  return farm;
-}
-
-// ─── Tenants ─────────────────────────────────────────────────────
-
-billingRouter.post('/', requirePlatform('platform.tenants.create'), validate(adminCreateFarmSchema), async (req, res) => {
-  const input = req.body as Parameters<typeof createFarmForClient>[1] & { planId?: string; currentPeriodEnd?: string | null };
-  const { farm, owner, invited } = await createFarmForClient(req.auth!.user, input);
-  if (input.planId && input.planId !== 'free') {
-    await setManualPlan(farm, input.planId as never, input.currentPeriodEnd ? new Date(input.currentPeriodEnd) : null);
-  }
-  await audit(req, {
-    action: 'admin.farm.created',
-    ...event(farm),
-    metadata: { name: farm.name, ownerEmail: input.ownerEmail, invited, planId: input.planId ?? null },
-  });
-  res.status(201).json({ farm: { id: farm.id, slug: farm.slug, name: farm.name }, owner: owner && { id: owner.id, email: owner.email }, invited });
-});
-
-// ─── Subscriptions ───────────────────────────────────────────────
 
 /** SQL mirrors of `subscriptionOf()` (farms without a row are free). */
 const entitled = sql`coalesce((coalesce(${s.plan}, 'free') <> 'free' and ${s.status} in ('active','trialing','past_due')
@@ -100,8 +28,8 @@ const owners = db
 
 const memberCounts = db.select({ farmId: farmMembers.farmId, total: count().as('member_total') }).from(farmMembers).groupBy(farmMembers.farmId).as('members');
 
-billingRouter.get('/subscriptions', requirePlatform('platform.billing.view'), validate(adminSubscriptionListQuerySchema, 'query'), async (req, res) => {
-  const { page, pageSize, q, plan, state, source, billing } = req.query as unknown as AdminSubscriptionListQuery;
+/** Every tenant's subscription, deal and unpaid manual invoices. */
+export async function listSubscriptions({ page, pageSize, q, plan, state, source, billing }: AdminSubscriptionListQuery) {
   const filters: SQL[] = [];
   if (q) {
     const pattern = `%${q.replace(/[%_\\]/g, '\\$&')}%`;
@@ -156,86 +84,5 @@ billingRouter.get('/subscriptions', requirePlatform('platform.billing.view'), va
       memberCount: Number(members ?? 0),
     };
   });
-  res.json({ subscriptions, pagination: { page, pageSize, total: total?.value ?? 0 } });
-});
-
-// ─── Invoices (all tenants) ──────────────────────────────────────
-
-billingRouter.get('/invoices', requirePlatform('platform.billing.view'), validate(adminInvoiceListQuerySchema, 'query'), async (req, res) => {
-  const { page, pageSize, q, status } = req.query as unknown as AdminInvoiceListQuery;
-  const { invoices, total } = await listManualInvoices({ q, status, limit: pageSize, offset: (page - 1) * pageSize });
-  res.json({ invoices, pagination: { page, pageSize, total } });
-});
-
-// ─── One tenant: deal & invoices ─────────────────────────────────
-
-billingRouter.get('/:id/entitlements', requirePlatform('platform.tenants.view'), async (req, res) => {
-  const farm = await loadFarm(req);
-  const row = await findSubscription(farm.id);
-  const { limits, capabilities, plan } = entitlementsOf(row);
-  res.json({ entitlements: await entitlementsFor(farm.id), effective: { planId: plan.id, limits, capabilities } });
-});
-
-billingRouter.patch('/:id/entitlements', requirePlatform('platform.billing.manage'), validate(adminEntitlementsSchema), async (req, res) => {
-  const farm = await loadFarm(req);
-  const before = await entitlementsFor(farm.id);
-  const entitlements = await setEntitlements(farm.id, req.body as AdminEntitlementsInput);
-  await audit(req, { action: 'admin.farm.entitlements_changed', ...event(farm), metadata: { before, after: entitlements } });
-  const { limits, capabilities, plan } = entitlementsOf(await findSubscription(farm.id));
-  res.json({ entitlements, effective: { planId: plan.id, limits, capabilities } });
-});
-
-billingRouter.get('/:id/invoices', requirePlatform('platform.billing.view'), async (req, res) => {
-  const farm = await loadFarm(req);
-  res.json((await listManualInvoices({ farmId: farm.id, limit: 200, offset: 0 })).invoices);
-});
-
-billingRouter.post('/:id/invoices', requirePlatform('platform.billing.manage'), validate(manualInvoiceSchema), async (req, res) => {
-  const farm = await loadFarm(req);
-  const invoice = await createManualInvoice(farm, req.auth!.user, req.body);
-  await audit(req, {
-    action: 'admin.farm.invoice_created',
-    ...event(farm),
-    metadata: { invoiceId: invoice.id, number: invoice.number, amount: invoice.amount, currency: invoice.currency },
-  });
-  res.status(201).json({ invoice });
-});
-
-billingRouter.get('/:id/invoices/:invoiceId', requirePlatform('platform.billing.view'), async (req, res) => {
-  const farm = await loadFarm(req);
-  res.json({ invoice: await getManualInvoice(farm.id, String(req.params.invoiceId)) });
-});
-
-billingRouter.post('/:id/invoices/:invoiceId/void', requirePlatform('platform.billing.manage'), async (req, res) => {
-  const farm = await loadFarm(req);
-  const invoice = await voidManualInvoice(farm, String(req.params.invoiceId));
-  await audit(req, { action: 'admin.farm.invoice_voided', ...event(farm), metadata: { invoiceId: invoice.id, number: invoice.number } });
-  res.json({ invoice });
-});
-
-billingRouter.post('/:id/invoices/:invoiceId/payments', requirePlatform('platform.billing.manage'), validate(manualPaymentSchema), async (req, res) => {
-  const farm = await loadFarm(req);
-  const { invoice, paidInFull, planApplied } = await recordManualPayment(farm, req.auth!.user, String(req.params.invoiceId), req.body);
-  const amount = (req.body as { amount: number }).amount;
-  await audit(req, {
-    action: 'admin.farm.payment_recorded',
-    ...event(farm),
-    metadata: { invoiceId: invoice.id, number: invoice.number, amount, currency: invoice.currency, paidInFull, planApplied },
-  });
-  // The tenant's own activity log shows it like a Stripe payment.
-  await audit(req, {
-    action: 'farm.payment_succeeded',
-    actorId: null,
-    ...event(farm),
-    metadata: { amount: new Intl.NumberFormat('en', { style: 'currency', currency: invoice.currency }).format(amount / 100), invoice: invoice.number },
-  });
-  res.status(201).json({ invoice, paidInFull, planApplied });
-});
-
-billingRouter.delete('/:id/invoices/:invoiceId/payments/:paymentId', requirePlatform('platform.billing.manage'), async (req, res) => {
-  const farm = await loadFarm(req);
-  const { payment, invoice } = await deleteManualPayment(farm, String(req.params.invoiceId), String(req.params.paymentId));
-  if (!payment) throw badRequest('Payment not found');
-  await audit(req, { action: 'admin.farm.payment_deleted', ...event(farm), metadata: { invoiceId: invoice.id, number: invoice.number, amount: payment.amount } });
-  res.json({ invoice });
-});
+  return { subscriptions, pagination: { page, pageSize, total: total?.value ?? 0 } };
+}

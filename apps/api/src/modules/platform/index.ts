@@ -1,5 +1,5 @@
 import { defineModule } from '../../core';
-import { router } from './routes';
+import { router } from './routes/platform.routes';
 
 /**
  * Platform — the operator's console across all tenants: revenue and growth

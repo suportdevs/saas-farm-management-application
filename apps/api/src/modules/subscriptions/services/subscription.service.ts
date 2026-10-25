@@ -1,12 +1,12 @@
 import type Stripe from 'stripe';
 import { eq } from 'drizzle-orm';
 import { PLAN_LIST, PLANS, type BillingOverview, type FarmInvoice, type FarmSubscription, type PlanId, type PublicPlan } from '@kit/shared';
-import { AppError, audit, badRequest, db, defineJob, env, logger, type User } from '../../core';
-import { farms, findFarm, listMembers, usageOf, type Farm, type Tx } from '../farms';
-import { sendPaymentFailedEmail } from './emails';
-import { billingEnabled, config, planForPrice, stripe, stripePrices } from './config';
-import { ENTITLED_STATUSES, entitlementsOf, findSubscription, subscriptionOf } from './entitlements';
-import { billingEvents, farmSubscriptions, type FarmSubscriptionRow } from './schema';
+import { AppError, audit, badRequest, db, defineJob, env, logger, type User } from '../../../core';
+import { farms, findFarm, listMembers, usageOf, type Farm, type Tx } from '../../farms';
+import { sendPaymentFailedEmail } from './email.service';
+import { billingEnabled, config, planForPrice, stripe, stripePrices } from '../config';
+import { ENTITLED_STATUSES, entitlementsOf, findSubscription, subscriptionOf } from './entitlement.service';
+import { billingEvents, farmSubscriptions, type FarmSubscriptionRow } from '../models';
 
 const DAY = 24 * 60 * 60 * 1000;
 

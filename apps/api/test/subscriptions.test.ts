@@ -3,12 +3,12 @@ import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app';
 import { db, pool } from '../src/db/client';
-import { farmSubscriptions } from '../src/modules/subscriptions/schema';
+import { farmSubscriptions } from '../src/modules/subscriptions/models';
 import { createFarm } from './farm-helpers';
 import { signUp } from './helpers';
 
 // Capture invitation tokens instead of sending email.
-vi.mock('../src/modules/farms/emails', () => import('./farm-helpers').then((m) => m.farmEmailsMock));
+vi.mock('../src/modules/farms/services/email.service', () => import('./farm-helpers').then((m) => m.farmEmailsMock));
 
 let app: Express;
 beforeAll(async () => {

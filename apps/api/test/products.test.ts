@@ -5,7 +5,7 @@ import { pool } from '../src/db/client';
 import { createFarm, inviteAndJoin } from './farm-helpers';
 import { signUp } from './helpers';
 
-vi.mock('../src/modules/farms/emails', () =>
+vi.mock('../src/modules/farms/services/email.service', () =>
   import('./farm-helpers').then((m) => m.farmEmailsMock),
 );
 

@@ -1,5 +1,5 @@
-import { env, renderEmail, sendMail, type User } from '../../core';
-import type { Farm } from './schema';
+import { env, renderEmail, sendMail, type User } from '../../../core';
+import type { Farm } from '../models';
 
 const article = (word: string) => (/^[aeiou]/i.test(word) ? 'an' : 'a');
 

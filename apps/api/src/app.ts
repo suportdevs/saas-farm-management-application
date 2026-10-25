@@ -17,11 +17,11 @@ import { enforceEmailVerification, loadSession } from './middleware/auth';
 import { csrfGuard } from './middleware/csrf';
 import { errorHandler, notFoundHandler } from './middleware/error-handler';
 import { apiLimiter } from './middleware/rate-limit';
-import { adminRouter } from './modules/admin/routes';
-import { authRouter } from './modules/auth/routes';
+import { adminRouter } from './modules/admin/routes/admin.routes';
+import { authRouter } from './modules/auth/routes/auth.routes';
 import { appModules } from './modules/app-modules';
 import { installedModules } from './modules/registry';
-import { usersRouter } from './modules/users/routes';
+import { usersRouter } from './modules/users/routes/user.routes';
 
 // Product modules first (in dependency order), then modules installed with the kit CLI.
 const modules = [...appModules, ...installedModules];

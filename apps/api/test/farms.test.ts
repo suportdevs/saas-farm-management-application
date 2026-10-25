@@ -7,7 +7,7 @@ import { createFarm, farmInput, inviteAndJoin, sentInvites } from './farm-helper
 import { signUp } from './helpers';
 
 // Capture invitation tokens instead of sending email.
-vi.mock('../src/modules/farms/emails', () => import('./farm-helpers').then((m) => m.farmEmailsMock));
+vi.mock('../src/modules/farms/services/email.service', () => import('./farm-helpers').then((m) => m.farmEmailsMock));
 
 let app: Express;
 beforeAll(async () => {

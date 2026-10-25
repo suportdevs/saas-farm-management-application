@@ -6,8 +6,8 @@ import { createFarm, farmInput, sentInvites } from './farm-helpers';
 import { signUp } from './helpers';
 
 // Capture invitation tokens instead of sending email.
-vi.mock('../src/modules/farms/emails', () => import('./farm-helpers').then((m) => m.farmEmailsMock));
-vi.mock('../src/modules/platform/emails', () => ({ sendFarmSuspendedEmail: async () => {} }));
+vi.mock('../src/modules/farms/services/email.service', () => import('./farm-helpers').then((m) => m.farmEmailsMock));
+vi.mock('../src/modules/platform/services/email.service', () => ({ sendFarmSuspendedEmail: async () => {} }));
 
 let app: Express;
 beforeAll(async () => {

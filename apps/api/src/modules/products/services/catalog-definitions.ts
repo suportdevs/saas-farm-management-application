@@ -1,7 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm';
-import { db } from '../../core';
-import { Catalog } from './catalog';
-import { brands, categories, colors, products, productSizes, sizes, units } from './schema';
+import { db } from '../../../core';
+import { Catalog } from './catalog.service';
+import { brands, categories, colors, products, productSizes, sizes, units } from '../models';
 
 // Defined in dependency order: a catalog can only reference ones above it.
 

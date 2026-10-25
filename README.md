@@ -25,10 +25,32 @@ product feature is a module with the same name in all three places**:
 
 ```
 packages/shared/src/<module>/      contract: zod schemas, types, constants (used by API and web)
-apps/api/src/modules/<module>/     backend:  schema.ts · service.ts · routes.ts · index.ts (public API)
+apps/api/src/modules/<module>/     backend:  MVC — models/ · services/ · controllers/ · routes/ · index.ts (public API)
 apps/web/src/modules/<module>/     frontend: components/ · server.ts · context.tsx · navigation.ts
 apps/web/src/app/…                 Next.js routes only — thin pages that compose module components
 ```
+
+### Backend MVC inside each module
+
+The API follows **Model – View – Controller** inside every module (the Next.js app is the View):
+
+```
+apps/api/src/modules/<module>/
+  models/        Drizzle tables, one table group per *.model.ts, re-exported by models/index.ts
+  services/      business logic and database queries — no req/res; throw AppError helpers
+  controllers/   request handlers: read the validated input → call services → audit → respond
+  routes/        URL + middleware (auth, permission, rate limit, validate) + controller — no logic
+  middleware/    module-specific middleware (e.g. farms' requireFarm, subscriptions' requireCapability)
+  validators/    request schemas used only by this module (shared ones live in packages/shared)
+  config.ts      the module's env vars (parseModuleEnv)
+  index.ts       public API for other modules + defineModule({ router, setup })
+```
+
+A request flows `routes → middleware → controller → service → model`. Keep each layer to its job:
+routes never contain logic, controllers never query the database, services never touch `req`/`res`.
+File names say the layer: `farm.model.ts`, `member.service.ts`, `role.controller.ts`, `farm.routes.ts`.
+Model files import each other relatively (drizzle-kit loads them directly), and drizzle-kit picks up
+every `models/*.model.ts` automatically.
 
 | Module | Responsibility | Depends on |
 | --- | --- | --- |
@@ -40,7 +62,7 @@ Rules that keep modules independent:
 
 - **One-way dependencies** in the order of `apps/api/src/modules/app-modules.ts` (`farms → subscriptions → platform`).
   A module imports another only through its `index.ts`, never its internal files.
-- **Each module owns its tables** (`schema.ts`); others read them through the owner's functions. The
+- **Each module owns its tables** (`models/`); others read them through the owner's functions. The
   tenant core never imports plans — `subscriptions` adds the plan to every farm, enforces seat limits and
   starts trials through `farmExtensions` (`extendContext`, `extendSummaries`, `addSeatGuard`, `onCreated`, `onDeleting`).
 - **Each module has its own tests** (`apps/api/test/<module>.test.ts`) and env vars (`parseModuleEnv('<module>', …)`).
@@ -50,18 +72,23 @@ Rules that keep modules independent:
 ### Adding an operation module (herd, milk, health, breeding, feed, finance…)
 
 1. `packages/shared/src/herd/` — schemas and types; export from `packages/shared/src/index.ts`.
-2. `apps/api/src/modules/herd/` — `schema.ts`, `service.ts`, `routes.ts`, `index.ts` (`defineModule({ name: 'herd', basePath: 'farms', router, setup })`),
+2. `apps/api/src/modules/herd/` — `models/animal.model.ts`, `services/animal.service.ts`, `controllers/animal.controller.ts`,
+   `routes/herd.routes.ts` and `index.ts` (`defineModule({ name: 'herd', basePath: 'farms', router, setup })`),
    then add it to `app-modules.ts` and run `npm run db:generate -- --name herd`.
 
    ```ts
    import { getFarm, registerUsageCounter, requireFarm } from '../farms';
    import { assertWithinLimit, requireCapability } from '../subscriptions';
 
-   router.post('/:farm/animals', requireFarm('herd.create'), requireCapability('herd'), async (req, res) => {
+   // routes/herd.routes.ts
+   router.post('/:farm/animals', requireFarm('herd.create'), requireCapability('herd'), validate(createAnimalSchema), animals.create);
+
+   // controllers/animal.controller.ts
+   export async function create(req: Request, res: Response) {
      const { farm } = getFarm(res);
      await assertWithinLimit(farm.id, 'animals', await countAnimals(farm.id)); // 402 PLAN_LIMIT_REACHED
-     …
-   });
+     res.status(201).json(await animalService.create(farm.id, req.body));
+   }
    // in setup(): registerUsageCounter('animals', countAnimals) — feeds plan limits and the billing page
    ```
 3. `apps/web/src/modules/herd/` — components; pages under `apps/web/src/app/(app)/farms/[farm]/herd/`
@@ -142,8 +169,8 @@ advanced filters, create & edit (modal, searchable and dependent selects), soft 
 
 - Columns (table, modal, filters, CSV headers, template examples): `packages/shared/src/products/catalog.ts`
 - Validation (body, import row, filters): `packages/shared/src/products/schemas.ts`
-- Tables: `apps/api/src/modules/products/schema.ts` — every table has `tenant_id` (the farm); `id` is internal, `key` (uuid) is public; rows are soft-deleted; `status` is 1 = active, 0 = inactive
-- One `new Catalog({...})` per resource in `apps/api/src/modules/products/catalogs.ts` — `fields` is exactly what a list row returns; `references` and `usedBy` declare foreign keys and delete protection
+- Tables: `apps/api/src/modules/products/models/` (one per table, shared columns in `columns.ts`) — every table has `tenant_id` (the farm); `id` is internal, `key` (uuid) is public; rows are soft-deleted; `status` is 1 = active, 0 = inactive
+- One `new Catalog({...})` per resource in `apps/api/src/modules/products/services/catalog-definitions.ts` (engine: `services/catalog.service.ts`; one `controllers/catalog.controller.ts` serves every catalog) — `fields` is exactly what a list row returns; `references` and `usedBy` declare foreign keys and delete protection
 - Each new product gets a default product size (no size); deleting a product deletes its sizes. Images are stored under `UPLOAD_DIR` (`apps/api/src/lib/storage.ts`) — mount a volume there in production
 - Endpoints per catalog under `/api/farms/:farm/products[/<resource>]`: `GET /`, `/export`, `/options`, `POST /`, `/import`, `/bulk-delete`, `/toggle-status`, `PUT|DELETE /:key`, `GET|PUT|DELETE /:key/image`
 
@@ -215,10 +242,12 @@ apps/
   api/                       Express API
     src/core/                Public surface for modules: auth flow, sessions, hooks, jobs, audit, tokens
     src/modules/
-      auth/ users/ admin/    Kit core routers
+      auth/ users/ admin/    Kit core (services/ · controllers/ · routes/)
       farms/                 Tenant core (farms, members, roles, invitations, activity)
       subscriptions/         Plans, trials, limits, Stripe billing
       platform/              Operator console (stats, tenants, manual plans, suspensions)
+      products/              Product catalog (products, sizes, categories, brands, units, colors)
+      <module>/              each: models/ · services/ · controllers/ · routes/ · index.ts
       app-modules.ts         Product modules, in dependency order (hand-maintained)
       registry.ts            Kit-installed modules (generated by the CLI)
     src/db/                  Core Drizzle schema, client, migrator, seed

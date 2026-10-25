@@ -7,7 +7,7 @@ type Client = Awaited<ReturnType<typeof signUp>>['c'];
 /**
  * Invitation emails captured instead of sent. Each test file mocks the farms
  * mailer with:
- *   vi.mock('../src/modules/farms/emails', () => import('./farm-helpers').then((m) => m.farmEmailsMock));
+ *   vi.mock('../src/modules/farms/services/email.service', () => import('./farm-helpers').then((m) => m.farmEmailsMock));
  */
 export const sentInvites: { to: string; token: string }[] = [];
 export const farmEmailsMock = {
