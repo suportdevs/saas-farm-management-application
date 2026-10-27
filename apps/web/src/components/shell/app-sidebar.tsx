@@ -3,16 +3,17 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Building2, ChevronDown, Lock, LogOut, Moon, Settings, Shield, ShieldCheck, Sun, UserRound } from 'lucide-react';
+import { ArrowLeft, Building2, ChevronDown, Lock, LogOut, Moon, Settings, Shield, ShieldCheck, Sun, UserRound } from 'lucide-react';
 import type { FarmSummary, PublicUser } from '@kit/shared';
 import { Avatar } from '@/components/app/user-menu';
 import { LogoBadge } from '@/components/logo';
 import { Menu, MenuSeparator, menuItemClasses } from '@/components/ui/menu';
 import { api } from '@/lib/api';
-import { farmNav, type NavLink } from '@/modules/farms/navigation';
+import { farmNav, type NavLink, type NavSection } from '@/modules/farms/navigation';
 import { appName, cn } from '@/lib/utils';
 import { moduleNavItems } from '@/modules/registry';
 import { FarmSwitcher } from '@/modules/farms/components/farm-switcher';
+import { platformNav } from '@/modules/platform/navigation';
 
 export interface ShellProps {
   user: PublicUser;
@@ -26,10 +27,27 @@ export function useCurrentFarm(farms: FarmSummary[]) {
   return (slug && farms.find((f) => f.slug === slug)) || farms[0];
 }
 
+/** Farm menus the member can see: switched-off modules hidden, plan-locked ones shown with a lock. */
+function farmSections(current: FarmSummary | undefined): NavSection[] {
+  if (!current) return [];
+  return farmNav(current.slug).map((section) => ({
+    ...section,
+    links: section.links.flatMap((l): NavLink[] => {
+      const status = l.module && current.modules[l.module];
+      if (status === 'disabled') return [];
+      // Not in the plan: still listed, with a lock, so the upgrade is discoverable.
+      if (status === 'plan') return [{ ...l, locked: true, children: undefined }];
+      return !l.permission || current.permissions.includes(l.permission) ? [l] : [];
+    }),
+  }));
+}
+
 export function SidebarContent({ user, farms, onNavigate }: ShellProps & { onNavigate?: () => void }) {
   const pathname = usePathname();
   const current = useCurrentFarm(farms);
-  const sections = current ? farmNav(current.slug) : [];
+  // Platform staff inside /admin see the platform menus instead of the farm ones.
+  const inPlatform = user.role === 'admin' && (pathname === '/admin' || pathname.startsWith('/admin/'));
+  const sections: NavSection[] = inPlatform ? platformNav(user.platformPermissions ?? []) : farmSections(current);
   const isActive = (link: NavLink) => (link.exact ? pathname === link.href : pathname === link.href || pathname.startsWith(`${link.href}/`));
 
   const accountLinks: NavLink[] = [
@@ -37,7 +55,7 @@ export function SidebarContent({ user, farms, onNavigate }: ShellProps & { onNav
     ...moduleNavItems.map((item) => ({ ...item, icon: item.icon ?? Settings })),
     { href: '/organizations', label: 'Organizations', icon: Building2 },
     { href: '/settings', label: 'Account', icon: UserRound },
-    ...(user.role === 'admin' ? [{ href: '/admin', label: 'Platform admin', icon: Shield }] : []),
+    ...(user.role === 'admin' && !inPlatform ? [{ href: '/admin', label: 'Platform admin', icon: Shield }] : []),
   ];
 
   return (
@@ -48,18 +66,16 @@ export function SidebarContent({ user, farms, onNavigate }: ShellProps & { onNav
       </Link>
 
       <div className="px-3">
-        <FarmSwitcher farms={farms} current={current} onNavigate={onNavigate} />
+        {inPlatform ? (
+          <PlatformHeader roleName={user.staffRoleName} backHref={current ? `/farms/${current.slug}` : '/dashboard'} onNavigate={onNavigate} />
+        ) : (
+          <FarmSwitcher farms={farms} current={current} onNavigate={onNavigate} />
+        )}
       </div>
 
       <nav className="scrollbar-sidebar mt-4 flex-1 space-y-5 overflow-y-auto px-3 pb-4" aria-label="Main">
         {sections.map((section, i) => {
-          const links = section.links.flatMap((l): NavLink[] => {
-            const status = l.module && current?.modules[l.module];
-            if (status === 'disabled') return [];
-            // Not in the plan: still listed, with a lock, so the upgrade is discoverable.
-            if (status === 'plan') return [{ ...l, locked: true, children: undefined }];
-            return !l.permission || current?.permissions.includes(l.permission) ? [l] : [];
-          });
+          const links = section.links;
           if (!links.length) return null;
           return (
             <div key={section.title ?? i}>
@@ -93,6 +109,26 @@ export function SidebarContent({ user, farms, onNavigate }: ShellProps & { onNav
       <div className="border-t border-sidebar-border p-3">
         <AccountMenu user={user} />
       </div>
+    </div>
+  );
+}
+
+/** Shown instead of the farm switcher inside /admin: where you are, and the way back. */
+function PlatformHeader({ roleName, backHref, onNavigate }: { roleName?: string | null; backHref: string; onNavigate?: () => void }) {
+  return (
+    <div className="rounded-xl bg-sidebar-accent/70 px-2.5 py-2 ring-1 ring-sidebar-border">
+      <div className="flex items-center gap-3">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary/20 text-sidebar-primary">
+          <Shield className="h-4 w-4" />
+        </span>
+        <span className="min-w-0 leading-tight">
+          <span className="block truncate text-sm font-semibold">Platform admin</span>
+          <span className="block truncate text-xs text-sidebar-muted">{roleName ?? 'Super admin'}</span>
+        </span>
+      </div>
+      <Link href={backHref} onClick={onNavigate} className="mt-2 flex items-center gap-1.5 rounded-md px-1 py-1 text-xs font-medium text-sidebar-muted transition-colors hover:text-sidebar-foreground">
+        <ArrowLeft className="h-3.5 w-3.5" /> {backHref === '/dashboard' ? 'Back to dashboard' : 'Back to farm'}
+      </Link>
     </div>
   );
 }
