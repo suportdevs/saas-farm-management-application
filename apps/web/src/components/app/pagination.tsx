@@ -23,7 +23,8 @@ export function Pagination({
   return (
     <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
       <span>
-        Page {pagination.page} of {pages}
+        Showing {((pagination.page - 1) * pagination.pageSize + 1).toLocaleString()}–{Math.min(pagination.page * pagination.pageSize, pagination.total).toLocaleString()} of{' '}
+        {pagination.total.toLocaleString()} · Page {pagination.page} of {pages}
       </span>
       <div className="flex gap-2">
         {pagination.page > 1 && (
