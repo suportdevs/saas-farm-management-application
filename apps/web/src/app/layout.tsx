@@ -1,12 +1,14 @@
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { Geist, Geist_Mono, Inter } from 'next/font/google';
 import { Toaster } from 'sonner';
-import { themeScript } from '@/components/theme-toggle';
+import { prefsScript } from '@/lib/preferences';
 import { appName, siteUrl } from '@/lib/utils';
 import './globals.css';
 
 const sans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] });
 const mono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] });
+// Optional font (Settings → Font). Not preloaded: it only downloads when chosen.
+const inter = Inter({ variable: '--font-inter', subsets: ['latin'], preload: false });
 
 const description = 'Cattle farm management software for dairy and beef operations worldwide — herd records, milk, health, breeding, teams and analytics.';
 
@@ -22,9 +24,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <script dangerouslySetInnerHTML={{ __html: prefsScript }} />
       </head>
-      <body className={`${sans.variable} ${mono.variable} min-h-screen font-sans`}>
+      <body className={`${sans.variable} ${mono.variable} ${inter.variable} min-h-screen font-sans`}>
         {children}
         <Toaster richColors position="top-right" />
       </body>

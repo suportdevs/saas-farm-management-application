@@ -18,7 +18,18 @@ export function FarmTile({ farm, className }: { farm: Pick<FarmSummary, 'id' | '
   );
 }
 
-export function FarmSwitcher({ farms, current, onNavigate }: { farms: FarmSummary[]; current: FarmSummary | undefined; onNavigate?: () => void }) {
+export function FarmSwitcher({
+  farms,
+  current,
+  onNavigate,
+  side = 'bottom',
+}: {
+  farms: FarmSummary[];
+  current: FarmSummary | undefined;
+  onNavigate?: () => void;
+  /** Where the farm list opens; "top" when the switcher sits in a bottom menu bar. */
+  side?: 'top' | 'bottom';
+}) {
   if (!current) {
     return (
       <Link
@@ -36,6 +47,7 @@ export function FarmSwitcher({ farms, current, onNavigate }: { farms: FarmSummar
   return (
     <Menu
       label="Switch farm"
+      side={side}
       className="w-[15.5rem]"
       triggerClassName="flex w-full items-center gap-3 rounded-xl bg-sidebar-accent/70 px-2.5 py-2 text-left ring-1 ring-sidebar-border transition-colors hover:bg-sidebar-accent"
       trigger={

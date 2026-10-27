@@ -1,18 +1,12 @@
 'use client';
 
 import { Moon, Sun } from 'lucide-react';
+import { saveTheme } from '@/lib/preferences';
 import { Button } from './ui/button';
 
-/** Inline script for <head>: applies the saved theme before paint (no flash). */
-export const themeScript = `(function(){try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.classList.add('dark')}catch(e){}})()`;
-
+/** Light/dark switch for the public pages. Inside the app, the top bar has the full theme menu. */
 export function ThemeToggle() {
-  const toggle = () => {
-    const dark = document.documentElement.classList.toggle('dark');
-    try {
-      localStorage.setItem('theme', dark ? 'dark' : 'light');
-    } catch {}
-  };
+  const toggle = () => saveTheme(document.documentElement.classList.contains('dark') ? 'light' : 'dark');
   return (
     <Button variant="ghost" size="icon" onClick={toggle} aria-label="Toggle theme">
       <Sun className="h-4 w-4 dark:hidden" />
