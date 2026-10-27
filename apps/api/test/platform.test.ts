@@ -51,6 +51,19 @@ describe('platform admin', () => {
     expect((await owner.c.get(`/api/farms/${farm.slug}/members`)).status).toBe(200);
   });
 
+  it('shows platform information to staff without exposing secrets', async () => {
+    const admin = await signUp(app, { admin: true });
+    const owner = await signUp(app);
+    expect((await owner.c.get('/api/admin/system')).status).toBe(403);
+
+    const res = await admin.c.get('/api/admin/system');
+    expect(res.status).toBe(200);
+    expect(res.body.database).toMatchObject({ connected: true });
+    expect(res.body.modules).toEqual(expect.arrayContaining(['farms', 'subscriptions', 'platform']));
+    expect(typeof res.body.billing.stripeConfigured).toBe('boolean');
+    expect(JSON.stringify(res.body)).not.toContain(process.env.APP_SECRET!);
+  });
+
   it('scopes platform staff by staff role, per action', async () => {
     const superAdmin = await signUp(app, { admin: true });
     const staff = await signUp(app, { admin: true });

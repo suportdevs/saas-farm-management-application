@@ -15,6 +15,7 @@ const tabs: { href: string; label: string; exact?: boolean; permission: Platform
   { href: '/admin/users', label: 'Users', permission: 'platform.users.view' },
   { href: '/admin/audit-logs', label: 'Audit log', permission: 'platform.audit.view' },
   { href: '/admin/staff-roles', label: 'Staff roles', permission: 'platform.staff.manage' },
+  { href: '/admin/system', label: 'Platform', permission: 'platform.stats.view' },
 ];
 
 /** Only the tabs the viewer's staff role can open. */

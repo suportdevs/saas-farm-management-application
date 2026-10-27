@@ -98,3 +98,16 @@ export interface PlatformOrganization {
   owner: { id: string; name: string; email: string } | null;
   createdAt: string;
 }
+
+/** GET /api/admin/system — how the platform is running and configured. Never includes secrets, only whether they are set. */
+export interface PlatformInfo {
+  app: { name: string; environment: string; version: string; webUrl: string; port: number; startedAt: string; uptimeSeconds: number };
+  runtime: { node: string; os: string; memoryMb: number };
+  database: { connected: boolean; version: string | null; name: string | null; sizeBytes: number | null; pendingMigrations: string[] };
+  email: { smtpConfigured: boolean; host: string | null; port: number; from: string; verification: 'off' | 'optional' | 'required'; welcomeEmail: boolean };
+  billing: { stripeConfigured: boolean; webhookConfigured: boolean; trialDays: number; trialPlan: PlanId; plans: number; archivedPlans: number };
+  security: { loginMaxAttempts: number; lockoutMinutes: number; captcha: string[]; rateLimitStore: string; sessionTtlDays: number; adminEmails: number };
+  jobs: { workerInProcess: boolean; concurrency: number; pollIntervalMs: number; pending: number; failed: number };
+  storage: { uploadDir: string };
+  modules: string[];
+}

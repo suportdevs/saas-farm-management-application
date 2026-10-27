@@ -80,6 +80,19 @@ export function trialPlan(): PlanId {
   return id;
 }
 
+/** Billing setup for the admin Platform page — only whether Stripe keys are set, never the keys. */
+export function billingSettings() {
+  const list = allPlans();
+  return {
+    stripeConfigured: billingEnabled(),
+    webhookConfigured: Boolean(config.STRIPE_WEBHOOK_SECRET),
+    trialDays: config.FARM_TRIAL_DAYS,
+    trialPlan: trialPlan(),
+    plans: list.filter((p) => !p.archived).length,
+    archivedPlans: list.filter((p) => p.archived).length,
+  };
+}
+
 /** The Stripe price for a plan and interval: the plan's own, else the STRIPE_PRICE_* env vars of the original plans. */
 export function stripePriceOf(planId: PlanId, interval: BillingInterval): string | null {
   const row = cache.get(planId);

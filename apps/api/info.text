@@ -1,0 +1,4 @@
+Email	Role	Can open /admin?
+admin@example.com	admin (super admin)	✅
+support@example.com / billing@example.com / analyst@example.com	admin (staff role)	✅ Platform tab too
+admin@gmail.com, mamun@gmail.com, ui-…@example.com

@@ -18,6 +18,7 @@ export { requireCapability } from './middleware/capability.middleware';
 export { assertAssignable, cancelFarmSubscription, extendTrial, setManualPlan } from './services/subscription.service';
 export {
   allPlans,
+  billingSettings,
   createPlan,
   deletePlan,
   getAdminPlan,
