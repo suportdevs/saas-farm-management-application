@@ -22,7 +22,7 @@ import { SignupsChart } from '@/components/admin/signups-chart';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatCard } from '@/components/ui/stat-card';
 import { actionLabel } from '@/lib/audit';
-import { countryName, flag, formatMoney, timeAgo } from '@/lib/format';
+import { countryName, flag, formatDate, formatMoney, timeAgo } from '@/lib/format';
 import { requireAdmin, serverFetch } from '@/lib/session';
 import { cn } from '@/lib/utils';
 import { NewTenantButton } from '@/modules/platform/components/new-tenant-dialog';
@@ -81,8 +81,34 @@ export default async function AdminOverviewPage() {
     can('platform.users.view') && { label: 'Users', hint: 'Accounts and sessions', href: '/admin/users', icon: Users },
   ].filter((a): a is QuickAction => Boolean(a));
 
+  const urgent = alerts.filter((a) => a.tone !== 'info').length;
+
   return (
     <div className="space-y-6">
+      <section className="hero-surface relative overflow-hidden rounded-3xl p-6 text-white shadow-xl shadow-primary/10 sm:p-8">
+        <div className="relative grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end">
+          <div>
+            <p className="text-sm font-medium text-white/70">{formatDate(new Date().toISOString(), { dateStyle: 'full' })}</p>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Welcome back, {me.name.split(' ')[0]}</h1>
+            <p className="mt-1.5 max-w-xl text-sm text-white/75 sm:text-base">Here is how the platform is doing today.</p>
+            <div className="mt-4 flex flex-wrap gap-2 text-xs font-medium">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 ring-1 ring-white/20 backdrop-blur">
+                <span className={cn('h-2 w-2 rounded-full', urgent ? 'bg-amber-300' : 'bg-emerald-300 shadow-[0_0_8px] shadow-emerald-300')} />
+                {urgent ? `${urgent} item${s(urgent)} need attention` : 'All systems healthy'}
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 ring-1 ring-white/20 backdrop-blur">
+                <Tractor className="h-3.5 w-3.5" /> +{farms.new7d} farm{s(farms.new7d)} this week
+              </span>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <HeroFigure label="MRR" value={formatMoney(platform.mrr, 'USD', 'en-US')} />
+            <HeroFigure label="Farms" value={farms.total.toLocaleString()} />
+            <HeroFigure label="Users" value={users.total.toLocaleString()} />
+          </div>
+        </div>
+      </section>
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Link href="/admin/subscriptions" className="block">
           <StatCard icon={CircleDollarSign} label="Monthly recurring revenue" value={formatMoney(platform.mrr, 'USD', 'en-US')} hint={`ARR ${formatMoney(platform.mrr * 12, 'USD', 'en-US', { compact: true })}`} />
@@ -103,7 +129,7 @@ export default async function AdminOverviewPage() {
         </Link>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid items-start gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -292,6 +318,16 @@ interface QuickAction {
 }
 
 const TONE_DOT: Record<Alert['tone'], string> = { danger: 'bg-destructive', warning: 'bg-warning', info: 'bg-info' };
+
+/** A big number on the hero banner, on frosted glass. */
+function HeroFigure({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-24 rounded-2xl bg-white/10 px-4 py-3 ring-1 ring-white/15 backdrop-blur">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-white/60">{label}</p>
+      <p className="mt-0.5 text-xl font-bold tabular-nums sm:text-2xl">{value}</p>
+    </div>
+  );
+}
 
 /** "s" for plurals: 1 tenant, 2 tenants. */
 const s = (n: number) => (n === 1 ? '' : 's');

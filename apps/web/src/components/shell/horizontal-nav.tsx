@@ -18,7 +18,7 @@ export function HorizontalNav({ user, farms, position }: ShellProps & { position
   const side = position === 'bottom' ? 'top' : 'bottom';
 
   return (
-    <nav aria-label="Main" className={cn('bg-sidebar text-sidebar-foreground', position === 'top' ? 'border-b border-sidebar-border' : 'border-t border-sidebar-border')}>
+    <nav aria-label="Main" className={cn('sidebar-surface bg-sidebar text-sidebar-foreground', position === 'top' ? 'border-b border-sidebar-border' : 'border-t border-sidebar-border')}>
       <div className="flex h-14 items-center gap-3 px-4">
         <div className="w-60 shrink-0">
           {inPlatform ? (

@@ -75,14 +75,17 @@ export function SidebarContent({ user, farms, onNavigate, collapsed = false }: S
   const backHref = current ? `/farms/${current.slug}` : '/dashboard';
 
   return (
-    <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
+    <div className="sidebar-surface flex h-full flex-col bg-sidebar text-sidebar-foreground">
       <Link
         href="/dashboard"
         onClick={onNavigate}
         title={appName}
         className={cn('flex items-center gap-2.5 pb-4 pt-5 font-semibold tracking-tight', collapsed ? 'justify-center px-2' : 'px-5')}
       >
-        <LogoBadge />
+        <span className="relative">
+          <span className="absolute inset-0 rounded-lg bg-sidebar-primary/50 blur-md" />
+          <LogoBadge className="relative" />
+        </span>
         {!collapsed && <span className="text-[17px]">{appName}</span>}
       </Link>
 
@@ -116,7 +119,9 @@ export function SidebarContent({ user, farms, onNavigate, collapsed = false }: S
               (collapsed ? (
                 <div className="mx-2 mb-3 h-px bg-sidebar-border" />
               ) : (
-                <p className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-wider text-sidebar-muted/80">{section.title}</p>
+                <p className="mb-1.5 flex items-center gap-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-sidebar-muted/80 after:h-px after:flex-1 after:bg-sidebar-border">
+                  {section.title}
+                </p>
               ))}
             <ul className="space-y-0.5">
               {section.links.map((link) => (
@@ -171,10 +176,12 @@ function SidebarLink({ link, active, onNavigate, collapsed }: { link: NavLink; a
       className={cn(
         'group relative flex items-center gap-3 rounded-lg py-2 text-sm font-medium transition-colors',
         collapsed ? 'justify-center px-2' : 'px-3',
-        active ? 'bg-sidebar-accent text-sidebar-active' : 'text-sidebar-muted hover:bg-sidebar-accent/60 hover:text-sidebar-foreground',
+        active
+          ? 'bg-gradient-to-r from-sidebar-primary/25 via-sidebar-primary/10 to-transparent text-sidebar-active ring-1 ring-inset ring-sidebar-primary/20'
+          : 'text-sidebar-muted hover:translate-x-0.5 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground',
       )}
     >
-      {active && <span className="absolute inset-y-1.5 left-0 w-1 rounded-r-full bg-sidebar-primary" />}
+      {active && <span className="absolute inset-y-1.5 left-0 w-1 rounded-r-full bg-sidebar-primary shadow-[0_0_12px_var(--sidebar-primary)]" />}
       <Icon className={cn('h-[18px] w-[18px] shrink-0', active ? 'text-sidebar-primary' : 'opacity-80 group-hover:opacity-100')} />
       {collapsed ? (
         link.locked && <Lock className="absolute right-1 top-1 h-2.5 w-2.5 text-sidebar-muted" aria-label="Upgrade to unlock" />
@@ -228,7 +235,7 @@ function SidebarGroup({ link, pathname, onNavigate }: { link: NavLink; pathname:
                   aria-current={active ? 'page' : undefined}
                   className={cn(
                     'block truncate rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors',
-                    active ? 'bg-sidebar-accent text-sidebar-active' : 'text-sidebar-muted hover:bg-sidebar-accent/60 hover:text-sidebar-foreground',
+                    active ? 'bg-sidebar-primary/15 text-sidebar-active' : 'text-sidebar-muted hover:bg-sidebar-accent/60 hover:text-sidebar-foreground',
                   )}
                 >
                   {child.label}

@@ -22,7 +22,9 @@ export function AppBar({ user, farms }: ShellProps) {
   const CollapseIcon = prefs.nav === 'right' ? (prefs.collapsed ? PanelRightOpen : PanelRightClose) : prefs.collapsed ? PanelLeftOpen : PanelLeftClose;
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-1 border-b bg-background/80 px-3 backdrop-blur-md sm:px-4">
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-1 border-b border-border/60 bg-background/65 px-3 backdrop-blur-xl backdrop-saturate-150 sm:px-4">
+      {/* A thin brand-colored line along the bottom edge. */}
+      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
       {/* Phones and tablets: the slide-out menu. */}
       <div className="lg:hidden">
         <MobileNav user={user} farms={farms} />

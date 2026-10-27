@@ -3,7 +3,8 @@ import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const variants = {
-  primary: 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm',
+  // Gradient + glow from .btn-primary in globals.css.
+  primary: 'btn-primary text-primary-foreground',
   secondary: 'bg-muted text-foreground hover:bg-muted/70',
   outline: 'border border-input bg-card hover:bg-muted text-foreground',
   ghost: 'hover:bg-muted text-foreground',

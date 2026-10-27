@@ -31,6 +31,7 @@ export function AppShell({ user, farms, topBanner, banner, children }: ShellProp
   if (prefs.nav === 'left' || prefs.nav === 'right') {
     return (
       <div className={cn('min-h-screen lg:flex', prefs.nav === 'right' && 'lg:flex-row-reverse')}>
+        <div className="app-backdrop" aria-hidden />
         <aside className={cn('hidden shrink-0 lg:sticky lg:top-0 lg:block lg:h-screen', prefs.collapsed ? 'lg:w-[4.5rem]' : 'lg:w-[16.5rem]')}>
           <SidebarContent user={user} farms={farms} collapsed={prefs.collapsed} />
         </aside>
@@ -46,6 +47,7 @@ export function AppShell({ user, farms, topBanner, banner, children }: ShellProp
 
   return (
     <div className="flex min-h-screen flex-col">
+      <div className="app-backdrop" aria-hidden />
       {topBanner}
       <AppBar user={user} farms={farms} />
       {prefs.nav === 'top' && (

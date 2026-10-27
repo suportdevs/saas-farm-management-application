@@ -38,7 +38,7 @@ export function AdminHeader({ roleName, permissions }: { roleName?: string | nul
   ];
 
   return (
-    <div className={page?.detail ? 'mb-4' : 'mb-8'}>
+    <div className={page?.detail || page?.link.href === '/admin' ? 'mb-5' : 'mb-8'}>
       <div className="flex items-center justify-between gap-4">
         <nav aria-label="Breadcrumb" className="min-w-0">
           <ol className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
@@ -71,8 +71,10 @@ export function AdminHeader({ roleName, permissions }: { roleName?: string | nul
         </div>
       </div>
 
-      {page && !page.detail && (
+      {/* The overview has its own hero banner instead of a title. */}
+      {page && !page.detail && page.link.href !== '/admin' && (
         <div className="mt-4">
+          {page.section && <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-primary">{page.section}</p>}
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{page.link.label}</h1>
           <p className="mt-1.5 max-w-2xl text-sm text-muted-foreground sm:text-base">{page.link.description}</p>
         </div>
