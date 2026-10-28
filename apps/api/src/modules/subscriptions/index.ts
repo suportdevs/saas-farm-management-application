@@ -6,6 +6,7 @@ import { loadPlans, trialPlan, watchPlans } from './services/plan.service';
 import { scheduleTrialReminders } from './services/reminder.service';
 import { publicRouter, router } from './routes/billing.routes';
 import { cancelFarmSubscription, startTrial } from './services/subscription.service';
+import { markFarmBillingDeleted } from './services/manual-billing.service';
 
 /**
  * Subscriptions — plans, trials, limits and Stripe billing for each farm.
@@ -58,7 +59,11 @@ export default defineModule({
     if (!billingEnabled()) logger.info('STRIPE_SECRET_KEY not set — online checkout is disabled');
 
     farmExtensions.onCreated((farm, tx) => startTrial(farm, tx));
-    farmExtensions.onDeleting((farm) => cancelFarmSubscription(farm));
+    // A deleted farm: stop Stripe billing, then mark its subscription, invoices and payments deleted.
+    farmExtensions.onDeleting(async (farm) => {
+      await cancelFarmSubscription(farm);
+      await markFarmBillingDeleted(farm.id);
+    });
     farmExtensions.extendContext(async (farm) => snapshotOf(await findSubscription(farm.id)));
     // Module permissions follow the plan: a farm only gets the keys of modules its plan includes.
     farmExtensions.provideCapabilities(async (farmIds) => {

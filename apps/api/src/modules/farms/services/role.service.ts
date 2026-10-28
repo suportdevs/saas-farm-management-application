@@ -9,7 +9,7 @@ import {
   type FarmRole,
   type Permission,
 } from '@kit/shared';
-import { badRequest, conflict, db, forbidden, isUuid, notFound } from '../../../core';
+import { badRequest, conflict, db, forbidden, isUuid, notDeleted, notFound, softDeleted } from '../../../core';
 import { farmCustomRoles, farmInvitations, farmMembers, type FarmCustomRoleRow } from '../models';
 
 export const isRoleId = (v: string) => isUuid(v);
@@ -58,13 +58,13 @@ export async function listCustomRoles(farmId: string): Promise<FarmCustomRole[]>
   const members = db
     .select({ roleId: farmMembers.customRoleId, total: count().as('member_total') })
     .from(farmMembers)
-    .where(eq(farmMembers.farmId, farmId))
+    .where(and(eq(farmMembers.farmId, farmId), notDeleted(farmMembers)))
     .groupBy(farmMembers.customRoleId)
     .as('role_members');
   const invites = db
     .select({ roleId: farmInvitations.customRoleId, total: count().as('invite_total') })
     .from(farmInvitations)
-    .where(and(eq(farmInvitations.farmId, farmId), gt(farmInvitations.expiresAt, new Date())))
+    .where(and(eq(farmInvitations.farmId, farmId), gt(farmInvitations.expiresAt, new Date()), notDeleted(farmInvitations)))
     .groupBy(farmInvitations.customRoleId)
     .as('role_invites');
   const rows = await db
@@ -72,7 +72,7 @@ export async function listCustomRoles(farmId: string): Promise<FarmCustomRole[]>
     .from(farmCustomRoles)
     .leftJoin(members, eq(members.roleId, farmCustomRoles.id))
     .leftJoin(invites, eq(invites.roleId, farmCustomRoles.id))
-    .where(eq(farmCustomRoles.farmId, farmId))
+    .where(and(eq(farmCustomRoles.farmId, farmId), notDeleted(farmCustomRoles)))
     .orderBy(asc(farmCustomRoles.name));
   return rows.map(({ role, members, invites }) => ({
     id: role.id,
@@ -90,7 +90,7 @@ export async function findCustomRole(farmId: string, id: string) {
   const [row] = await db
     .select()
     .from(farmCustomRoles)
-    .where(and(eq(farmCustomRoles.farmId, farmId), eq(farmCustomRoles.id, id)))
+    .where(and(eq(farmCustomRoles.farmId, farmId), eq(farmCustomRoles.id, id), notDeleted(farmCustomRoles)))
     .limit(1);
   return row;
 }
@@ -111,6 +111,7 @@ async function assertNameFree(farmId: string, name: string, exceptId?: string) {
         eq(farmCustomRoles.farmId, farmId),
         sql`lower(${farmCustomRoles.name}) = lower(${name})`,
         exceptId ? ne(farmCustomRoles.id, exceptId) : undefined,
+        notDeleted(farmCustomRoles),
       ),
     )
     .limit(1);
@@ -122,7 +123,10 @@ export async function createCustomRole(
   actor: PermissionActor,
   input: { name: string; description?: string | null; permissions: Permission[] },
 ) {
-  const [{ total } = { total: 0 }] = await db.select({ total: count() }).from(farmCustomRoles).where(eq(farmCustomRoles.farmId, farmId));
+  const [{ total } = { total: 0 }] = await db
+    .select({ total: count() })
+    .from(farmCustomRoles)
+    .where(and(eq(farmCustomRoles.farmId, farmId), notDeleted(farmCustomRoles)));
   if (total >= MAX_CUSTOM_ROLES) throw badRequest(`A farm can have up to ${MAX_CUSTOM_ROLES} custom roles`, 'ROLE_LIMIT');
   const permissions = PERMISSIONS.filter((p) => input.permissions.includes(p));
   assertMayChange(actor, permissions);
@@ -172,11 +176,14 @@ export async function deleteCustomRole(farmId: string, actor: PermissionActor, i
   }
   assertMayChange(actor, cleanPermissions(role.permissions));
   const [[members], [invites]] = await Promise.all([
-    db.select({ total: count() }).from(farmMembers).where(eq(farmMembers.customRoleId, role.id)),
+    db
+      .select({ total: count() })
+      .from(farmMembers)
+      .where(and(eq(farmMembers.customRoleId, role.id), notDeleted(farmMembers))),
     db
       .select({ total: count() })
       .from(farmInvitations)
-      .where(and(eq(farmInvitations.customRoleId, role.id), gt(farmInvitations.expiresAt, new Date()))),
+      .where(and(eq(farmInvitations.customRoleId, role.id), gt(farmInvitations.expiresAt, new Date()), notDeleted(farmInvitations))),
   ]);
   const inUse = (members?.total ?? 0) + (invites?.total ?? 0);
   if (inUse > 0) {
@@ -185,10 +192,14 @@ export async function deleteCustomRole(farmId: string, actor: PermissionActor, i
       'ROLE_IN_USE',
     );
   }
-  // Expired invitations don't block deletion; drop them with the role.
+  // Expired invitations don't block deletion; they are marked deleted with the role.
+  const deleted = softDeleted();
   await db.transaction(async (tx) => {
-    await tx.delete(farmInvitations).where(eq(farmInvitations.customRoleId, role.id));
-    await tx.delete(farmCustomRoles).where(eq(farmCustomRoles.id, role.id));
+    await tx
+      .update(farmInvitations)
+      .set(deleted)
+      .where(and(eq(farmInvitations.customRoleId, role.id), notDeleted(farmInvitations)));
+    await tx.update(farmCustomRoles).set(deleted).where(eq(farmCustomRoles.id, role.id));
   });
   return role;
 }

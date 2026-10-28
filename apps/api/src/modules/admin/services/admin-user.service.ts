@@ -2,8 +2,9 @@ import { and, count, countDistinct, desc, eq, gt, ilike, isNotNull, isNull, or, 
 import { isStaffRole, type AdminStats, type AdminUpdateUserInput, type AdminUser, type AdminUserListQuery } from '@kit/shared';
 import { db } from '../../../db/client';
 import { jobs, sessions, users, type User } from '../../../db/schema';
-import { hooks } from '../../../core/hooks';
+import { softDeleteUser } from '../../../core/accounts';
 import { deleteUserSessions } from '../../../core/session';
+import { notDeleted } from '../../../db/soft-delete';
 import { resolveStaff } from '../../../core/staff';
 import { serializeUser } from '../../../core/user';
 import { issueToken } from '../../../core/tokens';
@@ -26,7 +27,7 @@ export async function serializeAdminUser(user: User): Promise<AdminUser> {
 /** A user by id, or 404. */
 export async function findUser(id: string): Promise<User> {
   if (!isUuid(id)) throw notFound('User not found');
-  const user = await db.query.users.findFirst({ where: eq(users.id, id) });
+  const user = await db.query.users.findFirst({ where: and(eq(users.id, id), notDeleted(users)) });
   if (!user) throw notFound('User not found');
   return user;
 }
@@ -50,7 +51,8 @@ export async function adminStats(): Promise<AdminStats> {
         new7d: sql<number>`count(*) filter (where ${users.createdAt} > ${new Date(now - 7 * DAY).toISOString()})`.mapWith(Number),
         new30d: sql<number>`count(*) filter (where ${users.createdAt} > ${since30.toISOString()})`.mapWith(Number),
       })
-      .from(users),
+      .from(users)
+      .where(notDeleted(users)),
     db
       .select({
         active: count(),
@@ -64,7 +66,7 @@ export async function adminStats(): Promise<AdminStats> {
         count: count(),
       })
       .from(users)
-      .where(gt(users.createdAt, since30))
+      .where(and(gt(users.createdAt, since30), notDeleted(users)))
       .groupBy(sql`1`),
     db
       .select({
@@ -89,7 +91,7 @@ export async function adminStats(): Promise<AdminStats> {
 }
 
 export async function listUsers({ page, pageSize, q, role, status }: AdminUserListQuery) {
-  const filters: SQL[] = [];
+  const filters: SQL[] = [notDeleted(users)];
   if (q) {
     const pattern = `%${escapeLike(q)}%`;
     filters.push(or(ilike(users.email, pattern), ilike(users.name, pattern))!);
@@ -98,7 +100,7 @@ export async function listUsers({ page, pageSize, q, role, status }: AdminUserLi
   if (status === 'banned') filters.push(isNotNull(users.bannedAt));
   if (status === 'active') filters.push(isNull(users.bannedAt));
   if (status === 'unverified') filters.push(isNull(users.emailVerifiedAt));
-  const where = filters.length ? and(...filters) : undefined;
+  const where = and(...filters);
 
   const [rows, [total]] = await Promise.all([
     db.select().from(users).where(where).orderBy(desc(users.createdAt)).limit(pageSize).offset((page - 1) * pageSize),
@@ -162,7 +164,7 @@ export async function updateUser(actorUser: User, target: User, input: AdminUpda
  * one. Setting it also verifies the email address.
  */
 export async function createClientUser(input: { name: string; email: string }): Promise<User> {
-  const existing = await db.query.users.findFirst({ where: eq(users.email, input.email) });
+  const existing = await db.query.users.findFirst({ where: and(eq(users.email, input.email), notDeleted(users)) });
   if (existing) throw conflict('An account with that email already exists', 'EMAIL_TAKEN');
   const [user] = await db.insert(users).values({ name: input.name, email: input.email }).returning();
   const token = await issueToken(user!.id, 'password_reset', 7 * DAY);
@@ -191,8 +193,7 @@ export async function unbanUser(target: User) {
   return user!;
 }
 
-/** Deletes an account; modules clean up first, sessions and module rows cascade. */
+/** Deletes an account (soft). Name and email stay on the record; the email can sign up again. */
 export async function deleteUser(target: User) {
-  await hooks.emit(hooks.userDeleting, target);
-  await db.delete(users).where(eq(users.id, target.id));
+  await softDeleteUser(target, { anonymize: false });
 }

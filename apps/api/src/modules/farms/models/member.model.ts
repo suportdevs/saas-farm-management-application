@@ -1,5 +1,5 @@
 import { index, jsonb, pgTable, primaryKey, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
-import { users } from '../../../db/schema';
+import { auditColumns, users } from '../../../db/schema';
 import { farms } from './farm.model';
 import { farmCustomRoles, farmRole } from './role.model';
 
@@ -23,7 +23,8 @@ export const farmMembers = pgTable(
     permissionOverrides: jsonb('permission_overrides').$type<Record<string, boolean>>().notNull().default({}),
     /** Used to reopen the farm the user worked in last. */
     lastAccessedAt: timestamp('last_accessed_at', { withTimezone: true }),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    // A removed member's row is soft-deleted; adding them again brings it back (same farm + user key).
+    ...auditColumns(),
   },
   (t) => [primaryKey({ columns: [t.farmId, t.userId] }), index('farm_members_user_idx').on(t.userId)],
 );

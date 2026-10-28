@@ -1,8 +1,8 @@
 import { defineModule } from '../../core';
 import { router } from './routes';
 import { deleteFarm, findFarm } from './services/farm.service';
-import { handleUserDeletion } from './services/member.service';
-import { handleOrgUserDeletion } from './services/organization.service';
+import { handleUserDeletion, leaveAllFarms } from './services/member.service';
+import { handleOrgUserDeletion, leaveAllOrganizations } from './services/organization.service';
 
 /**
  * Farms — the tenant core: organizations (clients), farms (tenants), members,
@@ -49,8 +49,11 @@ export default defineModule({
         const farm = await findFarm(farmId);
         if (farm) await deleteFarm(farm);
       }
-      // …then their organizations pass to someone else, or go when empty.
+      // …then their organizations pass to someone else, or go when empty…
       await handleOrgUserDeletion(user.id);
+      // …and they leave every farm team and organization (rows kept, marked deleted).
+      await leaveAllFarms(user.id);
+      await leaveAllOrganizations(user.id);
     });
   },
 });

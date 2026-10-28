@@ -1,5 +1,5 @@
 import { boolean, integer, jsonb, pgTable, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
-import { users } from '../../../db/schema';
+import { auditColumns, users } from '../../../db/schema';
 
 // NOTE: keep imports in model files relative — drizzle-kit loads them directly.
 
@@ -33,11 +33,8 @@ export const plans = pgTable('plans', {
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   sortOrder: integer('sort_order').notNull().default(0),
   updatedById: uuid('updated_by_id').references(() => users.id, { onDelete: 'set null' }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
+  // A deleted plan keeps its code: old invoices and subscriptions may still mention it.
+  ...auditColumns(),
 });
 
 export type PlanRow = typeof plans.$inferSelect;

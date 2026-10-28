@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { db } from '../../../db/client';
 import { users, type User } from '../../../db/schema';
-import { hooks } from '../../../core/hooks';
+import { softDeleteUser } from '../../../core/accounts';
 import { deleteUserSessions } from '../../../core/session';
 import { badRequest } from '../../../lib/errors';
 import { hashPassword, verifyPassword } from '../../../lib/password';
@@ -30,8 +30,7 @@ export async function changePassword(user: User, keepSessionId: string, currentP
   await sendPasswordChangedEmail(user.email, user.name);
 }
 
-/** Deletes the account; modules clean up first, sessions and module rows cascade. */
+/** Deletes the user's own account (soft, with their name and email anonymized). */
 export async function deleteAccount(user: User) {
-  await hooks.emit(hooks.userDeleting, user);
-  await db.delete(users).where(eq(users.id, user.id));
+  await softDeleteUser(user, { anonymize: true });
 }

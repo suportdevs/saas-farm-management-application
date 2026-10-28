@@ -12,6 +12,7 @@ import {
 } from '@kit/shared';
 import { resolveStaff } from '../../../core/staff';
 import { db } from '../../../db/client';
+import { notDeleted, softDeleted } from '../../../db/soft-delete';
 import { platformRoles, users, type PlatformRoleRow, type User } from '../../../db/schema';
 import { badRequest, conflict, forbidden, notFound, validationError } from '../../../lib/errors';
 
@@ -29,7 +30,11 @@ export interface StaffRoleImportRow {
 }
 
 export async function platformRoleExists(key: string) {
-  const [row] = await db.select({ id: platformRoles.id }).from(platformRoles).where(eq(platformRoles.key, key)).limit(1);
+  const [row] = await db
+    .select({ id: platformRoles.id })
+    .from(platformRoles)
+    .where(and(eq(platformRoles.key, key), notDeleted(platformRoles)))
+    .limit(1);
   return Boolean(row);
 }
 
@@ -48,7 +53,7 @@ async function userCounts(): Promise<Map<string, number>> {
   const rows = await db
     .select({ key: users.staffRole, total: count() })
     .from(users)
-    .where(eq(users.role, 'admin'))
+    .where(and(eq(users.role, 'admin'), notDeleted(users)))
     .groupBy(users.staffRole);
   const map = new Map<string, number>();
   for (const r of rows) {
@@ -71,7 +76,7 @@ const serialize = (row: PlatformRoleRow, counts: Map<string, number>): PlatformR
 
 /** Built-in and custom staff roles, with how many staff hold each. */
 export async function listRoles(): Promise<PlatformRole[]> {
-  const [rows, counts] = await Promise.all([db.select().from(platformRoles).orderBy(platformRoles.name), userCounts()]);
+  const [rows, counts] = await Promise.all([db.select().from(platformRoles).where(notDeleted(platformRoles)).orderBy(platformRoles.name), userCounts()]);
   return [
     ...STAFF_ROLES.map((key) => ({
       key,
@@ -105,7 +110,11 @@ async function assertMayGrant(actorUser: User, permissions: readonly PlatformPer
 async function findCustom(key: string) {
   key = key.toLowerCase();
   if (isStaffRole(key)) throw badRequest('Built-in staff roles can’t be changed. Create a custom role instead.', 'SYSTEM_ROLE');
-  const [row] = await db.select().from(platformRoles).where(eq(platformRoles.key, key)).limit(1);
+  const [row] = await db
+    .select()
+    .from(platformRoles)
+    .where(and(eq(platformRoles.key, key), notDeleted(platformRoles)))
+    .limit(1);
   if (!row) throw notFound('Staff role not found', 'ROLE_NOT_FOUND');
   return row;
 }
@@ -117,7 +126,7 @@ export async function createRole(
   const key = input.key ?? slugify(input.name);
   if (key.length < 2) throw badRequest('Choose a key of at least 2 characters', 'INVALID_KEY');
   if (isStaffRole(key) || (await platformRoleExists(key))) throw conflict('A staff role with that key already exists', 'ROLE_KEY_TAKEN');
-  const [{ total } = { total: 0 }] = await db.select({ total: count() }).from(platformRoles);
+  const [{ total } = { total: 0 }] = await db.select({ total: count() }).from(platformRoles).where(notDeleted(platformRoles));
   if (total >= MAX_PLATFORM_ROLES) throw badRequest(`Up to ${MAX_PLATFORM_ROLES} custom staff roles`, 'ROLE_LIMIT');
   const permissions = cleanPlatformPermissions(input.permissions);
   await assertMayGrant(actor, permissions);
@@ -134,7 +143,7 @@ export async function createRole(
  */
 export async function importRoles(actorUser: User, rows: StaffRoleImportRow[]) {
   const actor = (await resolveStaff(actorUser))!;
-  const existing = new Map((await db.select().from(platformRoles)).map((r) => [r.key, r]));
+  const existing = new Map((await db.select().from(platformRoles).where(notDeleted(platformRoles))).map((r) => [r.key, r]));
   const details: Record<string, string[]> = {};
   const seen = new Set<string>();
   rows.forEach((row, i) => {
@@ -152,7 +161,7 @@ export async function importRoles(actorUser: User, rows: StaffRoleImportRow[]) {
   await db.transaction(async (tx) => {
     for (const row of rows) {
       const values = { name: row.name, description: row.description ?? null, permissions: cleanPlatformPermissions(row.permissions) };
-      if (existing.has(row.key)) await tx.update(platformRoles).set(values).where(eq(platformRoles.key, row.key));
+      if (existing.has(row.key)) await tx.update(platformRoles).set(values).where(and(eq(platformRoles.key, row.key), notDeleted(platformRoles)));
       else await tx.insert(platformRoles).values({ key: row.key, ...values, createdById: actorUser.id });
     }
   });
@@ -186,17 +195,17 @@ export async function updateRole(
   return { row, changed, role: serialize(updated!, await userCounts()) };
 }
 
-/** Deletes a custom role nobody holds. */
+/** Deletes (soft) a custom role nobody holds. Its key can then be used for a new role. */
 export async function deleteRole(actor: User, key: string) {
   const row = await findCustom(key);
   await assertMayGrant(actor, cleanPlatformPermissions(row.permissions));
   const [{ total } = { total: 0 }] = await db
     .select({ total: count() })
     .from(users)
-    .where(and(eq(users.role, 'admin'), eq(users.staffRole, row.key)));
+    .where(and(eq(users.role, 'admin'), eq(users.staffRole, row.key), notDeleted(users)));
   if (total > 0) {
     throw conflict(`${total} staff ${total === 1 ? 'member has' : 'members have'} this role. Give them another role first.`, 'ROLE_IN_USE');
   }
-  await db.delete(platformRoles).where(eq(platformRoles.id, row.id));
+  await db.update(platformRoles).set(softDeleted()).where(eq(platformRoles.id, row.id));
   return row;
 }

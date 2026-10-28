@@ -1,10 +1,10 @@
 import { and, count, desc, eq, gt, sql } from 'drizzle-orm';
 import { ROLE_INFO, type FarmRole } from '@kit/shared';
-import { badRequest, conflict, db, forbidden, isUuid, notFound, randomToken, sha256, users, type User } from '../../../core';
+import { badRequest, conflict, db, forbidden, isUuid, notDeleted, notFound, randomToken, sha256, softDeleted, users, type User } from '../../../core';
 import { farmCustomRoles, farmInvitations, farmMembers, farms, type Farm } from '../models';
 import { sendInvitationEmail } from './email.service';
 import { farmExtensions } from './farm.extensions';
-import { resolveAssignment } from './member.service';
+import { addMember, resolveAssignment } from './member.service';
 import { claimOrganizationIfOwnerless } from './organization.service';
 import { customRoleRef, type PermissionActor } from './role.service';
 
@@ -13,11 +13,14 @@ const INVITE_TTL = 7 * DAY;
 /** Members plus pending invitations — both take a seat. */
 export async function seatCount(farmId: string): Promise<number> {
   const [[members], [invites]] = await Promise.all([
-    db.select({ value: count() }).from(farmMembers).where(eq(farmMembers.farmId, farmId)),
+    db
+      .select({ value: count() })
+      .from(farmMembers)
+      .where(and(eq(farmMembers.farmId, farmId), notDeleted(farmMembers))),
     db
       .select({ value: count() })
       .from(farmInvitations)
-      .where(and(eq(farmInvitations.farmId, farmId), gt(farmInvitations.expiresAt, new Date()))),
+      .where(and(eq(farmInvitations.farmId, farmId), gt(farmInvitations.expiresAt, new Date()), notDeleted(farmInvitations))),
   ]);
   return (members?.value ?? 0) + (invites?.value ?? 0);
 }
@@ -28,7 +31,7 @@ export async function listInvitations(farmId: string) {
     .from(farmInvitations)
     .leftJoin(users, eq(users.id, farmInvitations.invitedById))
     .leftJoin(farmCustomRoles, eq(farmCustomRoles.id, farmInvitations.customRoleId))
-    .where(and(eq(farmInvitations.farmId, farmId), gt(farmInvitations.expiresAt, new Date())))
+    .where(and(eq(farmInvitations.farmId, farmId), gt(farmInvitations.expiresAt, new Date()), notDeleted(farmInvitations)))
     .orderBy(desc(farmInvitations.createdAt));
   return rows.map(({ invitation: i, inviter, customRole }) => ({
     id: i.id,
@@ -54,14 +57,16 @@ export async function invite(
     .select({ id: users.id })
     .from(farmMembers)
     .innerJoin(users, eq(users.id, farmMembers.userId))
-    .where(and(eq(farmMembers.farmId, farm.id), eq(users.email, input.email)))
+    .where(and(eq(farmMembers.farmId, farm.id), eq(users.email, input.email), notDeleted(farmMembers), notDeleted(users)))
     .limit(1);
   if (existingMember) throw conflict('That person is already on the team', 'ALREADY_MEMBER');
 
   const [pending] = await db
     .select({ id: farmInvitations.id })
     .from(farmInvitations)
-    .where(and(eq(farmInvitations.farmId, farm.id), eq(farmInvitations.email, input.email), gt(farmInvitations.expiresAt, new Date())))
+    .where(
+      and(eq(farmInvitations.farmId, farm.id), eq(farmInvitations.email, input.email), gt(farmInvitations.expiresAt, new Date()), notDeleted(farmInvitations)),
+    )
     .limit(1);
   // Re-sending a pending invitation doesn't take another seat.
   if (!pending) await farmExtensions.guardSeat(farm, await seatCount(farm.id));
@@ -81,7 +86,9 @@ export async function invite(
     .insert(farmInvitations)
     .values(values)
     .onConflictDoUpdate({
+      // One open invitation per email: refresh it instead of adding a second one.
       target: [farmInvitations.farmId, farmInvitations.email],
+      targetWhere: sql`deleted_at is null`,
       set: {
         role: values.role,
         customRoleId: values.customRoleId,
@@ -115,8 +122,9 @@ export async function inviteOwner(farm: Farm, email: string, staff: User) {
 export async function revokeInvitation(farmId: string, invitationId: string) {
   if (!isUuid(invitationId)) throw notFound('Invitation not found');
   const [deleted] = await db
-    .delete(farmInvitations)
-    .where(and(eq(farmInvitations.farmId, farmId), eq(farmInvitations.id, invitationId)))
+    .update(farmInvitations)
+    .set(softDeleted())
+    .where(and(eq(farmInvitations.farmId, farmId), eq(farmInvitations.id, invitationId), notDeleted(farmInvitations)))
     .returning({ email: farmInvitations.email });
   if (!deleted) throw notFound('Invitation not found');
   return deleted;
@@ -128,7 +136,7 @@ async function findInvitation(token: string) {
     .from(farmInvitations)
     .innerJoin(farms, eq(farms.id, farmInvitations.farmId))
     .leftJoin(farmCustomRoles, eq(farmCustomRoles.id, farmInvitations.customRoleId))
-    .where(and(eq(farmInvitations.tokenHash, sha256(token)), gt(farmInvitations.expiresAt, new Date())))
+    .where(and(eq(farmInvitations.tokenHash, sha256(token)), gt(farmInvitations.expiresAt, new Date()), notDeleted(farmInvitations), notDeleted(farms)))
     .limit(1);
   return row;
 }
@@ -157,20 +165,18 @@ export async function acceptInvitation(token: string, user: User) {
   }
   if (row.farm.suspendedAt) throw forbidden('This farm is currently suspended', 'FARM_SUSPENDED');
   await db.transaction(async (tx) => {
-    await tx
-      .insert(farmMembers)
-      .values({
-        farmId: row.farm.id,
-        userId: user.id,
-        role: row.invitation.role,
-        customRoleId: row.invitation.customRoleId,
-        title: row.invitation.title,
-        lastAccessedAt: new Date(),
-      })
-      .onConflictDoNothing();
+    await addMember(tx, {
+      farmId: row.farm.id,
+      userId: user.id,
+      role: row.invitation.role,
+      customRoleId: row.invitation.customRoleId,
+      title: row.invitation.title,
+      lastAccessedAt: new Date(),
+    });
     // The client the platform team set up a farm for takes over its (still ownerless) organization.
     if (row.invitation.role === 'owner') await claimOrganizationIfOwnerless(row.farm.organizationId, user.id, tx);
-    await tx.delete(farmInvitations).where(eq(farmInvitations.id, row.invitation.id));
+    // Accepted: the invitation is used up.
+    await tx.update(farmInvitations).set(softDeleted()).where(eq(farmInvitations.id, row.invitation.id));
   });
   return { farm: row.farm, role: row.customRole?.name ?? row.invitation.role };
 }

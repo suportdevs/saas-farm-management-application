@@ -40,8 +40,15 @@ export async function createFarm(c: Client, name?: string) {
 }
 
 /** Invites a new user with `role` and accepts the invitation as them. */
-export async function inviteAndJoin(app: Express, owner: { c: Client }, slug: string, role: string) {
-  const member = await signUp(app);
+/** Invites someone (a new user, or `existing`) and accepts the invitation as them. */
+export async function inviteAndJoin(
+  app: Express,
+  owner: { c: Client },
+  slug: string,
+  role: string,
+  existing?: Awaited<ReturnType<typeof signUp>>,
+) {
+  const member = existing ?? (await signUp(app));
   const res = await owner.c.post(`/api/farms/${slug}/invitations`, { email: member.email, role });
   expect(res.status).toBe(201);
   const { token } = sentInvites.findLast((i) => i.to === member.email)!;

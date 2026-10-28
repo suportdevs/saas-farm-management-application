@@ -1,5 +1,5 @@
 import { and, eq, gt, isNull, lte, sql } from 'drizzle-orm';
-import { db, defineJob, logger, schedule, users } from '../../../core';
+import { db, defineJob, logger, notDeleted, schedule, users } from '../../../core';
 import { farmMembers, farms, findFarm } from '../../farms';
 import { sendTrialEndedEmail, sendTrialEndingEmail } from './email.service';
 import { farmSubscriptions } from '../models';
@@ -15,7 +15,7 @@ const trialEmailJob = defineJob<{ farmId: string; kind: 'ending' | 'ended' }>('s
     .select({ email: users.email, name: users.name })
     .from(farmMembers)
     .innerJoin(users, eq(users.id, farmMembers.userId))
-    .where(and(eq(farmMembers.farmId, farmId), eq(farmMembers.role, 'owner')));
+    .where(and(eq(farmMembers.farmId, farmId), eq(farmMembers.role, 'owner'), notDeleted(farmMembers), notDeleted(users)));
   const daysLeft = sub?.trialEndsAt ? Math.max(1, Math.ceil((sub.trialEndsAt.getTime() - Date.now()) / DAY)) : 0;
   for (const owner of owners) {
     if (kind === 'ending') await sendTrialEndingEmail(owner.email, owner.name, farm, daysLeft);
@@ -34,6 +34,8 @@ const trialsEndingBetween = (from: Date, to: Date) =>
         gt(farmSubscriptions.trialEndsAt, from),
         lte(farmSubscriptions.trialEndsAt, to),
         isNull(farms.suspendedAt),
+        notDeleted(farms),
+        notDeleted(farmSubscriptions),
         sql`(${farmSubscriptions.status} is null or ${farmSubscriptions.status} not in ('active','trialing','past_due'))`,
       ),
     );

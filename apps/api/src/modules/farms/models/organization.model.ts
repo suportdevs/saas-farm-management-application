@@ -1,5 +1,5 @@
-import { index, pgEnum, pgTable, primaryKey, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
-import { users } from '../../../db/schema';
+import { index, pgEnum, pgTable, primaryKey, uuid, varchar } from 'drizzle-orm/pg-core';
+import { auditColumns, users } from '../../../db/schema';
 
 // NOTE: keep imports in model files relative — drizzle-kit loads them directly.
 
@@ -10,11 +10,7 @@ export const organizations = pgTable('organizations', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: varchar('name', { length: 100 }).notNull(),
   createdById: uuid('created_by_id').references(() => users.id, { onDelete: 'set null' }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
+  ...auditColumns(),
 });
 
 export const organizationMembers = pgTable(
@@ -27,7 +23,8 @@ export const organizationMembers = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     role: orgRole('role').notNull().default('member'),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    // A removed member's row is soft-deleted; adding them again brings it back (same org + user key).
+    ...auditColumns(),
   },
   (t) => [primaryKey({ columns: [t.organizationId, t.userId] }), index('organization_members_user_idx').on(t.userId)],
 );

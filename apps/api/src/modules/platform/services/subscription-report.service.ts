@@ -1,6 +1,6 @@
 import { and, count, desc, eq, ilike, inArray, not, or, sql, type SQL } from 'drizzle-orm';
 import { monthlyValue, type AdminSubscriptionListQuery, type BillingInterval, type PlatformSubscription } from '@kit/shared';
-import { db, escapeLike, users } from '../../../core';
+import { db, escapeLike, notDeleted, users } from '../../../core';
 import { farmMembers, farms } from '../../farms';
 import { entitlementsOf, farmSubscriptions, getPlan, subscriptionOf, unpaidByFarm, unpaidFarmIds } from '../../subscriptions';
 
@@ -23,14 +23,19 @@ const owners = db
   .select({ farmId: farmMembers.farmId, id: users.id, name: users.name, email: users.email })
   .from(farmMembers)
   .innerJoin(users, eq(users.id, farmMembers.userId))
-  .where(eq(farmMembers.role, 'owner'))
+  .where(and(eq(farmMembers.role, 'owner'), notDeleted(farmMembers)))
   .as('owner');
 
-const memberCounts = db.select({ farmId: farmMembers.farmId, total: count().as('member_total') }).from(farmMembers).groupBy(farmMembers.farmId).as('members');
+const memberCounts = db
+  .select({ farmId: farmMembers.farmId, total: count().as('member_total') })
+  .from(farmMembers)
+  .where(notDeleted(farmMembers))
+  .groupBy(farmMembers.farmId)
+  .as('members');
 
 /** Every tenant's subscription, deal and unpaid manual invoices. */
 export async function listSubscriptions({ page, pageSize, q, plan, state, source, billing }: AdminSubscriptionListQuery) {
-  const filters: SQL[] = [];
+  const filters: SQL[] = [notDeleted(farms)];
   if (q) {
     const pattern = `%${escapeLike(q)}%`;
     filters.push(or(ilike(farms.name, pattern), ilike(farms.slug, pattern), ilike(owners.email, pattern))!);
@@ -40,7 +45,7 @@ export async function listSubscriptions({ page, pageSize, q, plan, state, source
   if (source === 'none') filters.push(not(entitled));
   else if (source) filters.push(and(entitled, eq(s.source, source))!);
   if (billing) filters.push(inArray(farms.id, unpaidFarmIds(billing === 'overdue')));
-  const where = filters.length ? and(...filters) : undefined;
+  const where = and(...filters);
 
   const [rows, [total]] = await Promise.all([
     db

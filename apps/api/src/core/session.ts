@@ -95,7 +95,8 @@ export async function validateSessionToken(
   if (!row) return null;
 
   const { session, user } = row;
-  if (user.bannedAt) {
+  // Suspended or deleted accounts lose every session.
+  if (user.bannedAt || user.deletedAt) {
     await deleteUserSessions(user.id);
     return null;
   }

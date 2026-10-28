@@ -1,7 +1,7 @@
 import type Stripe from 'stripe';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { FREE_PLAN_ID, type BillingInterval, type BillingOverview, type FarmInvoice, type FarmSubscription, type PlanId } from '@kit/shared';
-import { AppError, audit, badRequest, db, defineJob, env, logger, type User } from '../../../core';
+import { AppError, audit, badRequest, db, defineJob, env, logger, notDeleted, type User } from '../../../core';
 import { farms, findFarm, listMembers, usageOf, type Farm, type Tx } from '../../farms';
 import { sendPaymentFailedEmail } from './email.service';
 import { billingEnabled, config, stripe } from '../config';
@@ -182,7 +182,13 @@ export async function applySubscription(sub: Stripe.Subscription): Promise<void>
   const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer.id;
   const [byCustomer] = await db.select().from(farmSubscriptions).where(eq(farmSubscriptions.stripeCustomerId, customerId)).limit(1);
   const farmId = byCustomer?.farmId ?? sub.metadata?.farmId;
-  const [farm] = farmId ? await db.select({ id: farms.id }).from(farms).where(eq(farms.id, farmId)).limit(1) : [];
+  const [farm] = farmId
+    ? await db
+        .select({ id: farms.id })
+        .from(farms)
+        .where(and(eq(farms.id, farmId), notDeleted(farms)))
+        .limit(1)
+    : [];
   if (!farm) {
     logger.warn({ subscription: sub.id, customerId }, 'Ignoring subscription for unknown farm');
     return;

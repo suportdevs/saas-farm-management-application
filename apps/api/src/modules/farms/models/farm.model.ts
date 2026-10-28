@@ -1,5 +1,5 @@
-import { index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
-import { users } from '../../../db/schema';
+import { index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
+import { auditColumns, notDeletedRows, users } from '../../../db/schema';
 import { organizations } from './organization.model';
 
 // NOTE: keep imports in model files relative — drizzle-kit loads them directly.
@@ -12,7 +12,8 @@ export const farms = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     name: varchar('name', { length: 100 }).notNull(),
-    slug: varchar('slug', { length: 60 }).notNull().unique(),
+    // Unique among farms that are not deleted (see the index below).
+    slug: varchar('slug', { length: 60 }).notNull(),
     /** The client (organization) that owns the farm. */
     organizationId: uuid('organization_id')
       .notNull()
@@ -52,13 +53,14 @@ export const farms = pgTable(
     suspendedReason: varchar('suspended_reason', { length: 500 }),
 
     createdById: uuid('created_by_id').references(() => users.id, { onDelete: 'set null' }),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp('updated_at', { withTimezone: true })
-      .notNull()
-      .defaultNow()
-      .$onUpdate(() => new Date()),
+    ...auditColumns(),
   },
-  (t) => [index('farms_created_at_idx').on(t.createdAt), index('farms_country_idx').on(t.country), index('farms_organization_idx').on(t.organizationId)],
+  (t) => [
+    uniqueIndex('farms_slug_active_unique').on(t.slug).where(notDeletedRows),
+    index('farms_created_at_idx').on(t.createdAt),
+    index('farms_country_idx').on(t.country),
+    index('farms_organization_idx').on(t.organizationId),
+  ],
 );
 
 export type Farm = typeof farms.$inferSelect;

@@ -51,6 +51,11 @@ export async function consumeToken(token: string, type: TokenType): Promise<stri
   return (await consumeTokenData(token, type))?.userId ?? null;
 }
 
+/** Removes every pending email link of a user (their account is being deleted). */
+export async function deleteUserTokens(userId: string) {
+  await db.delete(verificationTokens).where(eq(verificationTokens.userId, userId));
+}
+
 export async function purgeExpiredTokens() {
   await db.delete(verificationTokens).where(lt(verificationTokens.expiresAt, new Date()));
 }

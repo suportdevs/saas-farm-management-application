@@ -10,7 +10,7 @@ import {
   type PlatformOrganization,
   type PlatformStats,
 } from '@kit/shared';
-import { db, escapeLike, notFound, users } from '../../../core';
+import { db, escapeLike, notDeleted, notFound, users } from '../../../core';
 import { farmMembers, farms, findFarm, findOrganization, listActivity, listMembers, organizationMembers, organizations, serializeFarm, type Farm } from '../../farms';
 import { farmSubscriptions, findSubscription, getPlan, planExists, subscriptionOf, type FarmSubscriptionRow } from '../../subscriptions';
 
@@ -35,12 +35,13 @@ const ownerOf = db
   .select({ farmId: farmMembers.farmId, id: users.id, name: users.name, email: users.email })
   .from(farmMembers)
   .innerJoin(users, eq(users.id, farmMembers.userId))
-  .where(eq(farmMembers.role, 'owner'))
+  .where(and(eq(farmMembers.role, 'owner'), notDeleted(farmMembers)))
   .as('owner');
 
 const memberCounts = db
   .select({ farmId: farmMembers.farmId, total: count().as('total') })
   .from(farmMembers)
+  .where(notDeleted(farmMembers))
   .groupBy(farmMembers.farmId)
   .as('members');
 
@@ -91,23 +92,25 @@ export async function platformStats(): Promise<PlatformStats> {
         suspended: count(farms.suspendedAt),
       })
       .from(farms)
-      .leftJoin(s, eq(s.farmId, farms.id)),
+      .leftJoin(s, eq(s.farmId, farms.id))
+      .where(notDeleted(farms)),
     db
       .select({ plan: sql<string>`case when ${isEntitled} then ${s.plan} else 'free' end`, count: count() })
       .from(farms)
       .leftJoin(s, eq(s.farmId, farms.id))
+      .where(notDeleted(farms))
       .groupBy(sql`1`),
     db
       .select({ plan: s.plan, interval: s.interval, count: count() })
       .from(s)
-      .where(and(isEntitled, sql`${s.status} in ('active','past_due')`))
+      .where(and(isEntitled, sql`${s.status} in ('active','past_due')`, notDeleted(s)))
       .groupBy(s.plan, s.interval),
-    db.select({ country: farms.country, count: count() }).from(farms).groupBy(farms.country).orderBy(desc(count())).limit(10),
-    db.select({ type: farms.type, count: count() }).from(farms).groupBy(farms.type).orderBy(desc(count())),
+    db.select({ country: farms.country, count: count() }).from(farms).where(notDeleted(farms)).groupBy(farms.country).orderBy(desc(count())).limit(10),
+    db.select({ type: farms.type, count: count() }).from(farms).where(notDeleted(farms)).groupBy(farms.type).orderBy(desc(count())),
     db
       .select({ day: sql<string>`to_char(date_trunc('day', ${farms.createdAt}), 'YYYY-MM-DD')`, count: count() })
       .from(farms)
-      .where(gt(farms.createdAt, since30))
+      .where(and(gt(farms.createdAt, since30), notDeleted(farms)))
       .groupBy(sql`1`),
   ]);
 
@@ -131,7 +134,7 @@ export async function platformStats(): Promise<PlatformStats> {
 
 /** The farm directory: search and filter every tenant. */
 export async function listTenants({ page, pageSize, q, plan, status, country, organizationId }: AdminFarmListQuery) {
-  const filters: SQL[] = [];
+  const filters: SQL[] = [notDeleted(farms)];
   if (q) {
     const pattern = `%${escapeLike(q)}%`;
     filters.push(or(ilike(farms.name, pattern), ilike(farms.slug, pattern), ilike(farms.city, pattern), ilike(ownerOf.email, pattern), ilike(organizations.name, pattern))!);
@@ -140,7 +143,7 @@ export async function listTenants({ page, pageSize, q, plan, status, country, or
   if (status) filters.push(statusFilter[status]);
   if (country) filters.push(eq(farms.country, country));
   if (organizationId) filters.push(eq(farms.organizationId, organizationId));
-  const where = filters.length ? and(...filters) : undefined;
+  const where = and(...filters);
 
   const [rows, [total]] = await Promise.all([
     db
@@ -211,20 +214,26 @@ export async function tenantDetail(farm: Farm) {
 
 /** Client organizations: search by name or owner email. */
 export async function listClientOrganizations({ page, pageSize, q }: AdminOrganizationListQuery) {
-  const farmCounts = db.select({ organizationId: farms.organizationId, total: count().as('farm_total') }).from(farms).groupBy(farms.organizationId).as('farm_counts');
+  const farmCounts = db
+    .select({ organizationId: farms.organizationId, total: count().as('farm_total') })
+    .from(farms)
+    .where(notDeleted(farms))
+    .groupBy(farms.organizationId)
+    .as('farm_counts');
   const memberTotals = db
     .select({ organizationId: organizationMembers.organizationId, total: count().as('member_total') })
     .from(organizationMembers)
+    .where(notDeleted(organizationMembers))
     .groupBy(organizationMembers.organizationId)
     .as('member_totals');
   const owners = db
     .selectDistinctOn([organizationMembers.organizationId], { organizationId: organizationMembers.organizationId, id: users.id, name: users.name, email: users.email })
     .from(organizationMembers)
     .innerJoin(users, eq(users.id, organizationMembers.userId))
-    .where(eq(organizationMembers.role, 'owner'))
+    .where(and(eq(organizationMembers.role, 'owner'), notDeleted(organizationMembers)))
     .orderBy(organizationMembers.organizationId, organizationMembers.createdAt)
     .as('org_owner');
-  const where = q ? or(ilike(organizations.name, `%${escapeLike(q)}%`), ilike(owners.email, `%${escapeLike(q)}%`)) : undefined;
+  const where = and(notDeleted(organizations), q ? or(ilike(organizations.name, `%${escapeLike(q)}%`), ilike(owners.email, `%${escapeLike(q)}%`)) : undefined);
   const [rows, [total]] = await Promise.all([
     db
       .select({ org: organizations, farms: farmCounts.total, members: memberTotals.total, ownerId: owners.id, ownerName: owners.name, ownerEmail: owners.email })

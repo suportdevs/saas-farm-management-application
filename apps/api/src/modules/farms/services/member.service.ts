@@ -1,4 +1,4 @@
-import { and, asc, count, eq, ne, sql } from 'drizzle-orm';
+import { and, asc, count, eq, isNotNull, ne, sql } from 'drizzle-orm';
 import {
   cleanOverrides,
   CUSTOM_ROLE_BASE,
@@ -12,8 +12,9 @@ import {
   type OrgRole,
   type PermissionOverrides,
 } from '@kit/shared';
-import { badRequest, db, forbidden, isUuid, notFound, users } from '../../../core';
+import { badRequest, db, forbidden, isUuid, notDeleted, notFound, revived, softDeleted, users } from '../../../core';
 import { farmCustomRoles, farmMembers, farms, organizationMembers, type FarmMemberRow } from '../models';
+import type { Tx } from './farm.extensions';
 import { gateOf, roleOverridesOf } from './permission.service';
 import { assertMayAssign, assertMayChange, findCustomRole, type PermissionActor } from './role.service';
 
@@ -33,6 +34,11 @@ export function effectiveMember(farmId: string, userId: string, member: FarmMemb
     title: member?.title ?? `Organization ${orgRole}`,
     lastAccessedAt: member?.lastAccessedAt ?? null,
     createdAt: member?.createdAt ?? new Date(),
+    createdBy: member?.createdBy ?? null,
+    updatedAt: member?.updatedAt ?? new Date(),
+    updatedBy: member?.updatedBy ?? null,
+    deletedAt: null,
+    deletedBy: null,
     role: fromOrg,
     customRoleId: null,
     permissionOverrides: {},
@@ -44,9 +50,12 @@ export async function findMembership(key: string, userId: string) {
   const [row] = await db
     .select({ farm: farms, member: farmMembers, orgRole: organizationMembers.role })
     .from(farms)
-    .leftJoin(farmMembers, and(eq(farmMembers.farmId, farms.id), eq(farmMembers.userId, userId)))
-    .leftJoin(organizationMembers, and(eq(organizationMembers.organizationId, farms.organizationId), eq(organizationMembers.userId, userId)))
-    .where(isUuid(key) ? eq(farms.id, key) : eq(farms.slug, key.toLowerCase()))
+    .leftJoin(farmMembers, and(eq(farmMembers.farmId, farms.id), eq(farmMembers.userId, userId), notDeleted(farmMembers)))
+    .leftJoin(
+      organizationMembers,
+      and(eq(organizationMembers.organizationId, farms.organizationId), eq(organizationMembers.userId, userId), notDeleted(organizationMembers)),
+    )
+    .where(and(isUuid(key) ? eq(farms.id, key) : eq(farms.slug, key.toLowerCase()), notDeleted(farms)))
     .limit(1);
   const member = row && effectiveMember(row.farm.id, userId, row.member, row.orgRole);
   if (!row || !member) return undefined;
@@ -62,6 +71,32 @@ export async function findMembership(key: string, userId: string) {
   });
   const gate = await gateOf(row.farm);
   return { farm: row.farm, member, orgRole: row.orgRole, granted, gate, permissions: gatePermissions(granted, gate) };
+}
+
+/**
+ * Adds someone to a farm team. A member removed earlier still has their (deleted)
+ * row — it is brought back with the new role. Someone already on the team is left as is.
+ */
+export async function addMember(
+  executor: Tx | typeof db,
+  values: { farmId: string; userId: string; role: FarmRole; customRoleId?: string | null; title?: string | null; lastAccessedAt?: Date | null },
+) {
+  await executor
+    .insert(farmMembers)
+    .values(values)
+    .onConflictDoUpdate({
+      target: [farmMembers.farmId, farmMembers.userId],
+      set: {
+        role: values.role,
+        customRoleId: values.customRoleId ?? null,
+        title: values.title ?? null,
+        permissionOverrides: {},
+        lastAccessedAt: values.lastAccessedAt ?? null,
+        createdAt: new Date(),
+        ...revived(),
+      },
+      setWhere: isNotNull(farmMembers.deletedAt),
+    });
 }
 
 /** Remembers the most recently used farm (at most once every 5 minutes). */
@@ -90,7 +125,7 @@ export async function listMembers(farmId: string) {
     .from(farmMembers)
     .innerJoin(users, eq(users.id, farmMembers.userId))
     .leftJoin(farmCustomRoles, eq(farmCustomRoles.id, farmMembers.customRoleId))
-    .where(eq(farmMembers.farmId, farmId))
+    .where(and(eq(farmMembers.farmId, farmId), notDeleted(farmMembers)))
     .orderBy(sql`case ${farmMembers.role} when 'owner' then 0 when 'manager' then 1 else 2 end`, asc(farmMembers.createdAt));
   return rows.map(({ customRoleId, customRoleName, ...r }) => ({
     ...r,
@@ -128,7 +163,7 @@ async function getMember(farmId: string, userId: string) {
   const [m] = await db
     .select()
     .from(farmMembers)
-    .where(and(eq(farmMembers.farmId, farmId), eq(farmMembers.userId, userId)))
+    .where(and(eq(farmMembers.farmId, farmId), eq(farmMembers.userId, userId), notDeleted(farmMembers)))
     .limit(1);
   return m;
 }
@@ -137,7 +172,7 @@ async function ownerCount(farmId: string) {
   const [row] = await db
     .select({ value: count() })
     .from(farmMembers)
-    .where(and(eq(farmMembers.farmId, farmId), eq(farmMembers.role, 'owner')));
+    .where(and(eq(farmMembers.farmId, farmId), eq(farmMembers.role, 'owner'), notDeleted(farmMembers)));
   return row?.value ?? 0;
 }
 
@@ -187,7 +222,10 @@ export async function removeMember(farmId: string, actor: PermissionActor, targe
   if (target.role === 'owner' && (await ownerCount(farmId)) <= 1) {
     throw badRequest('Make someone else an owner first — every farm needs an owner', 'LAST_OWNER');
   }
-  await db.delete(farmMembers).where(and(eq(farmMembers.farmId, farmId), eq(farmMembers.userId, targetUserId)));
+  await db
+    .update(farmMembers)
+    .set(softDeleted())
+    .where(and(eq(farmMembers.farmId, farmId), eq(farmMembers.userId, targetUserId)));
 }
 
 /** Replaces a member's allow/deny overrides (keys left out inherit the role). */
@@ -208,6 +246,14 @@ export async function setMemberOverrides(farmId: string, actor: PermissionActor,
   return { changed };
 }
 
+/** A deleted user leaves every farm team (their member rows are marked deleted). */
+export async function leaveAllFarms(userId: string) {
+  await db
+    .update(farmMembers)
+    .set(softDeleted())
+    .where(and(eq(farmMembers.userId, userId), notDeleted(farmMembers)));
+}
+
 /**
  * Before a user is deleted: farms they solely own pass to the longest-standing
  * manager (else any member), or are deleted when nobody is left.
@@ -218,12 +264,12 @@ export async function handleUserDeletion(userId: string): Promise<string[]> {
   const owned = await db
     .select({ farmId: farmMembers.farmId })
     .from(farmMembers)
-    .where(and(eq(farmMembers.userId, userId), eq(farmMembers.role, 'owner')));
+    .where(and(eq(farmMembers.userId, userId), eq(farmMembers.role, 'owner'), notDeleted(farmMembers)));
   for (const { farmId } of owned) {
     const others = await db
       .select()
       .from(farmMembers)
-      .where(and(eq(farmMembers.farmId, farmId), ne(farmMembers.userId, userId)))
+      .where(and(eq(farmMembers.farmId, farmId), ne(farmMembers.userId, userId), notDeleted(farmMembers)))
       .orderBy(asc(farmMembers.createdAt));
     if (others.some((m) => m.role === 'owner')) continue;
     const heir = others.find((m) => m.role === 'manager') ?? others[0];

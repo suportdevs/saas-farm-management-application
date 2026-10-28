@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import {
   cleanPlatformPermissions,
   isStaffRole,
@@ -9,6 +9,7 @@ import {
 } from '@kit/shared';
 import { db } from '../db/client';
 import { platformRoles, type User } from '../db/schema';
+import { notDeleted } from '../db/soft-delete';
 
 export interface StaffAccess {
   /** Staff role key: built-in (super_admin…) or a custom platform_roles key. */
@@ -26,7 +27,11 @@ export async function resolveStaff(user: Pick<User, 'role' | 'staffRole'>): Prom
   const key = staffRoleOf(user);
   if (!key) return null;
   if (isStaffRole(key)) return { key, name: STAFF_ROLE_INFO[key].label, permissions: systemStaffPermissions(key) };
-  const [row] = await db.select().from(platformRoles).where(eq(platformRoles.key, key)).limit(1);
+  const [row] = await db
+    .select()
+    .from(platformRoles)
+    .where(and(eq(platformRoles.key, key), notDeleted(platformRoles)))
+    .limit(1);
   return row ? { key, name: row.name, permissions: cleanPlatformPermissions(row.permissions) } : { key, name: key, permissions: [] };
 }
 

@@ -1,4 +1,7 @@
-import { defineModule } from '../../core';
+import { and, eq } from 'drizzle-orm';
+import { db, defineModule, notDeleted, softDeleted } from '../../core';
+import { farmExtensions } from '../farms';
+import { brands, categories, colors, products, productSizes, sizes, units } from './models';
 import { router } from './routes/catalog.routes';
 
 /**
@@ -26,4 +29,15 @@ export default defineModule({
   // Farm-scoped: /api/farms/:farm/products…
   basePath: 'farms',
   router,
+  setup() {
+    // A deleted farm's catalog is marked deleted with it (rows are kept).
+    farmExtensions.onDeleting(async (farm) => {
+      const deleted = softDeleted();
+      await db.transaction(async (tx) => {
+        for (const table of [productSizes, products, categories, brands, units, sizes, colors]) {
+          await tx.update(table).set(deleted).where(and(eq(table.tenantId, farm.id), notDeleted(table)));
+        }
+      });
+    });
+  },
 });

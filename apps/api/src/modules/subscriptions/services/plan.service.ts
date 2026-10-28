@@ -1,4 +1,4 @@
-import { asc, count, eq } from 'drizzle-orm';
+import { and, asc, count, eq } from 'drizzle-orm';
 import {
   CAPABILITIES,
   DEFAULT_PLAN_LIST,
@@ -13,7 +13,7 @@ import {
   type PublicPlan,
   type UpdatePlanData,
 } from '@kit/shared';
-import { badRequest, conflict, db, logger, notFound, type User } from '../../../core';
+import { badRequest, conflict, db, logger, notDeleted, notFound, softDeleted, type User } from '../../../core';
 import { billingEnabled, config, envStripePrices } from '../config';
 import { farmSubscriptions, manualInvoices, plans, type PlanRow } from '../models';
 
@@ -46,7 +46,7 @@ const toPlan = (row: PlanRow): Plan => ({
 });
 
 export async function loadPlans() {
-  const rows = await db.select().from(plans).orderBy(asc(plans.sortOrder), asc(plans.name));
+  const rows = await db.select().from(plans).where(notDeleted(plans)).orderBy(asc(plans.sortOrder), asc(plans.name));
   cache = new Map(rows.map((r) => [r.id, r]));
   loaded = true;
   if (!cache.has(FREE_PLAN_ID)) logger.warn('The "free" plan is missing from the plans table — run the migrations');
@@ -128,7 +128,11 @@ export function publicPlans(): PublicPlan[] {
 const lockOf = (id: PlanId): AdminPlan['locked'] => (id === FREE_PLAN_ID ? 'free' : id === trialPlan() ? 'trial' : null);
 
 async function subscriberCounts(): Promise<Map<string, number>> {
-  const rows = await db.select({ plan: farmSubscriptions.plan, total: count() }).from(farmSubscriptions).groupBy(farmSubscriptions.plan);
+  const rows = await db
+    .select({ plan: farmSubscriptions.plan, total: count() })
+    .from(farmSubscriptions)
+    .where(notDeleted(farmSubscriptions))
+    .groupBy(farmSubscriptions.plan);
   return new Map(rows.map((r) => [r.plan, r.total]));
 }
 
@@ -142,12 +146,19 @@ const toAdminPlan = (row: PlanRow, counts: Map<string, number>): AdminPlan => ({
 });
 
 export async function listAdminPlans(): Promise<AdminPlan[]> {
-  const [rows, counts] = await Promise.all([db.select().from(plans).orderBy(asc(plans.sortOrder), asc(plans.name)), subscriberCounts()]);
+  const [rows, counts] = await Promise.all([
+    db.select().from(plans).where(notDeleted(plans)).orderBy(asc(plans.sortOrder), asc(plans.name)),
+    subscriberCounts(),
+  ]);
   return rows.map((r) => toAdminPlan(r, counts));
 }
 
 async function findRow(id: string): Promise<PlanRow> {
-  const [row] = await db.select().from(plans).where(eq(plans.id, id)).limit(1);
+  const [row] = await db
+    .select()
+    .from(plans)
+    .where(and(eq(plans.id, id), notDeleted(plans)))
+    .limit(1);
   if (!row) throw notFound('Plan not found', 'PLAN_NOT_FOUND');
   return row;
 }
@@ -189,8 +200,11 @@ function assertValid(id: PlanId, plan: PlanRow) {
 }
 
 export async function createPlan(actor: User, input: CreatePlanData): Promise<AdminPlan> {
-  const [existing] = await db.select({ id: plans.id }).from(plans).where(eq(plans.id, input.id)).limit(1);
-  if (existing) throw conflict('A plan with that code already exists', 'PLAN_EXISTS');
+  // Deleted plans keep their code (old invoices may mention it), so it can't be reused.
+  const [existing] = await db.select({ id: plans.id, deletedAt: plans.deletedAt }).from(plans).where(eq(plans.id, input.id)).limit(1);
+  if (existing) {
+    throw conflict(existing.deletedAt ? 'A deleted plan used that code. Choose another code.' : 'A plan with that code already exists', 'PLAN_EXISTS');
+  }
   const values = { id: input.id, ...valuesOf(input), name: input.name, limits: input.limits, updatedById: actor.id };
   assertValid(input.id, { priceMonth: null, priceYear: null, selfServe: false, custom: false, ...values } as PlanRow);
   const [row] = await db.insert(plans).values(values).returning();
@@ -225,18 +239,24 @@ export async function setArchived(actor: User, id: string, archived: boolean): P
   return getAdminPlan(id);
 }
 
-/** Deletes a plan nobody has ever used; otherwise archive it. */
+/** Deletes (soft) a plan nobody uses; otherwise archive it. */
 export async function deletePlan(id: string): Promise<PlanRow> {
   const row = await findRow(id);
   if (lockOf(id)) throw badRequest('This plan can’t be deleted', 'PLAN_LOCKED');
   const [[subs], [invoices]] = await Promise.all([
-    db.select({ total: count() }).from(farmSubscriptions).where(eq(farmSubscriptions.plan, id)),
-    db.select({ total: count() }).from(manualInvoices).where(eq(manualInvoices.planId, id)),
+    db
+      .select({ total: count() })
+      .from(farmSubscriptions)
+      .where(and(eq(farmSubscriptions.plan, id), notDeleted(farmSubscriptions))),
+    db
+      .select({ total: count() })
+      .from(manualInvoices)
+      .where(and(eq(manualInvoices.planId, id), notDeleted(manualInvoices))),
   ]);
   if ((subs?.total ?? 0) + (invoices?.total ?? 0) > 0) {
     throw conflict('Farms or invoices use this plan. Archive it instead.', 'PLAN_IN_USE');
   }
-  await db.delete(plans).where(eq(plans.id, id));
+  await db.update(plans).set(softDeleted()).where(eq(plans.id, id));
   await loadPlans();
   return row;
 }

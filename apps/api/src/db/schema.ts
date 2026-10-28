@@ -1,4 +1,4 @@
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 import {
   boolean,
   index,
@@ -8,11 +8,43 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
   varchar,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
+import { currentRequest } from '../core/context';
 
 // NOTE: keep imports in schema files relative (no "@/" aliases) — drizzle-kit loads them directly.
+
+/** The signed-in user of the request being handled; null in jobs, scripts and sign-up. */
+export const currentUserId = (): string | null => currentRequest()?.auth?.user.id ?? null;
+
+/** currentUserId() for column defaults: SQL NULL when nobody is signed in. */
+const byCurrentUser = () => currentUserId() ?? sql`null`;
+
+const userRef = (column: string) => uuid(column).references((): AnyPgColumn => users.id, { onDelete: 'set null' });
+
+/**
+ * Audit columns of every business table (project rule).
+ * Rows are never removed: deleting sets deleted_at / deleted_by (see db/soft-delete.ts),
+ * and queries skip rows where deleted_at is set.
+ * created_by / updated_by are filled from the signed-in user of the current request.
+ */
+export const auditColumns = () => ({
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  createdBy: userRef('created_by').$defaultFn(byCurrentUser),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+  updatedBy: userRef('updated_by').$defaultFn(byCurrentUser).$onUpdate(byCurrentUser),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  deletedBy: userRef('deleted_by'),
+});
+
+/** For unique indexes that only apply to rows that are not deleted. */
+export const notDeletedRows = sql`deleted_at is null`;
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -24,34 +56,43 @@ const timestamps = {
 
 export const userRole = pgEnum('user_role', ['user', 'admin']);
 
-export const users = pgTable('users', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  email: varchar('email', { length: 254 }).notNull().unique(),
-  name: varchar('name', { length: 100 }).notNull(),
-  // Null for accounts created through social login until a password is set.
-  passwordHash: text('password_hash'),
-  image: text('image'),
-  role: userRole('role').notNull().default('user'),
-  // Platform staff role key for admins: built-in (super_admin, support, billing, analyst) or a platform_roles key; null = super admin.
-  staffRole: varchar('staff_role', { length: 40 }),
-  emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
-  // Suspended accounts cannot sign in and all their sessions are revoked.
-  bannedAt: timestamp('banned_at', { withTimezone: true }),
-  bannedReason: varchar('banned_reason', { length: 500 }),
-  lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
-  ...timestamps,
-});
+export const users = pgTable(
+  'users',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    // Unique among accounts that are not deleted (see the index below).
+    email: varchar('email', { length: 254 }).notNull(),
+    name: varchar('name', { length: 100 }).notNull(),
+    // Null for accounts created through social login until a password is set.
+    passwordHash: text('password_hash'),
+    image: text('image'),
+    role: userRole('role').notNull().default('user'),
+    // Platform staff role key for admins: built-in (super_admin, support, billing, analyst) or a platform_roles key; null = super admin.
+    staffRole: varchar('staff_role', { length: 40 }),
+    emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
+    // Suspended accounts cannot sign in and all their sessions are revoked.
+    bannedAt: timestamp('banned_at', { withTimezone: true }),
+    bannedReason: varchar('banned_reason', { length: 500 }),
+    lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
+    ...auditColumns(),
+  },
+  (t) => [uniqueIndex('users_email_active_unique').on(t.email).where(notDeletedRows)],
+);
 
 /** Custom platform staff roles created by super admins (built-in ones live in code). */
-export const platformRoles = pgTable('platform_roles', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  key: varchar('key', { length: 40 }).notNull().unique(),
-  name: varchar('name', { length: 60 }).notNull(),
-  description: varchar('description', { length: 255 }),
-  permissions: jsonb('permissions').$type<string[]>().notNull().default([]),
-  createdById: uuid('created_by_id').references(() => users.id, { onDelete: 'set null' }),
-  ...timestamps,
-});
+export const platformRoles = pgTable(
+  'platform_roles',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    key: varchar('key', { length: 40 }).notNull(),
+    name: varchar('name', { length: 60 }).notNull(),
+    description: varchar('description', { length: 255 }),
+    permissions: jsonb('permissions').$type<string[]>().notNull().default([]),
+    createdById: uuid('created_by_id').references(() => users.id, { onDelete: 'set null' }),
+    ...auditColumns(),
+  },
+  (t) => [uniqueIndex('platform_roles_key_active_unique').on(t.key).where(notDeletedRows)],
+);
 
 export const sessions = pgTable(
   'sessions',

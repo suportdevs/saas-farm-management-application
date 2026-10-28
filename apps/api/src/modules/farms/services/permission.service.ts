@@ -12,7 +12,7 @@ import {
   type Permission,
   type PermissionOverrides,
 } from '@kit/shared';
-import { badRequest, db } from '../../../core';
+import { badRequest, db, notDeleted, revived, softDeleted } from '../../../core';
 import { farmMembers, farmRolePermissions, type Farm } from '../models';
 import { farmExtensions } from './farm.extensions';
 import { assertMayChange, listCustomRoles, type PermissionActor } from './role.service';
@@ -25,7 +25,10 @@ export async function gateOf(farm: Farm): Promise<ModuleGate> {
 
 /** The farm's role overrides, per role ({} for roles on their defaults). */
 export async function roleOverridesOf(farmId: string): Promise<Record<FarmRole, PermissionOverrides>> {
-  const rows = await db.select().from(farmRolePermissions).where(eq(farmRolePermissions.farmId, farmId));
+  const rows = await db
+    .select()
+    .from(farmRolePermissions)
+    .where(and(eq(farmRolePermissions.farmId, farmId), notDeleted(farmRolePermissions)));
   const byRole = Object.fromEntries(FARM_ROLES.map((r) => [r, {}])) as Record<FarmRole, PermissionOverrides>;
   for (const row of rows) byRole[row.role] = cleanOverrides(row.overrides);
   return byRole;
@@ -38,7 +41,7 @@ export async function getFarmPermissions(farmId: string): Promise<FarmPermission
     db
       .select({ userId: farmMembers.userId, role: farmMembers.role, customRoleId: farmMembers.customRoleId, overrides: farmMembers.permissionOverrides })
       .from(farmMembers)
-      .where(eq(farmMembers.farmId, farmId)),
+      .where(and(eq(farmMembers.farmId, farmId), notDeleted(farmMembers))),
   ]);
   const byId = new Map(customRoles.map((r) => [r.id, r]));
   return {
@@ -74,12 +77,17 @@ export async function setRolePermissions(farmId: string, actor: PermissionActor,
   assertMayChange(actor, changed);
   const overrides = diffFromDefaults(role, [...target]);
   if (Object.keys(overrides).length === 0) {
-    await db.delete(farmRolePermissions).where(and(eq(farmRolePermissions.farmId, farmId), eq(farmRolePermissions.role, role)));
+    // Back on the defaults: the stored changes are marked deleted.
+    await db
+      .update(farmRolePermissions)
+      .set(softDeleted())
+      .where(and(eq(farmRolePermissions.farmId, farmId), eq(farmRolePermissions.role, role), notDeleted(farmRolePermissions)));
   } else {
     await db
       .insert(farmRolePermissions)
       .values({ farmId, role, overrides, updatedById: actor.userId })
-      .onConflictDoUpdate({ target: [farmRolePermissions.farmId, farmRolePermissions.role], set: { overrides, updatedById: actor.userId } });
+      // Same farm + role key: update it (and bring it back if it was reset).
+      .onConflictDoUpdate({ target: [farmRolePermissions.farmId, farmRolePermissions.role], set: { overrides, updatedById: actor.userId, ...revived() } });
   }
   return { changed };
 }

@@ -18,6 +18,7 @@ export { encrypt, decrypt, randomToken, sha256, safeEqual, sign } from '../lib/c
 export { escapeLike, isUuid } from '../lib/text';
 export { hashPassword, verifyPassword } from '../lib/password';
 export { db } from '../db/client';
+export { notDeleted, revived, softDeleted } from '../db/soft-delete';
 export { users, sessions } from '../db/schema';
 export type { User, Session } from '../db/schema';
 export { env, isProd, parseModuleEnv } from '../config/env';

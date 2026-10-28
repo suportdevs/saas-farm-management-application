@@ -1,7 +1,8 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { Impersonator, RegisterInput } from '@kit/shared';
 import { db } from '../../../db/client';
 import { users, type User } from '../../../db/schema';
+import { notDeleted } from '../../../db/soft-delete';
 import { onAccountActivated } from '../../../core/accounts';
 import { hooks } from '../../../core/hooks';
 import { env } from '../../../config/env';
@@ -18,8 +19,9 @@ import {
 
 const HOUR = 60 * 60 * 1000;
 
+/** An account (not deleted) by email. */
 export function findUserByEmail(email: string) {
-  return db.query.users.findFirst({ where: eq(users.email, email.toLowerCase()) });
+  return db.query.users.findFirst({ where: and(eq(users.email, email.toLowerCase()), notDeleted(users)) });
 }
 
 export async function registerUser(input: RegisterInput): Promise<User> {
@@ -70,7 +72,8 @@ export async function requestPasswordReset(email: string) {
 export async function resetPassword(token: string, password: string): Promise<string | null> {
   const userId = await consumeToken(token, 'password_reset');
   if (!userId) return null;
-  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  const user = await db.query.users.findFirst({ where: and(eq(users.id, userId), notDeleted(users)) });
+  if (!user) return null;
   await db
     .update(users)
     .set({
@@ -98,7 +101,7 @@ export async function confirmEmailChange(token: string): Promise<{ userId: strin
   const result = await consumeTokenData(token, 'email_change');
   const email = typeof result?.data.email === 'string' ? result.data.email : null;
   if (!result || !email) return null;
-  const user = await db.query.users.findFirst({ where: eq(users.id, result.userId) });
+  const user = await db.query.users.findFirst({ where: and(eq(users.id, result.userId), notDeleted(users)) });
   if (!user) return null;
   if (await findUserByEmail(email)) throw conflict('An account with this email already exists', 'EMAIL_TAKEN');
   // Clicking the link proves ownership of the new inbox.

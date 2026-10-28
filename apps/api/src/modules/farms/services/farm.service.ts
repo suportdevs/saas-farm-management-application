@@ -15,12 +15,12 @@ import {
   type OrgRole,
   type UnitSystem,
 } from '@kit/shared';
-import { badRequest, conflict, db, forbidden, isUuid, notFound, randomToken, users, type User } from '../../../core';
+import { badRequest, conflict, db, forbidden, isUuid, notDeleted, notFound, randomToken, softDeleted, users, type User } from '../../../core';
 import { config } from '../config';
-import { farmCustomRoles, farmMembers, farmRolePermissions, farms, organizationMembers, organizations, type Farm, type FarmMemberRow } from '../models';
+import { farmCustomRoles, farmInvitations, farmMembers, farmRolePermissions, farms, organizationMembers, organizations, type Farm, type FarmMemberRow } from '../models';
 import { farmExtensions } from './farm.extensions';
 import { inviteOwner, seatCount } from './invitation.service';
-import { effectiveMember } from './member.service';
+import { addMember, effectiveMember } from './member.service';
 import { createClientOrganization, findOrganization, organizationForNewFarm } from './organization.service';
 import { gateOf, roleOverridesOf } from './permission.service';
 import { customRoleRef, listCustomRoles } from './role.service';
@@ -129,7 +129,11 @@ export function slugify(name: string): string {
 }
 
 async function slugTaken(slug: string): Promise<boolean> {
-  const [row] = await db.select({ id: farms.id }).from(farms).where(eq(farms.slug, slug)).limit(1);
+  const [row] = await db
+    .select({ id: farms.id })
+    .from(farms)
+    .where(and(eq(farms.slug, slug), notDeleted(farms)))
+    .limit(1);
   return Boolean(row);
 }
 
@@ -147,19 +151,25 @@ export async function listUserFarms(userId: string): Promise<FarmSummary[]> {
   const memberCount = db
     .select({ farmId: farmMembers.farmId, total: count().as('total') })
     .from(farmMembers)
+    .where(notDeleted(farmMembers))
     .groupBy(farmMembers.farmId)
     .as('member_count');
   const rows = await db
     .select({ farm: farms, member: farmMembers, orgRole: organizationMembers.role, orgName: organizations.name, members: memberCount.total })
     .from(farms)
     .innerJoin(organizations, eq(organizations.id, farms.organizationId))
-    .leftJoin(farmMembers, and(eq(farmMembers.farmId, farms.id), eq(farmMembers.userId, userId)))
+    .leftJoin(farmMembers, and(eq(farmMembers.farmId, farms.id), eq(farmMembers.userId, userId), notDeleted(farmMembers)))
     .leftJoin(
       organizationMembers,
-      and(eq(organizationMembers.organizationId, farms.organizationId), eq(organizationMembers.userId, userId), inArray(organizationMembers.role, ['owner', 'admin'])),
+      and(
+        eq(organizationMembers.organizationId, farms.organizationId),
+        eq(organizationMembers.userId, userId),
+        inArray(organizationMembers.role, ['owner', 'admin']),
+        notDeleted(organizationMembers),
+      ),
     )
     .leftJoin(memberCount, eq(memberCount.farmId, farms.id))
-    .where(or(isNotNull(farmMembers.userId), isNotNull(organizationMembers.userId)))
+    .where(and(notDeleted(farms), or(isNotNull(farmMembers.userId), isNotNull(organizationMembers.userId))))
     .orderBy(sql`${farmMembers.lastAccessedAt} desc nulls last`, asc(farms.name));
 
   const ids = rows.map((r) => r.farm.id);
@@ -167,7 +177,7 @@ export async function listUserFarms(userId: string): Promise<FarmSummary[]> {
   const [extra, capabilities, roleRows, customRoles] = await Promise.all([
     farmExtensions.summaries(ids),
     farmExtensions.capabilities(ids),
-    ids.length ? db.select().from(farmRolePermissions).where(inArray(farmRolePermissions.farmId, ids)) : [],
+    ids.length ? db.select().from(farmRolePermissions).where(and(inArray(farmRolePermissions.farmId, ids), notDeleted(farmRolePermissions))) : [],
     customRoleIds.length ? db.select().from(farmCustomRoles).where(inArray(farmCustomRoles.id, customRoleIds)) : [],
   ]);
   const roleOverrides = (farmId: string, role: string) => roleRows.find((r) => r.farmId === farmId && r.role === role)?.overrides;
@@ -203,7 +213,7 @@ export async function createFarm(user: User, input: CreateFarmData) {
   const [owned] = await db
     .select({ value: count() })
     .from(farmMembers)
-    .where(and(eq(farmMembers.userId, user.id), eq(farmMembers.role, 'owner')));
+    .where(and(eq(farmMembers.userId, user.id), eq(farmMembers.role, 'owner'), notDeleted(farmMembers)));
   if ((owned?.value ?? 0) >= config.FARM_MAX_OWNED) {
     throw forbidden(`You can own up to ${config.FARM_MAX_OWNED} farms. Contact us to raise this limit.`, 'FARM_LIMIT');
   }
@@ -211,7 +221,7 @@ export async function createFarm(user: User, input: CreateFarmData) {
   return db.transaction(async (tx) => {
     const org = await organizationForNewFarm(user, input.organizationId, input.name, tx);
     const [farm] = await tx.insert(farms).values({ ...farmValues(input, slug, user.id), organizationId: org.id }).returning();
-    await tx.insert(farmMembers).values({ farmId: farm!.id, userId: user.id, role: 'owner', lastAccessedAt: new Date() });
+    await addMember(tx, { farmId: farm!.id, userId: user.id, role: 'owner', lastAccessedAt: new Date() });
     await farmExtensions.created(farm!, tx);
     return farm!;
   });
@@ -243,7 +253,7 @@ const farmValues = (input: CreateFarmData, slug: string, createdById: string) =>
  * email (the farm has no members until they accept). Farm-owning limits don't apply.
  */
 export async function createFarmForClient(staff: User, input: CreateFarmData & { ownerEmail: string; organizationName?: string }) {
-  const owner = await db.query.users.findFirst({ where: eq(users.email, input.ownerEmail) });
+  const owner = await db.query.users.findFirst({ where: and(eq(users.email, input.ownerEmail), notDeleted(users)) });
   const existingOrg = input.organizationId ? await findOrganization(input.organizationId) : undefined;
   if (input.organizationId && !existingOrg) throw notFound('Organization not found', 'ORGANIZATION_NOT_FOUND');
   const slug = await uniqueSlug(input.name);
@@ -251,7 +261,7 @@ export async function createFarmForClient(staff: User, input: CreateFarmData & {
     // A new client gets a new organization; the owner joins it now, or when they accept the invitation.
     const org = existingOrg ?? (await createClientOrganization(staff, input.organizationName || input.name, owner ?? null, tx));
     const [farm] = await tx.insert(farms).values({ ...farmValues(input, slug, staff.id), organizationId: org.id }).returning();
-    if (owner) await tx.insert(farmMembers).values({ farmId: farm!.id, userId: owner.id, role: 'owner', title: 'Farm owner' });
+    if (owner) await addMember(tx, { farmId: farm!.id, userId: owner.id, role: 'owner', title: 'Farm owner' });
     await farmExtensions.created(farm!, tx);
     return farm!;
   });
@@ -261,7 +271,11 @@ export async function createFarmForClient(staff: User, input: CreateFarmData & {
 
 export async function findFarm(id: string) {
   if (!isUuid(id)) return undefined;
-  const [farm] = await db.select().from(farms).where(eq(farms.id, id)).limit(1);
+  const [farm] = await db
+    .select()
+    .from(farms)
+    .where(and(eq(farms.id, id), notDeleted(farms)))
+    .limit(1);
   return farm;
 }
 
@@ -275,10 +289,20 @@ export async function updateFarm(farm: Farm, patch: Partial<typeof farms.$inferI
   return updated!;
 }
 
-/** Deletes a farm and everything in it (other modules clean up first, e.g. cancel billing). */
+/**
+ * Deletes a farm (soft): the farm and its team, invitations and roles are marked
+ * deleted together, with the same time. Other modules handle their own rows first
+ * (cancel billing, mark their data deleted) through farmExtensions.onDeleting.
+ */
 export async function deleteFarm(farm: Farm) {
   await farmExtensions.deleting(farm);
-  await db.delete(farms).where(eq(farms.id, farm.id));
+  const deleted = softDeleted();
+  await db.transaction(async (tx) => {
+    for (const table of [farmMembers, farmInvitations, farmCustomRoles, farmRolePermissions]) {
+      await tx.update(table).set(deleted).where(and(eq(table.farmId, farm.id), notDeleted(table)));
+    }
+    await tx.update(farms).set(deleted).where(eq(farms.id, farm.id));
+  });
 }
 
 /** Suspends (reason) or restores (null) a farm. Suspended farms are read-blocked in requireFarm. */

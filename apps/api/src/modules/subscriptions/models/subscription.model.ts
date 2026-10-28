@@ -1,4 +1,5 @@
 import { boolean, jsonb, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { auditColumns } from '../../../db/schema';
 import { farms } from '../../farms/models/farm.model';
 
 // NOTE: keep imports in model files relative — drizzle-kit loads them directly.
@@ -28,11 +29,8 @@ export const farmSubscriptions = pgTable('farm_subscriptions', {
   capabilityOverrides: jsonb('capability_overrides').$type<Record<string, boolean>>().notNull().default({}),
   /** Internal notes about the deal (contract number, contact…). */
   dealNotes: text('deal_notes'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
+  // Soft-deleted together with its farm.
+  ...auditColumns(),
 });
 
 export type FarmSubscriptionRow = typeof farmSubscriptions.$inferSelect;

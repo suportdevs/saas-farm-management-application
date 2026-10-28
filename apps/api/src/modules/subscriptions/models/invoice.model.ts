@@ -1,5 +1,5 @@
 import { date, index, integer, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
-import { users } from '../../../db/schema';
+import { auditColumns, users } from '../../../db/schema';
 import { farms } from '../../farms/models/farm.model';
 
 // NOTE: keep imports in model files relative — drizzle-kit loads them directly.
@@ -30,11 +30,8 @@ export const manualInvoices = pgTable(
     paidAt: timestamp('paid_at', { withTimezone: true }),
     voidedAt: timestamp('voided_at', { withTimezone: true }),
     createdById: uuid('created_by_id').references(() => users.id, { onDelete: 'set null' }),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp('updated_at', { withTimezone: true })
-      .notNull()
-      .defaultNow()
-      .$onUpdate(() => new Date()),
+    // Soft-deleted together with its farm. Numbers are never reused.
+    ...auditColumns(),
   },
   (t) => [index('manual_invoices_farm_idx').on(t.farmId), index('manual_invoices_due_idx').on(t.dueAt)],
 );
@@ -53,7 +50,8 @@ export const manualPayments = pgTable(
     paidAt: date('paid_at').notNull(),
     notes: text('notes'),
     recordedById: uuid('recorded_by_id').references(() => users.id, { onDelete: 'set null' }),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    // "Delete payment" (recorded by mistake) soft-deletes it.
+    ...auditColumns(),
   },
   (t) => [index('manual_payments_invoice_idx').on(t.invoiceId)],
 );

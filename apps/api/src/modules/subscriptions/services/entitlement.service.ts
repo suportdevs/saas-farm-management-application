@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import {
   CAPABILITIES,
   FREE_PLAN_ID,
@@ -9,7 +9,7 @@ import {
   type PlanLimits,
   type SubscriptionSnapshot,
 } from '@kit/shared';
-import { AppError, db } from '../../../core';
+import { AppError, db, notDeleted } from '../../../core';
 import { farmSubscriptions, type FarmSubscriptionRow } from '../models';
 import { getPlan, planExists, trialPlan } from './plan.service';
 
@@ -58,13 +58,20 @@ export function subscriptionOf(row: Row, now = new Date()): FarmSubscription {
 }
 
 export async function findSubscription(farmId: string): Promise<Row> {
-  const [row] = await db.select().from(farmSubscriptions).where(eq(farmSubscriptions.farmId, farmId)).limit(1);
+  const [row] = await db
+    .select()
+    .from(farmSubscriptions)
+    .where(and(eq(farmSubscriptions.farmId, farmId), notDeleted(farmSubscriptions)))
+    .limit(1);
   return row;
 }
 
 export async function findSubscriptions(farmIds: string[]): Promise<Map<string, FarmSubscriptionRow>> {
   if (!farmIds.length) return new Map();
-  const rows = await db.select().from(farmSubscriptions).where(inArray(farmSubscriptions.farmId, farmIds));
+  const rows = await db
+    .select()
+    .from(farmSubscriptions)
+    .where(and(inArray(farmSubscriptions.farmId, farmIds), notDeleted(farmSubscriptions)));
   return new Map(rows.map((r) => [r.farmId, r]));
 }
 

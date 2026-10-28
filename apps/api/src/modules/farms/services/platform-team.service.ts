@@ -1,9 +1,10 @@
 import { and, eq, ne } from 'drizzle-orm';
 import { PERMISSIONS, type FarmRole } from '@kit/shared';
-import { conflict, db, isUuid, notFound, users, type User } from '../../../core';
+import { conflict, db, isUuid, notDeleted, notFound, softDeleted, users, type User } from '../../../core';
 import { farmInvitations, farmMembers, farms, type Farm } from '../models';
 import { farmExtensions } from './farm.extensions';
 import { invite, seatCount } from './invitation.service';
+import { addMember } from './member.service';
 import { findOrganization } from './organization.service';
 import type { PermissionActor } from './role.service';
 
@@ -15,7 +16,7 @@ export const platformActor = (staff: User): PermissionActor => ({ userId: staff.
 
 /** Adds someone to the farm: an existing account joins straight away, anyone else gets an invitation. */
 export async function addMemberAsPlatform(farm: Farm, staff: User, email: string, role: FarmRole) {
-  const user = await db.query.users.findFirst({ where: eq(users.email, email) });
+  const user = await db.query.users.findFirst({ where: and(eq(users.email, email), notDeleted(users)) });
   if (!user) {
     await invite(farm, staff, platformActor(staff), { email, role });
     return { invited: true as const, userId: null };
@@ -23,14 +24,17 @@ export async function addMemberAsPlatform(farm: Farm, staff: User, email: string
   const [existing] = await db
     .select({ userId: farmMembers.userId })
     .from(farmMembers)
-    .where(and(eq(farmMembers.farmId, farm.id), eq(farmMembers.userId, user.id)))
+    .where(and(eq(farmMembers.farmId, farm.id), eq(farmMembers.userId, user.id), notDeleted(farmMembers)))
     .limit(1);
   if (existing) throw conflict('That person is already on the team', 'ALREADY_MEMBER');
   await farmExtensions.guardSeat(farm, await seatCount(farm.id));
   await db.transaction(async (tx) => {
-    await tx.insert(farmMembers).values({ farmId: farm.id, userId: user.id, role });
+    await addMember(tx, { farmId: farm.id, userId: user.id, role });
     // A pending invitation for the same address is no longer needed.
-    await tx.delete(farmInvitations).where(and(eq(farmInvitations.farmId, farm.id), eq(farmInvitations.email, email)));
+    await tx
+      .update(farmInvitations)
+      .set(softDeleted())
+      .where(and(eq(farmInvitations.farmId, farm.id), eq(farmInvitations.email, email), notDeleted(farmInvitations)));
   });
   return { invited: false as const, userId: user.id };
 }
@@ -40,7 +44,7 @@ export async function transferOwnership(farmId: string, userId: string, keepOwne
   const [target] = await db
     .select()
     .from(farmMembers)
-    .where(and(eq(farmMembers.farmId, farmId), eq(farmMembers.userId, userId)))
+    .where(and(eq(farmMembers.farmId, farmId), eq(farmMembers.userId, userId), notDeleted(farmMembers)))
     .limit(1);
   if (!target) throw notFound('Member not found');
   await db.transaction(async (tx) => {
@@ -52,7 +56,7 @@ export async function transferOwnership(farmId: string, userId: string, keepOwne
       await tx
         .update(farmMembers)
         .set({ role: 'manager' })
-        .where(and(eq(farmMembers.farmId, farmId), eq(farmMembers.role, 'owner'), ne(farmMembers.userId, userId)));
+        .where(and(eq(farmMembers.farmId, farmId), eq(farmMembers.role, 'owner'), ne(farmMembers.userId, userId), notDeleted(farmMembers)));
     }
   });
   return { previousRole: target.role };
@@ -64,7 +68,7 @@ export async function resendInvitation(farm: Farm, staff: User, invitationId: st
   const [row] = await db
     .select()
     .from(farmInvitations)
-    .where(and(eq(farmInvitations.farmId, farm.id), eq(farmInvitations.id, invitationId)))
+    .where(and(eq(farmInvitations.farmId, farm.id), eq(farmInvitations.id, invitationId), notDeleted(farmInvitations)))
     .limit(1);
   if (!row) throw notFound('Invitation not found');
   return invite(farm, staff, platformActor(staff), { email: row.email, role: row.role, customRoleId: row.customRoleId, title: row.title });

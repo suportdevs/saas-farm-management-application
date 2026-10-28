@@ -9,7 +9,7 @@ import {
   type PlanId,
   type TenantEntitlements,
 } from '@kit/shared';
-import { badRequest, db, escapeLike, notFound, users, type User } from '../../../core';
+import { badRequest, db, escapeLike, notDeleted, notFound, softDeleted, users, type User } from '../../../core';
 import { farms, type Farm } from '../../farms';
 import { capabilityOverridesOf, findSubscription, limitOverridesOf } from './entitlement.service';
 import { farmSubscriptions, manualInvoices, manualPayments, type ManualInvoiceRow, type ManualPaymentRow } from '../models';
@@ -73,7 +73,7 @@ async function hydrate(rows: { invoice: ManualInvoiceRow; farm: { id: string; na
   const payments = await db
     .select()
     .from(manualPayments)
-    .where(inArray(manualPayments.invoiceId, rows.map((r) => r.invoice.id)))
+    .where(and(inArray(manualPayments.invoiceId, rows.map((r) => r.invoice.id)), notDeleted(manualPayments)))
     .orderBy(manualPayments.paidAt, manualPayments.createdAt);
   const userIds = [...new Set([...rows.map((r) => r.invoice.createdById), ...payments.map((p) => p.recordedById)].filter((v): v is string => !!v))];
   const names = new Map(
@@ -109,14 +109,14 @@ async function hydrate(rows: { invoice: ManualInvoiceRow; farm: { id: string; na
 const farmRef = { id: farms.id, name: farms.name, slug: farms.slug };
 
 export async function listManualInvoices(opts: { farmId?: string; q?: string; status?: InvoiceStatus; limit: number; offset: number }) {
-  const filters: SQL[] = [];
+  const filters: SQL[] = [notDeleted(manualInvoices), notDeleted(farms)];
   if (opts.farmId) filters.push(eq(manualInvoices.farmId, opts.farmId));
   if (opts.status) filters.push(statusWhere[opts.status]);
   if (opts.q) {
     const pattern = `%${escapeLike(opts.q)}%`;
     filters.push(or(ilike(manualInvoices.number, pattern), ilike(manualInvoices.description, pattern), ilike(farms.name, pattern))!);
   }
-  const where = filters.length ? and(...filters) : undefined;
+  const where = and(...filters);
   const [rows, [total]] = await Promise.all([
     db
       .select({ invoice: manualInvoices, farm: farmRef })
@@ -137,7 +137,7 @@ async function loadInvoice(farmId: string, invoiceId: string) {
     .select({ invoice: manualInvoices, farm: farmRef })
     .from(manualInvoices)
     .innerJoin(farms, eq(farms.id, manualInvoices.farmId))
-    .where(and(eq(manualInvoices.id, invoiceId), eq(manualInvoices.farmId, farmId)))
+    .where(and(eq(manualInvoices.id, invoiceId), eq(manualInvoices.farmId, farmId), notDeleted(manualInvoices)))
     .limit(1);
   if (!row) throw notFound('Invoice not found');
   return row;
@@ -145,7 +145,7 @@ async function loadInvoice(farmId: string, invoiceId: string) {
 
 export const getManualInvoice = async (farmId: string, invoiceId: string) => (await hydrate([await loadInvoice(farmId, invoiceId)]))[0]!;
 
-/** INV-<year>-<5 digits>, sequential per year. */
+/** INV-<year>-<5 digits>, sequential per year. Deleted invoices count too: a number is never reused. */
 async function nextNumber(year: number) {
   const prefix = `INV-${year}-`;
   const [row] = await db
@@ -263,12 +263,16 @@ export async function recordQuickPayment(
   }
 }
 
-/** Removes a payment recorded by mistake. The invoice reopens; plan changes stay (adjust them by hand). */
+/**
+ * Removes a payment recorded by mistake (soft: kept on record, marked deleted).
+ * The invoice reopens; plan changes stay (adjust them by hand).
+ */
 export async function deleteManualPayment(farm: Farm, invoiceId: string, paymentId: string) {
   await loadInvoice(farm.id, invoiceId);
   const [deleted] = await db
-    .delete(manualPayments)
-    .where(and(eq(manualPayments.id, paymentId), eq(manualPayments.invoiceId, invoiceId)))
+    .update(manualPayments)
+    .set(softDeleted())
+    .where(and(eq(manualPayments.id, paymentId), eq(manualPayments.invoiceId, invoiceId), notDeleted(manualPayments)))
     .returning();
   if (!deleted) throw notFound('Payment not found');
   const after = await getManualInvoice(farm.id, invoiceId);
@@ -308,7 +312,9 @@ async function listManualInvoicesFor(farmIds: string[]) {
     .select({ invoice: manualInvoices, farm: farmRef })
     .from(manualInvoices)
     .innerJoin(farms, eq(farms.id, manualInvoices.farmId))
-    .where(and(inArray(manualInvoices.farmId, farmIds), isNull(manualInvoices.voidedAt), isNull(manualInvoices.paidAt)));
+    .where(
+      and(inArray(manualInvoices.farmId, farmIds), isNull(manualInvoices.voidedAt), isNull(manualInvoices.paidAt), notDeleted(manualInvoices), notDeleted(farms)),
+    );
   return { invoices: await hydrate(rows) };
 }
 
@@ -317,7 +323,27 @@ export const unpaidFarmIds = (overdueOnly: boolean) =>
   db
     .selectDistinct({ farmId: manualInvoices.farmId })
     .from(manualInvoices)
-    .where(overdueOnly ? statusWhere.overdue : or(statusWhere.open, statusWhere.overdue));
+    .where(and(notDeleted(manualInvoices), overdueOnly ? statusWhere.overdue : or(statusWhere.open, statusWhere.overdue)));
+
+/** When a farm is deleted: its subscription, invoices and payments are marked deleted with it. */
+export async function markFarmBillingDeleted(farmId: string) {
+  const deleted = softDeleted();
+  const invoiceIds = db.select({ id: manualInvoices.id }).from(manualInvoices).where(eq(manualInvoices.farmId, farmId));
+  await db.transaction(async (tx) => {
+    await tx
+      .update(manualPayments)
+      .set(deleted)
+      .where(and(inArray(manualPayments.invoiceId, invoiceIds), notDeleted(manualPayments)));
+    await tx
+      .update(manualInvoices)
+      .set(deleted)
+      .where(and(eq(manualInvoices.farmId, farmId), notDeleted(manualInvoices)));
+    await tx
+      .update(farmSubscriptions)
+      .set(deleted)
+      .where(and(eq(farmSubscriptions.farmId, farmId), notDeleted(farmSubscriptions)));
+  });
+}
 
 /** The tenant's own billing page lists manual invoices next to Stripe ones. */
 export async function manualInvoicesForTenant(farmId: string): Promise<FarmInvoice[]> {

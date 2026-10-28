@@ -1,6 +1,6 @@
-import { and, asc, count, eq, ne, sql } from 'drizzle-orm';
+import { and, asc, count, eq, isNotNull, ne, sql } from 'drizzle-orm';
 import type { OrganizationDetail, OrganizationMember, OrganizationSummary, OrgRole } from '@kit/shared';
-import { badRequest, conflict, db, forbidden, isUuid, notFound, users, type User } from '../../../core';
+import { badRequest, conflict, db, forbidden, isUuid, notDeleted, notFound, revived, softDeleted, users, type User } from '../../../core';
 import { farmMembers, farms, organizationMembers, organizations, type Organization } from '../models';
 import { farmExtensions, type Tx } from './farm.extensions';
 
@@ -9,23 +9,29 @@ export async function orgRoleOf(organizationId: string, userId: string): Promise
   const [row] = await db
     .select({ role: organizationMembers.role })
     .from(organizationMembers)
-    .where(and(eq(organizationMembers.organizationId, organizationId), eq(organizationMembers.userId, userId)))
+    .where(and(eq(organizationMembers.organizationId, organizationId), eq(organizationMembers.userId, userId), notDeleted(organizationMembers)))
     .limit(1);
   return row?.role ?? null;
 }
 
 export async function findOrganization(id: string): Promise<Organization | undefined> {
   if (!isUuid(id)) return undefined;
-  const [org] = await db.select().from(organizations).where(eq(organizations.id, id)).limit(1);
+  const [org] = await db.select().from(organizations).where(and(eq(organizations.id, id), notDeleted(organizations))).limit(1);
   return org;
 }
 
 /** The organizations a user belongs to, with farm and member counts. */
 export async function listUserOrganizations(userId: string): Promise<OrganizationSummary[]> {
-  const farmCounts = db.select({ organizationId: farms.organizationId, total: count().as('farm_total') }).from(farms).groupBy(farms.organizationId).as('farm_counts');
+  const farmCounts = db
+    .select({ organizationId: farms.organizationId, total: count().as('farm_total') })
+    .from(farms)
+    .where(notDeleted(farms))
+    .groupBy(farms.organizationId)
+    .as('farm_counts');
   const memberCounts = db
     .select({ organizationId: organizationMembers.organizationId, total: count().as('member_total') })
     .from(organizationMembers)
+    .where(notDeleted(organizationMembers))
     .groupBy(organizationMembers.organizationId)
     .as('member_counts');
   const rows = await db
@@ -34,7 +40,7 @@ export async function listUserOrganizations(userId: string): Promise<Organizatio
     .innerJoin(organizations, eq(organizations.id, organizationMembers.organizationId))
     .leftJoin(farmCounts, eq(farmCounts.organizationId, organizations.id))
     .leftJoin(memberCounts, eq(memberCounts.organizationId, organizations.id))
-    .where(eq(organizationMembers.userId, userId))
+    .where(and(eq(organizationMembers.userId, userId), notDeleted(organizationMembers), notDeleted(organizations)))
     .orderBy(asc(organizations.name));
   return rows.map(({ org, role, farmCount, memberCount }) => ({
     id: org.id,
@@ -77,7 +83,7 @@ export async function organizationForNewFarm(user: User, organizationId: string 
     .select({ org: organizations })
     .from(organizationMembers)
     .innerJoin(organizations, eq(organizations.id, organizationMembers.organizationId))
-    .where(and(eq(organizationMembers.userId, user.id), eq(organizationMembers.role, 'owner')))
+    .where(and(eq(organizationMembers.userId, user.id), eq(organizationMembers.role, 'owner'), notDeleted(organizationMembers), notDeleted(organizations)))
     .orderBy(asc(organizationMembers.createdAt))
     .limit(1);
   return owned?.org ?? createOrganization(user, farmName, tx);
@@ -88,20 +94,25 @@ export async function listOrgMembers(organizationId: string): Promise<Organizati
     .select({ userId: users.id, name: users.name, email: users.email, image: users.image, role: organizationMembers.role, joinedAt: organizationMembers.createdAt })
     .from(organizationMembers)
     .innerJoin(users, eq(users.id, organizationMembers.userId))
-    .where(eq(organizationMembers.organizationId, organizationId))
+    .where(and(eq(organizationMembers.organizationId, organizationId), notDeleted(organizationMembers)))
     .orderBy(sql`case ${organizationMembers.role} when 'owner' then 0 when 'admin' then 1 else 2 end`, asc(organizationMembers.createdAt));
   return rows.map((r) => ({ ...r, joinedAt: r.joinedAt.toISOString() }));
 }
 
 /** The organization page: its farms (with their plans) and members. */
 export async function organizationDetail(org: Organization, role: OrgRole): Promise<OrganizationDetail> {
-  const memberCounts = db.select({ farmId: farmMembers.farmId, total: count().as('total') }).from(farmMembers).groupBy(farmMembers.farmId).as('member_counts');
+  const memberCounts = db
+    .select({ farmId: farmMembers.farmId, total: count().as('total') })
+    .from(farmMembers)
+    .where(notDeleted(farmMembers))
+    .groupBy(farmMembers.farmId)
+    .as('member_counts');
   const [farmRows, members] = await Promise.all([
     db
       .select({ farm: farms, members: memberCounts.total })
       .from(farms)
       .leftJoin(memberCounts, eq(memberCounts.farmId, farms.id))
-      .where(eq(farms.organizationId, org.id))
+      .where(and(eq(farms.organizationId, org.id), notDeleted(farms)))
       .orderBy(asc(farms.name)),
     listOrgMembers(org.id),
   ]);
@@ -133,11 +144,31 @@ export async function renameOrganization(org: Organization, name: string) {
   return updated!;
 }
 
-/** Deletes an organization that has no farms left. */
+/** Number of farms (not deleted) an organization has. */
+async function activeFarmCount(organizationId: string) {
+  const [row] = await db
+    .select({ total: count() })
+    .from(farms)
+    .where(and(eq(farms.organizationId, organizationId), notDeleted(farms)));
+  return row?.total ?? 0;
+}
+
+/** Marks an organization and its member list deleted. */
+async function softDeleteOrganization(organizationId: string) {
+  const deleted = softDeleted();
+  await db.transaction(async (tx) => {
+    await tx
+      .update(organizationMembers)
+      .set(deleted)
+      .where(and(eq(organizationMembers.organizationId, organizationId), notDeleted(organizationMembers)));
+    await tx.update(organizations).set(deleted).where(eq(organizations.id, organizationId));
+  });
+}
+
+/** Deletes (soft) an organization that has no farms left. */
 export async function deleteOrganization(org: Organization) {
-  const [row] = await db.select({ total: count() }).from(farms).where(eq(farms.organizationId, org.id));
-  if ((row?.total ?? 0) > 0) throw conflict('Move or delete the organization’s farms first', 'ORGANIZATION_HAS_FARMS');
-  await db.delete(organizations).where(eq(organizations.id, org.id));
+  if ((await activeFarmCount(org.id)) > 0) throw conflict('Move or delete the organization’s farms first', 'ORGANIZATION_HAS_FARMS');
+  await softDeleteOrganization(org.id);
 }
 
 // ─── Members ─────────────────────────────────────────────────────
@@ -146,7 +177,7 @@ async function ownerCount(organizationId: string) {
   const [row] = await db
     .select({ total: count() })
     .from(organizationMembers)
-    .where(and(eq(organizationMembers.organizationId, organizationId), eq(organizationMembers.role, 'owner')));
+    .where(and(eq(organizationMembers.organizationId, organizationId), eq(organizationMembers.role, 'owner'), notDeleted(organizationMembers)));
   return row?.total ?? 0;
 }
 
@@ -159,12 +190,17 @@ function assertMayAssign(actorRole: OrgRole, ...roles: OrgRole[]) {
 /** Adds an existing user (by email) to the organization. */
 export async function addOrgMember(organizationId: string, actorRole: OrgRole, email: string, role: OrgRole) {
   assertMayAssign(actorRole, role);
-  const user = await db.query.users.findFirst({ where: eq(users.email, email) });
+  const user = await db.query.users.findFirst({ where: and(eq(users.email, email), notDeleted(users)) });
   if (!user) throw notFound('No account uses that email yet. Ask them to sign up first, or invite them to a farm.', 'USER_NOT_FOUND');
+  // Someone removed earlier gets their row back; an active member is left as is (nothing returned).
   const [inserted] = await db
     .insert(organizationMembers)
     .values({ organizationId, userId: user.id, role })
-    .onConflictDoNothing()
+    .onConflictDoUpdate({
+      target: [organizationMembers.organizationId, organizationMembers.userId],
+      set: { role, createdAt: new Date(), ...revived() },
+      setWhere: isNotNull(organizationMembers.deletedAt),
+    })
     .returning({ userId: organizationMembers.userId });
   if (!inserted) throw conflict('That person is already in the organization', 'ALREADY_MEMBER');
   return user;
@@ -181,7 +217,7 @@ export async function updateOrgMember(organizationId: string, actor: { userId: s
   await db
     .update(organizationMembers)
     .set({ role })
-    .where(and(eq(organizationMembers.organizationId, organizationId), eq(organizationMembers.userId, targetUserId)));
+    .where(and(eq(organizationMembers.organizationId, organizationId), eq(organizationMembers.userId, targetUserId), notDeleted(organizationMembers)));
   return { from: current, to: role };
 }
 
@@ -193,7 +229,10 @@ export async function removeOrgMember(organizationId: string, actor: { userId: s
   if (current === 'owner' && (await ownerCount(organizationId)) <= 1) {
     throw badRequest('Make someone else an owner first — every organization needs an owner', 'LAST_OWNER');
   }
-  await db.delete(organizationMembers).where(and(eq(organizationMembers.organizationId, organizationId), eq(organizationMembers.userId, targetUserId)));
+  await db
+    .update(organizationMembers)
+    .set(softDeleted())
+    .where(and(eq(organizationMembers.organizationId, organizationId), eq(organizationMembers.userId, targetUserId)));
 }
 
 /** Makes `userId` an owner of the farm's organization when it has none (e.g. a client accepting the owner invitation). */
@@ -201,13 +240,26 @@ export async function claimOrganizationIfOwnerless(organizationId: string, userI
   const [owner] = await tx
     .select({ userId: organizationMembers.userId })
     .from(organizationMembers)
-    .where(and(eq(organizationMembers.organizationId, organizationId), eq(organizationMembers.role, 'owner')))
+    .where(and(eq(organizationMembers.organizationId, organizationId), eq(organizationMembers.role, 'owner'), notDeleted(organizationMembers)))
     .limit(1);
   if (owner) return;
+  await makeOrgOwner(organizationId, userId, tx);
+}
+
+/** Makes someone an owner: adds them, or brings their removed row back. */
+async function makeOrgOwner(organizationId: string, userId: string, tx: Tx | typeof db = db) {
   await tx
     .insert(organizationMembers)
     .values({ organizationId, userId, role: 'owner' })
-    .onConflictDoUpdate({ target: [organizationMembers.organizationId, organizationMembers.userId], set: { role: 'owner' } });
+    .onConflictDoUpdate({ target: [organizationMembers.organizationId, organizationMembers.userId], set: { role: 'owner', ...revived() } });
+}
+
+/** A deleted user leaves every organization (their member rows are marked deleted). */
+export async function leaveAllOrganizations(userId: string) {
+  await db
+    .update(organizationMembers)
+    .set(softDeleted())
+    .where(and(eq(organizationMembers.userId, userId), notDeleted(organizationMembers)));
 }
 
 /**
@@ -219,12 +271,12 @@ export async function handleOrgUserDeletion(userId: string) {
   const owned = await db
     .select({ organizationId: organizationMembers.organizationId })
     .from(organizationMembers)
-    .where(and(eq(organizationMembers.userId, userId), eq(organizationMembers.role, 'owner')));
+    .where(and(eq(organizationMembers.userId, userId), eq(organizationMembers.role, 'owner'), notDeleted(organizationMembers)));
   for (const { organizationId } of owned) {
     const others = await db
       .select()
       .from(organizationMembers)
-      .where(and(eq(organizationMembers.organizationId, organizationId), ne(organizationMembers.userId, userId)))
+      .where(and(eq(organizationMembers.organizationId, organizationId), ne(organizationMembers.userId, userId), notDeleted(organizationMembers)))
       .orderBy(asc(organizationMembers.createdAt));
     if (others.some((m) => m.role === 'owner')) continue;
     let heir = (others.find((m) => m.role === 'admin') ?? others[0])?.userId;
@@ -233,19 +285,17 @@ export async function handleOrgUserDeletion(userId: string) {
         .select({ userId: farmMembers.userId })
         .from(farmMembers)
         .innerJoin(farms, eq(farms.id, farmMembers.farmId))
-        .where(and(eq(farms.organizationId, organizationId), eq(farmMembers.role, 'owner'), ne(farmMembers.userId, userId)))
+        .where(
+          and(eq(farms.organizationId, organizationId), eq(farmMembers.role, 'owner'), ne(farmMembers.userId, userId), notDeleted(farmMembers), notDeleted(farms)),
+        )
         .orderBy(asc(farmMembers.createdAt))
         .limit(1);
       heir = farmOwner?.userId;
     }
     if (heir) {
-      await db
-        .insert(organizationMembers)
-        .values({ organizationId, userId: heir, role: 'owner' })
-        .onConflictDoUpdate({ target: [organizationMembers.organizationId, organizationMembers.userId], set: { role: 'owner' } });
+      await makeOrgOwner(organizationId, heir);
       continue;
     }
-    const [farmCount] = await db.select({ total: count() }).from(farms).where(eq(farms.organizationId, organizationId));
-    if (!farmCount?.total) await db.delete(organizations).where(eq(organizations.id, organizationId));
+    if (!(await activeFarmCount(organizationId))) await softDeleteOrganization(organizationId);
   }
 }

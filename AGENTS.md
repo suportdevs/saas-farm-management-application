@@ -5,3 +5,5 @@ Keep updates safe.
 Before editing, check for impact on existing flows.
 Make programming mid level developer reading/manage friendly, don't make so complex.
 don't create migration for permission
+always maintain softdelete
+audition columns (created_at, created_by, updated_at, updated_by, deleted_at, deleted_by)
