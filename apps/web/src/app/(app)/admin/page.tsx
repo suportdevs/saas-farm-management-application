@@ -25,6 +25,7 @@ import { actionLabel } from '@/lib/audit';
 import { countryName, flag, formatDate, formatMoney, timeAgo } from '@/lib/format';
 import { requireAdmin, serverFetch } from '@/lib/session';
 import { cn } from '@/lib/utils';
+import { RecordPaymentButton } from '@/modules/platform/components/manual-payment-dialog';
 import { NewTenantButton } from '@/modules/platform/components/new-tenant-dialog';
 import { getAdminPlans } from '@/modules/subscriptions/server';
 
@@ -167,9 +168,10 @@ export default async function AdminOverviewPage() {
             <CardDescription>Common tasks, one click away.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            {can('platform.tenants.create') && (
-              <div className="[&>button]:w-full">
-                <NewTenantButton plans={plans.filter((p) => !p.archived)} />
+            {(can('platform.tenants.create') || can('platform.billing.manage')) && (
+              <div className="grid gap-2 sm:grid-cols-2 [&_button]:w-full">
+                {can('platform.tenants.create') && <NewTenantButton plans={plans.filter((p) => !p.archived)} />}
+                {can('platform.billing.manage') && <RecordPaymentButton plans={plans} variant="outline" />}
               </div>
             )}
             {quickActions.map((a) => (

@@ -13,6 +13,8 @@ import { formatDate, formatMoney } from '@/lib/format';
 import { requireAdmin, serverFetch } from '@/lib/session';
 import { getAdminPlans } from '@/modules/subscriptions/server';
 import { InvoiceStatusBadge } from '@/modules/platform/components/invoice-status-badge';
+import { RecordPaymentButton } from '@/modules/platform/components/manual-payment-dialog';
+import { PayInvoiceButton } from '@/modules/platform/components/tenant-billing';
 
 export const metadata: Metadata = { title: 'Invoices · Admin' };
 
@@ -20,7 +22,8 @@ type Search = { q?: string; status?: string; page?: string };
 
 /** Every manual invoice across tenants. Issue and settle them on the tenant's page. */
 export default async function AdminInvoicesPage({ searchParams }: { searchParams: Promise<Search> }) {
-  await requireAdmin('platform.billing.view');
+  const me = await requireAdmin('platform.billing.view');
+  const canBill = Boolean(me.platformPermissions?.includes('platform.billing.manage'));
   const params = await searchParams;
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]);
   const [data, plans] = await Promise.all([
@@ -48,14 +51,17 @@ export default async function AdminInvoicesPage({ searchParams }: { searchParams
             Filter
           </Button>
         </form>
-        <InvoicesExport query={qs.toString()} plans={plans} />
+        <div className="flex gap-2">
+          <InvoicesExport query={qs.toString()} plans={plans} />
+          {canBill && <RecordPaymentButton plans={plans} />}
+        </div>
       </div>
 
       {invoices.length === 0 ? (
         <EmptyState
           icon={Receipt}
           title="No invoices found"
-          description="Manual invoices are issued from a tenant's page (Tenants → a tenant → Manual invoices)."
+          description="Use Record payment for money already received, or issue an invoice from a tenant's page (Tenants → a tenant → Manual invoices)."
         />
       ) : (
         <Card className="overflow-x-auto">
@@ -69,6 +75,7 @@ export default async function AdminInvoicesPage({ searchParams }: { searchParams
                 <th className="px-5 py-3 text-right font-medium">Amount</th>
                 <th className="px-5 py-3 text-right font-medium">Balance</th>
                 <th className="px-5 py-3 font-medium">Payments</th>
+                {canBill && <th className="px-5 py-3" />}
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -101,6 +108,9 @@ export default async function AdminInvoicesPage({ searchParams }: { searchParams
                           </span>
                         ))}
                   </td>
+                  {canBill && (
+                    <td className="px-5 py-3 text-right">{(i.status === 'open' || i.status === 'overdue') && <PayInvoiceButton invoice={i} plans={plans} />}</td>
+                  )}
                 </tr>
               ))}
             </tbody>

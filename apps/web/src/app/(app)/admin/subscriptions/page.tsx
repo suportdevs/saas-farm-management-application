@@ -13,6 +13,7 @@ import { Select } from '@/components/ui/select';
 import { flag, formatDate, formatMoney } from '@/lib/format';
 import { requireAdmin, serverFetch } from '@/lib/session';
 import { getAdminPlans } from '@/modules/subscriptions/server';
+import { RecordPaymentButton } from '@/modules/platform/components/manual-payment-dialog';
 
 export const metadata: Metadata = { title: 'Subscriptions · Admin' };
 
@@ -28,7 +29,7 @@ const STATE_BADGE: Record<string, 'success' | 'info' | 'warning' | 'default' | '
 
 /** Every tenant's subscription: plan, how they pay, their deal and what they still owe. */
 export default async function AdminSubscriptionsPage({ searchParams }: { searchParams: Promise<Search> }) {
-  await requireAdmin('platform.billing.view');
+  const me = await requireAdmin('platform.billing.view');
   const params = await searchParams;
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]);
   const [data, plans] = await Promise.all([
@@ -76,7 +77,10 @@ export default async function AdminSubscriptionsPage({ searchParams }: { searchP
             Filter
           </Button>
         </form>
-        <SubscriptionsExport query={qs.toString()} />
+        <div className="flex gap-2">
+          <SubscriptionsExport query={qs.toString()} />
+          {me.platformPermissions?.includes('platform.billing.manage') && <RecordPaymentButton plans={plans} />}
+        </div>
       </div>
 
       {rows.length === 0 ? (

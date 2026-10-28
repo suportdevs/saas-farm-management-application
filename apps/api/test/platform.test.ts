@@ -167,6 +167,29 @@ describe('platform admin', () => {
     expect((await user.c.patch(`/api/admin/staff-roles/${key}`, { permissions: ['platform.users.view'] })).body.error.code).toBe('SELF_ACTION');
   });
 
+  it('records a manual payment in one step: paid invoice + plan applied', async () => {
+    const admin = await signUp(app, { admin: true });
+    const owner = await signUp(app);
+    const { farm } = await createFarm(owner.c, `Quick Pay Ranch ${Date.now()}`);
+    const periodEnd = `${new Date().getFullYear() + 1}-06-30`;
+    const body = { description: 'Growth plan — 12 months', amount: '480', currency: 'usd', method: 'cash', reference: 'RCPT-9', planId: 'growth', periodEnd };
+
+    expect((await owner.c.post(`/api/admin/farms/${farm.id}/payments`, body)).status).toBe(403);
+    expect((await admin.c.post(`/api/admin/farms/${farm.id}/payments`, { ...body, planId: 'growth', periodEnd: null })).status).toBe(400);
+
+    const res = await admin.c.post(`/api/admin/farms/${farm.id}/payments`, body);
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ paidInFull: true, planApplied: { planId: 'growth', periodEnd } });
+    expect(res.body.invoice).toMatchObject({ status: 'paid', amount: 48000, balance: 0, currency: 'USD' });
+    expect(res.body.invoice.payments[0]).toMatchObject({ amount: 48000, method: 'cash', reference: 'RCPT-9' });
+
+    // The tenant sees the new plan and the paid invoice on their own billing page.
+    const ctx = await owner.c.get(`/api/farms/${farm.slug}`);
+    expect(ctx.body.subscription).toMatchObject({ planId: 'growth', source: 'manual' });
+    const invoices = await owner.c.get(`/api/farms/${farm.slug}/billing/invoices`);
+    expect(invoices.body.invoices[0]).toMatchObject({ number: res.body.invoice.number, status: 'paid' });
+  });
+
   it('runs a manual client: tenant, deal, invoice, payment', async () => {
     const admin = await signUp(app, { admin: true });
     const client = await signUp(app);

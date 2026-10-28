@@ -107,6 +107,7 @@ export default async function AdminFarmPage({ params }: { params: Promise<{ id: 
       {deal && (
         <TenantBilling
           farmId={farm.id}
+          farmName={farm.name}
           currency={profile.currency}
           planId={deal.effective.planId}
           plans={plans}

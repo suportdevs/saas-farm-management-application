@@ -32,6 +32,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ApiError, api, errorMessage } from '@/lib/api';
 import { formatDate, formatMoney } from '@/lib/format';
 import { InvoiceStatusBadge } from './invoice-status-badge';
+import { RecordPaymentButton } from './manual-payment-dialog';
 
 const fieldErrors = (err: unknown) =>
   err instanceof ApiError && err.details ? Object.fromEntries(Object.entries(err.details).map(([k, v]) => [k, v[0] ?? 'Invalid'])) : null;
@@ -42,6 +43,7 @@ const fieldErrors = (err: unknown) =>
  */
 export function TenantBilling({
   farmId,
+  farmName,
   currency,
   planId,
   plans,
@@ -50,6 +52,7 @@ export function TenantBilling({
   permissions,
 }: {
   farmId: string;
+  farmName: string;
   /** The farm's own currency, the default for new invoices. */
   currency: string;
   planId: PlanId;
@@ -65,7 +68,7 @@ export function TenantBilling({
   return (
     <div className="grid gap-6 xl:grid-cols-[22rem_1fr]">
       <DealCard farmId={farmId} plan={plan} entitlements={entitlements} canEdit={canBill} />
-      <InvoicesCard farmId={farmId} currency={currency} invoices={invoices} plans={plans} canBill={canBill} />
+      <InvoicesCard farmId={farmId} farmName={farmName} currency={currency} invoices={invoices} plans={plans} canBill={canBill} />
     </div>
   );
 }
@@ -282,12 +285,14 @@ function DealDialog({
 
 function InvoicesCard({
   farmId,
+  farmName,
   currency,
   invoices,
   plans,
   canBill,
 }: {
   farmId: string;
+  farmName: string;
   currency: string;
   invoices: ManualInvoice[];
   plans: AdminPlan[];
@@ -326,9 +331,13 @@ function InvoicesCard({
             </CardDescription>
           </div>
           {canBill && (
-            <Button size="sm" onClick={() => setCreating(true)}>
-              <FilePlus2 className="h-4 w-4" /> New invoice
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {/* Money already received: a paid invoice in one step. */}
+              <RecordPaymentButton plans={plans} tenant={{ id: farmId, name: farmName, currency }} variant="outline" size="sm" />
+              <Button size="sm" onClick={() => setCreating(true)}>
+                <FilePlus2 className="h-4 w-4" /> New invoice
+              </Button>
+            </div>
           )}
         </div>
       </CardHeader>
@@ -537,6 +546,31 @@ function InvoiceDialog({
         </div>
       </div>
     </Dialog>
+  );
+}
+
+/** "Record payment" for one open invoice, outside the tenant page (Admin → Invoices). */
+export function PayInvoiceButton({ invoice, plans }: { invoice: ManualInvoice; plans: AdminPlan[] }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+        Record payment
+      </Button>
+      {open && (
+        <PaymentDialog
+          farmId={invoice.farm.id}
+          invoice={invoice}
+          plans={plans}
+          onClose={() => setOpen(false)}
+          onSaved={() => {
+            setOpen(false);
+            router.refresh();
+          }}
+        />
+      )}
+    </>
   );
 }
 

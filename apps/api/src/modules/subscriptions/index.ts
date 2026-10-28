@@ -36,6 +36,7 @@ export {
   getManualInvoice,
   listManualInvoices,
   recordManualPayment,
+  recordQuickPayment,
   setEntitlements,
   unpaidByFarm,
   unpaidFarmIds,

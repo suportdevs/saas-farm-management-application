@@ -11,6 +11,7 @@ import {
   getManualInvoice,
   listManualInvoices,
   recordManualPayment,
+  recordQuickPayment,
   setEntitlements,
   voidManualInvoice,
 } from '../../subscriptions';
@@ -84,8 +85,32 @@ export async function voidInvoice(req: Request, res: Response) {
 /** POST /:id/invoices/:invoiceId/payments — paid in full → plan extended. */
 export async function recordPayment(req: Request, res: Response) {
   const farm = await findTenant(String(req.params.id));
-  const { invoice, paidInFull, planApplied } = await recordManualPayment(farm, req.auth!.user, String(req.params.invoiceId), req.body);
-  const amount = (req.body as { amount: number }).amount;
+  const result = await recordManualPayment(farm, req.auth!.user, String(req.params.invoiceId), req.body);
+  await auditPayment(req, farm, result, (req.body as { amount: number }).amount);
+  res.status(201).json(result);
+}
+
+/** POST /:id/payments — money received with no invoice yet: issues a paid invoice in one step. */
+export async function quickPayment(req: Request, res: Response) {
+  const farm = await findTenant(String(req.params.id));
+  const result = await recordQuickPayment(farm, req.auth!.user, req.body);
+  const { invoice } = result;
+  await audit(req, {
+    action: 'admin.farm.invoice_created',
+    ...event(farm),
+    metadata: { invoiceId: invoice.id, number: invoice.number, amount: invoice.amount, currency: invoice.currency },
+  });
+  await auditPayment(req, farm, result, invoice.amount);
+  res.status(201).json(result);
+}
+
+/** Audit entries for a recorded payment: one for staff, one in the tenant's own activity log. */
+async function auditPayment(
+  req: Request,
+  farm: Farm,
+  { invoice, paidInFull, planApplied }: Awaited<ReturnType<typeof recordManualPayment>>,
+  amount: number,
+) {
   await audit(req, {
     action: 'admin.farm.payment_recorded',
     ...event(farm),
@@ -98,7 +123,6 @@ export async function recordPayment(req: Request, res: Response) {
     ...event(farm),
     metadata: { amount: new Intl.NumberFormat('en', { style: 'currency', currency: invoice.currency }).format(amount / 100), invoice: invoice.number },
   });
-  res.status(201).json({ invoice, paidInFull, planApplied });
 }
 
 /** DELETE /:id/invoices/:invoiceId/payments/:paymentId */

@@ -14,6 +14,7 @@ import {
   adminUpdateMemberSchema,
   manualInvoiceSchema,
   manualPaymentSchema,
+  quickPaymentSchema,
 } from '@kit/shared';
 import { requirePlatform, requireRole, validate } from '../../../core';
 import * as billing from '../controllers/billing.controller';
@@ -63,3 +64,5 @@ tenantRouter.get('/:id/invoices/:invoiceId', requirePlatform('platform.billing.v
 tenantRouter.post('/:id/invoices/:invoiceId/void', requirePlatform('platform.billing.manage'), billing.voidInvoice);
 tenantRouter.post('/:id/invoices/:invoiceId/payments', requirePlatform('platform.billing.manage'), validate(manualPaymentSchema), billing.recordPayment);
 tenantRouter.delete('/:id/invoices/:invoiceId/payments/:paymentId', requirePlatform('platform.billing.manage'), billing.deletePayment);
+// Money already received, no invoice yet: issue a paid invoice in one step.
+tenantRouter.post('/:id/payments', requirePlatform('platform.billing.manage'), validate(quickPaymentSchema), billing.quickPayment);

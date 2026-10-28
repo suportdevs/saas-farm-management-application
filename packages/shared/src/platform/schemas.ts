@@ -195,6 +195,25 @@ export const manualPaymentSchema = z.object({
 });
 export type ManualPaymentInput = z.input<typeof manualPaymentSchema>;
 
+/**
+ * POST /admin/farms/:id/payments — money already received, no invoice yet.
+ * Issues the invoice (dated the day it was paid) and records it as paid in full, in one step.
+ */
+export const quickPaymentSchema = z.object({
+  description: z.string().trim().min(2, 'Describe what the payment is for').max(255),
+  amount: money,
+  currency: z.string().trim().toUpperCase().length(3, 'Use a 3-letter currency code'),
+  method: z.enum(PAYMENT_METHODS),
+  reference: z.string().trim().max(120).optional(),
+  paidAt: isoDate.optional(),
+  /** The tenant moves to this plan… */
+  planId: planIdSchema.nullable().optional(),
+  /** …paid through this date. */
+  periodEnd: isoDate.nullable().optional(),
+  notes: z.string().trim().max(2000).optional(),
+});
+export type QuickPaymentInput = z.input<typeof quickPaymentSchema>;
+
 export const INVOICE_STATUSES = ['open', 'overdue', 'paid', 'void'] as const;
 export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
 

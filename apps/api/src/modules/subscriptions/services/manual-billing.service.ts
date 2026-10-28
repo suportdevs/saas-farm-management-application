@@ -233,6 +233,36 @@ export async function recordManualPayment(
   return { invoice: await getManualInvoice(farm.id, invoiceId), paidInFull, planApplied };
 }
 
+/**
+ * Money already received with no invoice yet (platform "Record manual payment"):
+ * issues the invoice dated the day it was paid and records it as paid in full,
+ * so the plan, if any, is applied straight away.
+ */
+export async function recordQuickPayment(
+  farm: Farm,
+  staff: User,
+  input: { description: string; amount: number; currency: string; method: PaymentMethod; reference?: string; paidAt?: string; planId?: PlanId | null; periodEnd?: string | null; notes?: string },
+) {
+  const paidAt = input.paidAt ?? today();
+  const invoice = await createManualInvoice(farm, staff, {
+    description: input.description,
+    amount: input.amount,
+    currency: input.currency,
+    issuedAt: paidAt,
+    dueAt: paidAt,
+    planId: input.planId,
+    periodEnd: input.periodEnd,
+    notes: input.notes,
+  });
+  try {
+    return await recordManualPayment(farm, staff, invoice.id, { amount: invoice.amount, method: input.method, reference: input.reference, paidAt });
+  } catch (err) {
+    // Don't leave an unpaid invoice behind when the payment could not be saved.
+    await voidManualInvoice(farm, invoice.id).catch(() => {});
+    throw err;
+  }
+}
+
 /** Removes a payment recorded by mistake. The invoice reopens; plan changes stay (adjust them by hand). */
 export async function deleteManualPayment(farm: Farm, invoiceId: string, paymentId: string) {
   await loadInvoice(farm.id, invoiceId);
