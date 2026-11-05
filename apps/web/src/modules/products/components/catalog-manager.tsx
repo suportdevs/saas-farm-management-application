@@ -21,6 +21,7 @@ import { toast } from 'sonner';
 import {
   CATALOG,
   catalogPath,
+  catalogPermission,
   hasStatus,
   STATUS,
   statusLabel,
@@ -78,12 +79,12 @@ export function CatalogManager({
   const { farm } = useFarm();
   const { label, plural, description, columns } = CATALOG[resource];
   const withStatus = hasStatus(resource);
-  // One per-action key per button.
-  const canCreate = useCan('products.create');
-  const canUpdate = useCan('products.update');
-  const canDelete = useCan('products.delete');
-  const canImport = useCan('products.import');
-  const canExport = useCan('products.export');
+  // One key per button, for this catalog (e.g. products.category_create).
+  const canCreate = useCan(catalogPermission(resource, 'create'));
+  const canUpdate = useCan(catalogPermission(resource, 'edit'));
+  const canDelete = useCan(catalogPermission(resource, 'delete'));
+  const canImport = useCan(catalogPermission(resource, 'import'));
+  const canExport = useCan(catalogPermission(resource, 'export'));
   /** Selection only exists for bulk actions the member may run. */
   const canSelect = canDelete || (withStatus && canUpdate);
   const withImage = !!CATALOG[resource].image;

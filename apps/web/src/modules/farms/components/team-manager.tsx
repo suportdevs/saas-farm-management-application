@@ -8,9 +8,10 @@ import { toast } from 'sonner';
 import {
   assignableRoles,
   FARM_ROLES,
-  PERMISSION_ACTION_LABELS,
   PERMISSION_MODULE_KEYS,
+  modulePermissions,
   PERMISSION_MODULES,
+  permissionLabel,
   ROLE_INFO,
   roleLabel,
   type CustomRoleRef,
@@ -404,13 +405,13 @@ function RolesGuide() {
         <p className="text-sm text-muted-foreground">{description}</p>
         <ul className="space-y-2 text-sm">
           {PERMISSION_MODULE_KEYS.map((m) => {
-            const held = PERMISSION_MODULES[m].actions.filter((a) => granted.includes(`${m}.${a}` as Permission));
+            const held = modulePermissions(m).filter((p) => granted.includes(p));
             return (
               <li key={m} className={cn('flex items-start gap-2', !held.length && 'text-muted-foreground/60')}>
                 {held.length ? <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" /> : <X className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
                 <span>
                   {PERMISSION_MODULES[m].label}
-                  {held.length > 0 && <span className="block text-xs text-muted-foreground">{held.map((a) => PERMISSION_ACTION_LABELS[a]).join(' · ')}</span>}
+                  {held.length > 0 && <span className="block text-xs text-muted-foreground">{held.map(permissionLabel).join(' · ')}</span>}
                 </span>
               </li>
             );

@@ -3,6 +3,7 @@ export * from './core/schemas/admin';
 export * from './core/schemas/auth';
 export * from './core/schemas/user';
 export * from './core/types';
+export * from './config/permissions';
 
 // Product modules — one folder per module, mirroring apps/api and apps/web.
 export * from './farms';

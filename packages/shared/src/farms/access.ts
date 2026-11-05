@@ -2,7 +2,8 @@
  * Farm roles and permissions. Shared by the API (enforcement) and the web app
  * (hiding actions a member can't perform).
  *
- * A permission is a per-action key, `<module>.<action>` (e.g. `products.delete`).
+ * A permission is a per-action key, `<module>.<key>` (e.g. `products.category_delete`),
+ * listed module by module in config/permissions.ts.
  * A member's permissions are resolved in three layers:
  *
  *   1. ROLE_PERMISSIONS — the built-in defaults of their role
@@ -12,6 +13,8 @@
  * Owners always hold every permission and can't be overridden.
  */
 
+import { CATALOG_OPERATIONS, PERMISSION_CONFIG, type PermissionModuleConfig } from '../config/permissions';
+import type { CatalogResource } from '../products/catalog';
 import type { Capability } from '../subscriptions/plans';
 
 export const FARM_ROLES =['owner', 'manager', 'veterinarian', 'accountant', 'worker', 'viewer'] as const;
@@ -26,55 +29,72 @@ export const ROLE_INFO: Record<FarmRole, { label: string; description: string }>
   viewer: { label: 'Viewer', description: 'Read-only access, e.g. for advisors or investors.' },
 };
 
-export const PERMISSION_ACTION_LABELS = {
-  view: 'View',
-  create: 'Create',
-  update: 'Edit',
-  delete: 'Delete',
-  import: 'Import',
-  export: 'Export',
-  invite: 'Invite',
-  remove: 'Remove',
-  manage: 'Manage',
-} as const;
-export type PermissionAction = keyof typeof PERMISSION_ACTION_LABELS;
+/**
+ * Modules and their permissions come from config/permissions.ts — add a
+ * permission there. A key is `<module>.<key>`, e.g. `products.category_create`.
+ */
+export const PERMISSION_MODULES = PERMISSION_CONFIG;
+type Config = typeof PERMISSION_CONFIG;
 
-const CRUD = ['view', 'create', 'update', 'delete'] as const;
-
-/** Every permission module and the actions it can be granted per action. Add a module here to give it keys. */
-export const PERMISSION_MODULES = {
-  farm: { label: 'Farm settings', actions: ['update', 'delete'] },
-  members: { label: 'Team', actions: ['view', 'invite', 'update', 'remove'] },
-  roles: { label: 'Roles & permissions', actions: ['view', 'manage'] },
-  billing: { label: 'Plan & billing', actions: ['view', 'manage'] },
-  activity: { label: 'Activity log', actions: ['view'] },
-  herd: { label: 'Herd', actions: CRUD },
-  milk: { label: 'Milk', actions: CRUD },
-  health: { label: 'Health', actions: CRUD },
-  breeding: { label: 'Breeding', actions: CRUD },
-  feed: { label: 'Feed', actions: CRUD },
-  products: { label: 'Products', actions: [...CRUD, 'import', 'export'] },
-  finance: { label: 'Finance', actions: [...CRUD, 'export'] },
-  reports: { label: 'Reports', actions: ['view', 'export'] },
-} as const satisfies Record<string, { label: string; actions: readonly PermissionAction[] }>;
-
-export type PermissionModule = keyof typeof PERMISSION_MODULES;
-export const PERMISSION_MODULE_KEYS = Object.keys(PERMISSION_MODULES) as PermissionModule[];
+export type PermissionModule = keyof Config;
+export const PERMISSION_MODULE_KEYS = Object.keys(PERMISSION_CONFIG) as PermissionModule[];
 
 export type Permission = {
-  [M in PermissionModule]: `${M}.${(typeof PERMISSION_MODULES)[M]['actions'][number]}`;
+  [M in PermissionModule]: `${M}.${Extract<keyof Config[M]['permissions'], string>}`;
 }[PermissionModule];
 
-export const PERMISSIONS = PERMISSION_MODULE_KEYS.flatMap((m) =>
-  PERMISSION_MODULES[m].actions.map((a) => `${m}.${a}` as Permission),
-);
+/** Every key of one module, in config order, e.g. `modulePermissions('products')`. */
+export const modulePermissions = (module: PermissionModule): Permission[] =>
+  Object.keys(PERMISSION_CONFIG[module].permissions).map((k) => `${module}.${k}` as Permission);
+
+export const PERMISSIONS = PERMISSION_MODULE_KEYS.flatMap(modulePermissions);
 
 const PERMISSION_SET: ReadonlySet<string> = new Set(PERMISSIONS);
 export const isPermission = (value: unknown): value is Permission => typeof value === 'string' && PERMISSION_SET.has(value);
 
-/** The action keys of one module, e.g. `modulePermissions('products')`. */
-export const modulePermissions = (module: PermissionModule): Permission[] =>
-  PERMISSION_MODULES[module].actions.map((a) => `${module}.${a}` as Permission);
+/** The module of a key, e.g. `products`. */
+export const moduleOf = (p: Permission) => p.slice(0, p.indexOf('.')) as PermissionModule;
+/** The part after the module, e.g. `category_create`. */
+const keyPart = (p: Permission) => p.slice(p.indexOf('.') + 1);
+
+/** The label from the config, e.g. `Category Create`. */
+export const permissionLabel = (p: Permission): string =>
+  (PERMISSION_CONFIG[moduleOf(p)].permissions as Record<string, string>)[keyPart(p)] ?? p;
+
+export interface PermissionOperation {
+  /** Operation prefix (`category`), or '' for a module's own short keys. */
+  key: string;
+  label: string;
+  permissions: Permission[];
+}
+
+/**
+ * A module's keys grouped by operation, for the permission screens:
+ * `products.category_create` goes under "Category". Keys that match no
+ * operation are grouped under the module's own name.
+ */
+export function permissionOperations(module: PermissionModule): PermissionOperation[] {
+  const config: PermissionModuleConfig = PERMISSION_CONFIG[module];
+  const operations = config.operations ?? {};
+  // Longest prefix first, so `product_size_list` goes to product_size, not product.
+  const prefixes = Object.keys(operations).sort((a, b) => b.length - a.length);
+  const groups = new Map<string, PermissionOperation>();
+  for (const p of modulePermissions(module)) {
+    const op = prefixes.find((prefix) => keyPart(p).startsWith(`${prefix}_`)) ?? '';
+    if (!groups.has(op)) groups.set(op, { key: op, label: op ? operations[op]! : config.label, permissions: [] });
+    groups.get(op)!.permissions.push(p);
+  }
+  return [...groups.values()];
+}
+
+export type CatalogAction = 'list' | 'create' | 'edit' | 'delete' | 'import' | 'export';
+
+/** One catalog screen's key, e.g. `catalogPermission('categories', 'create')` → `products.category_create`. */
+export const catalogPermission = (resource: CatalogResource, action: CatalogAction) => `products.${CATALOG_OPERATIONS[resource]}_${action}` as Permission;
+
+/** Keys of a module ending in `action`, e.g. (`products`, `list`) → every `products.*_list`. */
+export const permissionsWithAction = (module: PermissionModule, action: string) =>
+  modulePermissions(module).filter((p) => keyPart(p) === action || keyPart(p).endsWith(`_${action}`));
 
 /** Keys only owners hold: they can't be granted to another role or member. */
 export const OWNER_ONLY_PERMISSIONS: readonly Permission[] = ['farm.delete'];
@@ -83,8 +103,9 @@ export const isOwnerOnly = (p: Permission) => OWNER_ONLY_PERMISSIONS.includes(p)
 /** What every role sees: the team and the operational records. */
 const BASE: Permission[] = [
   'members.view',
-  ...(['herd', 'milk', 'health', 'breeding', 'feed', 'products'] as const).map((m) => `${m}.view` as Permission),
-  'products.export',
+  ...(['herd', 'milk', 'health', 'breeding', 'feed'] as const).map((m) => `${m}.view` as Permission),
+  ...permissionsWithAction('products', 'list'),
+  ...permissionsWithAction('products', 'export'),
 ];
 
 /** Keeps every permission list in PERMISSIONS order. */
@@ -184,8 +205,8 @@ export const MODULE_CAPABILITIES: Partial<Record<PermissionModule, Capability>> 
   reports: 'advanced_reports',
 };
 
-/** The plan capability an action needs in any module (e.g. every `*.export`). */
-export const ACTION_CAPABILITIES: Partial<Record<PermissionAction, Capability>> = {
+/** The plan capability an action needs in any module (e.g. every `*.export` and `*_export`). */
+export const ACTION_CAPABILITIES: Record<string, Capability> = {
   export: 'data_export',
 };
 
@@ -214,10 +235,11 @@ export const moduleStatuses = (gate: ModuleGate) =>
 
 /** Why the farm (not the member) can't use `permission`, or null. */
 export function permissionBlock(permission: Permission, gate: ModuleGate): Exclude<ModuleStatus, 'enabled'> | null {
-  const [module, action] = permission.split('.') as [PermissionModule, PermissionAction];
-  const status = moduleStatus(module, gate);
+  const status = moduleStatus(moduleOf(permission), gate);
   if (status !== 'enabled') return status;
-  const needs = ACTION_CAPABILITIES[action];
+  const key = keyPart(permission);
+  const action = Object.keys(ACTION_CAPABILITIES).find((a) => key === a || key.endsWith(`_${a}`));
+  const needs = action ? ACTION_CAPABILITIES[action] : undefined;
   return needs && !gate.capabilities.includes(needs) ? 'plan' : null;
 }
 

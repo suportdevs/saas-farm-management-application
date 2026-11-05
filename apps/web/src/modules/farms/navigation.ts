@@ -16,7 +16,17 @@ import {
   Wallet,
   Wheat,
 } from 'lucide-react';
-import { CATALOG, CATALOG_RESOURCES, catalogPath, PERMISSION_MODULES, type Capability, type Permission, type PermissionModule } from '@kit/shared';
+import {
+  CATALOG,
+  CATALOG_RESOURCES,
+  catalogPath,
+  catalogPermission,
+  PERMISSION_MODULES,
+  permissionsWithAction,
+  type Capability,
+  type Permission,
+  type PermissionModule,
+} from '@kit/shared';
 import { CowMark } from '@/components/logo';
 
 type Icon = ComponentType<{ className?: string }>;
@@ -32,7 +42,7 @@ export interface FarmModule {
   status: 'live' | 'soon';
   highlights: string[];
   /** Sub-pages shown nested under the module in the sidebar (slugs under /farms/[farm]/). */
-  children?: { slug: string; label: string }[];
+  children?: { slug: string; label: string; permission?: Permission }[];
 }
 
 /**
@@ -101,7 +111,7 @@ export const BUSINESS_MODULES: FarmModule[] = [
     label: 'Products',
     icon: Package,
     status: 'live',
-    children: CATALOG_RESOURCES.map((r) => ({ slug: catalogPath(r), label: CATALOG[r].plural })),
+    children: CATALOG_RESOURCES.map((r) => ({ slug: catalogPath(r), label: CATALOG[r].plural, permission: catalogPermission(r, 'list') })),
     summary: 'Your product catalog — feed, medicine, milk and supplies with categories, brands, units, sizes and colors.',
     highlights: ['Products with category and unit', 'Categories, brands, units, sizes and colors', 'CSV import with a ready-made template', 'Export and print any list', 'Bulk delete'],
   },
@@ -132,7 +142,8 @@ export interface NavLink {
   href: string;
   label: string;
   icon: Icon;
-  permission?: Permission;
+  /** Needed to see the link; a list means any one of them. */
+  permission?: Permission | Permission[];
   /** The permission module behind the link: switched-off modules are hidden, plan-locked ones show a lock. */
   module?: PermissionModule;
   /** Set by the sidebar: the module isn't in the farm's plan. */
@@ -140,7 +151,7 @@ export interface NavLink {
   soon?: boolean;
   exact?: boolean;
   /** Nested links; the parent opens a collapsible group instead of navigating. */
-  children?: { href: string; label: string }[];
+  children?: { href: string; label: string; permission?: Permission }[];
 }
 
 export interface NavSection {
@@ -148,17 +159,20 @@ export interface NavSection {
   links: NavLink[];
 }
 
+/** The keys that open a module: its `view` key or any `*_list` key. */
+const viewKeys = (m: PermissionModule) => [...permissionsWithAction(m, 'view'), ...permissionsWithAction(m, 'list')];
+
 export function farmNav(slug: string): NavSection[] {
   const base = `/farms/${slug}`;
   const toLink = (m: FarmModule): NavLink => ({
     href: `${base}/${m.slug}`,
     label: m.label,
     icon: m.icon,
-    // Modules with permission keys need their view key, e.g. products.view.
-    permission: m.slug in PERMISSION_MODULES ? (`${m.slug}.view` as Permission) : undefined,
+    // Modules with permission keys need a view or list key, e.g. herd.view or any products.*_list.
+    permission: m.slug in PERMISSION_MODULES ? viewKeys(m.slug as PermissionModule) : undefined,
     module: m.slug in PERMISSION_MODULES ? (m.slug as PermissionModule) : undefined,
     soon: m.status === 'soon',
-    children: m.children?.map((c) => ({ href: `${base}/${c.slug}`, label: c.label })),
+    children: m.children?.map((c) => ({ href: `${base}/${c.slug}`, label: c.label, permission: c.permission })),
   });
   return [
     { links: [{ href: base, label: 'Overview', icon: LayoutDashboard, exact: true }] },

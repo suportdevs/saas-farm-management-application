@@ -7,9 +7,12 @@ import { toast } from 'sonner';
 import {
   FARM_ROLES,
   isOwnerOnly,
-  PERMISSION_ACTION_LABELS,
+  modulePermissions,
   PERMISSION_MODULE_KEYS,
   PERMISSION_MODULES,
+  permissionLabel,
+  permissionOperations,
+  PERMISSIONS,
   resolvePermissions,
   ROLE_INFO,
   roleLabel,
@@ -18,7 +21,6 @@ import {
   type FarmPermissions,
   type FarmRole,
   type Permission,
-  type PermissionAction,
   type PermissionModule,
   type PermissionOverrides,
 } from '@kit/shared';
@@ -37,14 +39,8 @@ import { cn } from '@/lib/utils';
 
 const EDITABLE_ROLES = FARM_ROLES.filter((r) => r !== 'owner');
 
-/** Matrix columns: every action some module uses, in label order. */
-const ACTIONS = (Object.keys(PERMISSION_ACTION_LABELS) as PermissionAction[]).filter((a) =>
-  PERMISSION_MODULE_KEYS.some((m) => (PERMISSION_MODULES[m].actions as readonly PermissionAction[]).includes(a)),
-);
-
-const keyOf = (m: PermissionModule, a: PermissionAction) => `${m}.${a}` as Permission;
-const hasAction = (m: PermissionModule, a: PermissionAction) => (PERMISSION_MODULES[m].actions as readonly PermissionAction[]).includes(a);
-export const moduleKeys = (m: PermissionModule) => PERMISSION_MODULES[m].actions.map((a) => keyOf(m, a as PermissionAction));
+/** Every key of one module. */
+export const moduleKeys = modulePermissions;
 
 /**
  * Roles & permissions: what each role can do on this farm (role-based keys,
@@ -122,47 +118,80 @@ export function useLockReason() {
   };
 }
 
-export function Matrix({ renderCell, renderRowControl }: { renderCell: (key: Permission) => ReactNode; renderRowControl?: (m: PermissionModule) => ReactNode }) {
-  const { modules } = useFarm();
+/** "Category Create" under "Category" → "Create". */
+const shortLabel = (key: Permission, operation: string) => {
+  const label = permissionLabel(key);
+  return label.toLowerCase().startsWith(`${operation.toLowerCase()} `) ? label.slice(operation.length + 1) : label;
+};
+
+/**
+ * Permissions grouped module → operation → actions, straight from
+ * config/permissions.ts. `renderCell` draws one key's control,
+ * `renderGroupControl` the "all" control of a module or an operation.
+ */
+export function Matrix({
+  modules = PERMISSION_MODULE_KEYS,
+  renderCell,
+  renderGroupControl,
+}: {
+  modules?: readonly PermissionModule[];
+  renderCell: (key: Permission) => ReactNode;
+  renderGroupControl?: (keys: Permission[], label: string) => ReactNode;
+}) {
+  const { modules: status } = useFarm();
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
           <tr>
-            <th className="px-4 py-3 font-medium">Module</th>
-            {renderRowControl && <th className="px-2 py-3 font-medium">All actions</th>}
-            {ACTIONS.map((a) => (
-              <th key={a} className="px-2 py-3 text-center font-medium">
-                {PERMISSION_ACTION_LABELS[a]}
-              </th>
-            ))}
+            <th className="px-4 py-3 font-medium">Operation</th>
+            {renderGroupControl && <th className="px-2 py-3 font-medium">All</th>}
+            <th className="px-4 py-3 font-medium">Actions</th>
           </tr>
         </thead>
-        <tbody className="divide-y">
-          {PERMISSION_MODULE_KEYS.map((m) => (
-            <tr key={m} className="hover:bg-muted/20">
-              <th scope="row" className="whitespace-nowrap px-4 py-2.5 font-medium">
-                {PERMISSION_MODULES[m].label}
-                <span className="block text-xs font-normal text-muted-foreground">{m}.*</span>
-                {modules[m] !== 'enabled' && (
-                  <Badge
-                    variant={modules[m] === 'plan' ? 'warning' : 'default'}
-                    className="mt-1"
-                    title={modules[m] === 'plan' ? 'Saved, but has no effect until the plan includes this module' : 'Switched off in farm settings'}
-                  >
-                    {modules[m] === 'plan' ? 'Not in plan' : 'Switched off'}
-                  </Badge>
-                )}
-              </th>
-              {renderRowControl && <td className="px-2 py-2">{renderRowControl(m)}</td>}
-              {ACTIONS.map((a) => (
-                <td key={a} className="px-2 py-2 text-center">
-                  {hasAction(m, a) ? renderCell(keyOf(m, a)) : <span className="text-muted-foreground/40">—</span>}
+        {modules.map((m) => {
+          const operations = permissionOperations(m);
+          return (
+            <tbody key={m} className="divide-y border-b">
+              <tr className="bg-muted/20">
+                <th scope="rowgroup" className="whitespace-nowrap px-4 py-2.5 font-semibold">
+                  {PERMISSION_MODULES[m].label}
+                  {status[m] !== 'enabled' && (
+                    <Badge
+                      variant={status[m] === 'plan' ? 'warning' : 'default'}
+                      className="ml-2"
+                      title={status[m] === 'plan' ? 'Saved, but has no effect until the plan includes this module' : 'Switched off in farm settings'}
+                    >
+                      {status[m] === 'plan' ? 'Not in plan' : 'Switched off'}
+                    </Badge>
+                  )}
+                </th>
+                {renderGroupControl && <td className="px-2 py-2">{renderGroupControl(modulePermissions(m), PERMISSION_MODULES[m].label)}</td>}
+                <td className="px-4 py-2 text-xs text-muted-foreground">
+                  {operations.length > 1 ? `${operations.length} operations` : null}
                 </td>
+              </tr>
+              {operations.map((op) => (
+                <tr key={op.key || m} className="hover:bg-muted/20">
+                  <th scope="row" className="whitespace-nowrap py-2.5 pl-8 pr-4 font-medium">
+                    {op.label}
+                  </th>
+                  {renderGroupControl && <td className="px-2 py-2">{renderGroupControl(op.permissions, op.label)}</td>}
+                  <td className="px-4 py-2">
+                    <div className="flex flex-wrap gap-x-4 gap-y-2">
+                      {op.permissions.map((key) => (
+                        <label key={key} className="inline-flex items-center gap-1.5 whitespace-nowrap" title={key}>
+                          {renderCell(key)}
+                          <span>{shortLabel(key, op.label)}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </td>
+                </tr>
               ))}
-            </tr>
-          ))}
-        </tbody>
+            </tbody>
+          );
+        })}
       </table>
     </div>
   );
@@ -195,7 +224,7 @@ export const sameSet = (a: Iterable<Permission>, b: Iterable<Permission>) => {
 /** The role being edited: a system role key, `custom:<id>`, or `new` for a role being created. */
 type RoleSelection = Exclude<FarmRole, 'owner'> | `custom:${string}` | 'new';
 
-export const ROLE_KEY_COUNT = PERMISSION_MODULE_KEYS.reduce((n, m) => n + moduleKeys(m).length, 0);
+export const ROLE_KEY_COUNT = PERMISSIONS.length;
 
 function RoleEditor({ data, onSaved, canManage }: { data: FarmPermissions; onSaved: (d: FarmPermissions) => void; canManage: boolean }) {
   const router = useRouter();
@@ -354,12 +383,12 @@ function RoleEditor({ data, onSaved, canManage }: { data: FarmPermissions; onSav
       </CardHeader>
 
       <Matrix
-        renderRowControl={(m) => {
-          const keys = moduleKeys(m).filter((k) => !lockReason(k));
+        renderGroupControl={(group, label) => {
+          const keys = group.filter((k) => !lockReason(k));
           const on = keys.filter((k) => draft.has(k)).length;
           return (
             <Checkbox
-              aria-label={`All ${PERMISSION_MODULES[m].label} actions`}
+              aria-label={`All ${label} permissions`}
               checked={keys.length > 0 && on === keys.length}
               ref={(el) => {
                 if (el) el.indeterminate = on > 0 && on < keys.length;
@@ -572,13 +601,13 @@ function MemberOverrides({
         </CardHeader>
 
         <Matrix
-          renderRowControl={(m) => {
-            const keys = moduleKeys(m).filter((k) => !lockReason(k));
+          renderGroupControl={(group, label) => {
+            const keys = group.filter((k) => !lockReason(k));
             const states = new Set(keys.map((k) => stateOf(draft, k)));
             const value = states.size === 1 ? [...states][0]! : 'custom';
             return (
               <Select
-                aria-label={`${PERMISSION_MODULES[m].label} override`}
+                aria-label={`${label} override`}
                 value={value}
                 disabled={!editable || keys.length === 0}
                 onChange={(e) => setState(keys, e.target.value as CellState)}

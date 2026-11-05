@@ -135,13 +135,13 @@ describe('farm permissions', () => {
     expect((await worker.c.post(sizes, { name: 'Small', weight: 1 })).status).toBe(403);
 
     // Workers may now add (but still not delete) catalog rows, and lose milk.update.
-    const wanted = [...ROLE_PERMISSIONS.worker.filter((p) => p !== 'milk.update'), 'products.create'];
+    const wanted = [...ROLE_PERMISSIONS.worker.filter((p) => p !== 'milk.update'), 'products.size_create'];
     const put = await owner.c.put(`${base}/roles/worker/permissions`, { permissions: wanted });
     expect(put.status).toBe(200);
-    expect(put.body.roles.worker.overrides).toEqual({ 'milk.update': false, 'products.create': true });
+    expect(put.body.roles.worker.overrides).toEqual({ 'milk.update': false, 'products.size_create': true });
 
     const ctx = await worker.c.get(base);
-    expect(ctx.body.membership.permissions).toContain('products.create');
+    expect(ctx.body.membership.permissions).toContain('products.size_create');
     expect(ctx.body.membership.permissions).not.toContain('milk.update');
     expect(ctx.body.rolePermissions.worker).toEqual(ctx.body.membership.permissions);
     expect((await worker.c.get('/api/farms')).body.farms[0].permissions).toEqual(ctx.body.membership.permissions);
@@ -169,12 +169,12 @@ describe('farm permissions', () => {
     const base = `/api/farms/${farm.slug}`;
 
     const put = await owner.c.put(`${base}/members/${viewer.id}/permissions`, {
-      overrides: { 'products.create': true, 'products.update': true, 'products.export': false },
+      overrides: { 'products.size_create': true, 'products.size_edit': true, 'products.size_export': false },
     });
     expect(put.status).toBe(200);
     const entry = put.body.members.find((m: { userId: string }) => m.userId === viewer.id);
-    expect(entry.permissions).toEqual(expect.arrayContaining(['products.view', 'products.create', 'products.update']));
-    expect(entry.permissions).not.toContain('products.export');
+    expect(entry.permissions).toEqual(expect.arrayContaining(['products.size_list', 'products.size_create', 'products.size_edit']));
+    expect(entry.permissions).not.toContain('products.size_export');
 
     const size = await viewer.c.post(`${base}/products/sizes`, { name: 'Small', weight: 1 });
     expect(size.status).toBe(201);
@@ -295,7 +295,7 @@ describe('farm custom roles', () => {
     const owner = await signUp(app);
     const { farm } = await createFarm(owner.c);
     const base = `/api/farms/${farm.slug}`;
-    const { body } = await owner.c.post(`${base}/roles`, { name: 'Catalog clerk', permissions: ['products.view', 'products.create'] });
+    const { body } = await owner.c.post(`${base}/roles`, { name: 'Catalog clerk', permissions: ['products.size_list', 'products.size_create'] });
     const roleId = body.role.id;
 
     // Invite straight into the custom role.
@@ -309,13 +309,13 @@ describe('farm custom roles', () => {
 
     const ctx = await clerk.c.get(base);
     expect(ctx.body.membership.customRole).toEqual({ id: roleId, name: 'Catalog clerk' });
-    expect(ctx.body.membership.permissions).toEqual(['products.view', 'products.create']);
+    expect(ctx.body.membership.permissions).toEqual(['products.size_list', 'products.size_create']);
     expect((await clerk.c.post(`${base}/products/sizes`, { name: 'Small', weight: 1 })).status).toBe(201);
     expect((await clerk.c.get(`${base}/members`)).status).toBe(403);
     expect((await clerk.c.get('/api/farms')).body.farms[0].customRole.name).toBe('Catalog clerk');
 
     // Editing the role changes what its members can do.
-    await owner.c.patch(`${base}/roles/${roleId}`, { permissions: ['products.view', 'members.view'] });
+    await owner.c.patch(`${base}/roles/${roleId}`, { permissions: ['products.size_list', 'members.view'] });
     expect((await clerk.c.post(`${base}/products/sizes`, { name: 'Medium', weight: 2 })).status).toBe(403);
     expect((await clerk.c.get(`${base}/members`)).status).toBe(200);
     expect((await owner.c.get(`${base}/members`)).body.members.find((m: { userId: string }) => m.userId === clerk.id).customRole.name).toBe('Catalog clerk');

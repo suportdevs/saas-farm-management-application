@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Building2, ChevronDown, Lock, LogOut, Moon, Settings, Shield, ShieldCheck, Sun, UserRound } from 'lucide-react';
-import type { FarmSummary, PublicUser } from '@kit/shared';
+import type { FarmSummary, Permission, PublicUser } from '@kit/shared';
 import { Avatar } from '@/components/app/user-menu';
 import { LogoBadge } from '@/components/logo';
 import { Menu, MenuSeparator, menuItemClasses } from '@/components/ui/menu';
@@ -31,6 +31,9 @@ export function useCurrentFarm(farms: FarmSummary[]) {
 /** Farm menus the member can see: switched-off modules hidden, plan-locked ones shown with a lock. */
 function farmSections(current: FarmSummary | undefined): NavSection[] {
   if (!current) return [];
+  // No key needed, or the member holds it (a list: any one of them).
+  const allowed = (permission?: Permission | Permission[]) =>
+    !permission || (Array.isArray(permission) ? permission.some((p) => current.permissions.includes(p)) : current.permissions.includes(permission));
   return farmNav(current.slug).map((section) => ({
     ...section,
     links: section.links.flatMap((l): NavLink[] => {
@@ -38,7 +41,8 @@ function farmSections(current: FarmSummary | undefined): NavSection[] {
       if (status === 'disabled') return [];
       // Not in the plan: still listed, with a lock, so the upgrade is discoverable.
       if (status === 'plan') return [{ ...l, locked: true, children: undefined }];
-      return !l.permission || current.permissions.includes(l.permission) ? [l] : [];
+      if (!allowed(l.permission)) return [];
+      return [l.children ? { ...l, children: l.children.filter((c) => allowed(c.permission)) } : l];
     }),
   }));
 }

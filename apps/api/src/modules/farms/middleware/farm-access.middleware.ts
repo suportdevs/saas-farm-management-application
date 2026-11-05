@@ -33,8 +33,13 @@ export const hasPermission = (res: Response, permission: Permission) => getFarm(
  *   role and overrides don't grant it → 403 FARM_PERMISSION_REQUIRED
  *
  *   router.post('/:farm/animals', requireFarm('herd.create'), handler)
+ *
+ * A list means "any one of these" (keys of one module), e.g.
+ *   requireFarm(['products.category_list', 'products.product_create'])
  */
-export function requireFarm(permission?: Permission, opts: { allowSuspended?: boolean } = {}) {
+export function requireFarm(permissions?: Permission | Permission[], opts: { allowSuspended?: boolean } = {}) {
+  const anyOf = permissions === undefined ? [] : Array.isArray(permissions) ? permissions : [permissions];
+  const permission = anyOf[0];
   return async (req: Request, res: Response, next: NextFunction) => {
     if (!req.auth || req.auth.session.pending) throw unauthorized();
     const row = await findMembership(String(req.params.farm), req.auth.user.id);
@@ -52,7 +57,7 @@ export function requireFarm(permission?: Permission, opts: { allowSuspended?: bo
         const what = MODULE_CAPABILITIES[module] && !row.gate.capabilities.includes(MODULE_CAPABILITIES[module]) ? PERMISSION_MODULES[module].label : 'This feature';
         throw new AppError(402, 'PLAN_UPGRADE_REQUIRED', `${what} isn't included in your plan. Upgrade to unlock it.`);
       }
-      if (!row.permissions.includes(permission)) {
+      if (!anyOf.some((p) => row.permissions.includes(p))) {
         throw forbidden("Your role on this farm doesn't allow that", 'FARM_PERMISSION_REQUIRED');
       }
     }

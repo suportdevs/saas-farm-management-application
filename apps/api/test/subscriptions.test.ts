@@ -45,15 +45,15 @@ describe('subscriptions', () => {
     // On the Pro trial everything the role allows is available.
     let ctx = await owner.c.get(base);
     expect(ctx.body.modules).toMatchObject({ finance: 'enabled', products: 'enabled' });
-    expect(ctx.body.membership.permissions).toContain('products.export');
+    expect(ctx.body.membership.permissions).toContain('products.size_export');
 
     // Trial over → Starter: no finance, no reports, no exports.
     await db.update(farmSubscriptions).set({ trialEndsAt: new Date(Date.now() - 1000) }).where(eq(farmSubscriptions.farmId, farm.id));
     ctx = await owner.c.get(base);
     expect(ctx.body.modules).toMatchObject({ herd: 'enabled', products: 'enabled', finance: 'plan', reports: 'plan' });
     expect(ctx.body.membership.permissions).not.toContain('finance.view');
-    expect(ctx.body.membership.permissions).not.toContain('products.export');
-    expect(ctx.body.membership.permissions).toContain('products.create');
+    expect(ctx.body.membership.permissions).not.toContain('products.size_export');
+    expect(ctx.body.membership.permissions).toContain('products.size_create');
     // The role is still configured with them, so an upgrade brings them straight back.
     expect(ctx.body.rolePermissions.owner).toContain('finance.view');
     expect((await owner.c.get('/api/farms')).body.farms[0].modules.finance).toBe('plan');

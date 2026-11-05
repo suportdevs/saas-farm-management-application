@@ -7,6 +7,10 @@ import {
   catalogListSchema,
   catalogOptionsSchema,
   catalogPath,
+  catalogPermission,
+  permissionsWithAction,
+  type CatalogAction,
+  type CatalogResource,
   catalogSchemas,
   hasStatus,
   IMAGE_MAX_BYTES,
@@ -19,15 +23,28 @@ import type { Catalog } from '../services/catalog.service';
 
 const importLimiter = limiter({ name: 'catalog-import', windowMs: 60 * 60 * 1000, limit: 30 });
 const uploadLimiter = limiter({ name: 'catalog-upload', windowMs: 60 * 60 * 1000, limit: 200 });
-/** One per-action key per endpoint group. */
-const can = {
-  view: requireFarm('products.view'),
-  create: requireFarm('products.create'),
-  update: requireFarm('products.update'),
-  delete: requireFarm('products.delete'),
-  import: requireFarm('products.import'),
-  export: requireFarm('products.export'),
-};
+/**
+ * One key per endpoint group, per catalog: categories need
+ * `products.category_create` to create, units `products.unit_create`, …
+ */
+function permissionsFor(resource: CatalogResource) {
+  const key = (action: CatalogAction) => requireFarm(catalogPermission(resource, action));
+  return {
+    list: key('list'),
+    create: key('create'),
+    edit: key('edit'),
+    delete: key('delete'),
+    import: key('import'),
+    export: key('export'),
+    // Select choices: the catalog's own list, or any create / edit in the module
+    // (the product form picks a category and unit without listing them).
+    options: requireFarm([
+      catalogPermission(resource, 'list'),
+      ...permissionsWithAction('products', 'create'),
+      ...permissionsWithAction('products', 'edit'),
+    ]),
+  };
+}
 /** Image uploads arrive as the raw file body (Content-Type: image/*). */
 const imageBody = express.raw({ type: 'image/*', limit: IMAGE_MAX_BYTES });
 
@@ -50,20 +67,21 @@ function catalogRouter(catalog: Catalog) {
   const { resource } = catalog;
   const input = catalogSchemas[resource];
   const c = catalogController(catalog);
+  const can = permissionsFor(resource);
 
-  router.get('/', can.view, validate(catalogListSchema(resource), 'query'), c.list);
+  router.get('/', can.list, validate(catalogListSchema(resource), 'query'), c.list);
   router.get('/export', can.export, validate(catalogFilterSchema(resource), 'query'), c.export);
-  router.get('/options', can.view, validate(catalogOptionsSchema(resource), 'query'), c.options);
+  router.get('/options', can.options, validate(catalogOptionsSchema(resource), 'query'), c.options);
   router.post('/', can.create, validate(input), c.create);
   router.post('/import', can.import, importLimiter, validate(catalogImportSchema(resource)), c.import);
   router.post('/bulk-delete', can.delete, validate(bulkKeysSchema), c.bulkDelete);
-  if (hasStatus(resource)) router.post('/toggle-status', can.update, validate(bulkKeysSchema), c.toggleStatus);
+  if (hasStatus(resource)) router.post('/toggle-status', can.edit, validate(bulkKeysSchema), c.toggleStatus);
   if (CATALOG[resource].image) {
-    router.get('/:key/image', can.view, c.showImage);
-    router.put('/:key/image', can.update, uploadLimiter, imageBody, c.setImage);
-    router.delete('/:key/image', can.update, c.removeImage);
+    router.get('/:key/image', can.list, c.showImage);
+    router.put('/:key/image', can.edit, uploadLimiter, imageBody, c.setImage);
+    router.delete('/:key/image', can.edit, c.removeImage);
   }
-  router.put('/:key', can.update, validate(input), c.update);
+  router.put('/:key', can.edit, validate(input), c.update);
   router.delete('/:key', can.delete, c.remove);
 
   return router;
