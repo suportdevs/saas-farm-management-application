@@ -44,7 +44,7 @@ const ACTIONS = (Object.keys(PERMISSION_ACTION_LABELS) as PermissionAction[]).fi
 
 const keyOf = (m: PermissionModule, a: PermissionAction) => `${m}.${a}` as Permission;
 const hasAction = (m: PermissionModule, a: PermissionAction) => (PERMISSION_MODULES[m].actions as readonly PermissionAction[]).includes(a);
-const moduleKeys = (m: PermissionModule) => PERMISSION_MODULES[m].actions.map((a) => keyOf(m, a as PermissionAction));
+export const moduleKeys = (m: PermissionModule) => PERMISSION_MODULES[m].actions.map((a) => keyOf(m, a as PermissionAction));
 
 /**
  * Roles & permissions: what each role can do on this farm (role-based keys,
@@ -113,7 +113,7 @@ export function PermissionsManager({
 // ─── Shared pieces ───────────────────────────────────────────────
 
 /** Why the signed-in member can't change `key` (null when they can). */
-function useLockReason() {
+export function useLockReason() {
   const { membership } = useFarm();
   return (key: Permission): string | null => {
     if (isOwnerOnly(key)) return 'Only owners have this';
@@ -122,7 +122,7 @@ function useLockReason() {
   };
 }
 
-function Matrix({ renderCell, renderRowControl }: { renderCell: (key: Permission) => ReactNode; renderRowControl?: (m: PermissionModule) => ReactNode }) {
+export function Matrix({ renderCell, renderRowControl }: { renderCell: (key: Permission) => ReactNode; renderRowControl?: (m: PermissionModule) => ReactNode }) {
   const { modules } = useFarm();
   return (
     <div className="overflow-x-auto">
@@ -184,7 +184,7 @@ function Footer({ dirty, saving, onSave, onDiscard, extra }: { dirty: boolean; s
   );
 }
 
-const sameSet = (a: Iterable<Permission>, b: Iterable<Permission>) => {
+export const sameSet = (a: Iterable<Permission>, b: Iterable<Permission>) => {
   const x = new Set(a);
   const y = new Set(b);
   return x.size === y.size && [...x].every((k) => y.has(k));
@@ -195,7 +195,7 @@ const sameSet = (a: Iterable<Permission>, b: Iterable<Permission>) => {
 /** The role being edited: a system role key, `custom:<id>`, or `new` for a role being created. */
 type RoleSelection = Exclude<FarmRole, 'owner'> | `custom:${string}` | 'new';
 
-const ROLE_KEY_COUNT = PERMISSION_MODULE_KEYS.reduce((n, m) => n + moduleKeys(m).length, 0);
+export const ROLE_KEY_COUNT = PERMISSION_MODULE_KEYS.reduce((n, m) => n + moduleKeys(m).length, 0);
 
 function RoleEditor({ data, onSaved, canManage }: { data: FarmPermissions; onSaved: (d: FarmPermissions) => void; canManage: boolean }) {
   const router = useRouter();

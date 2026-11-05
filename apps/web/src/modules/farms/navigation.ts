@@ -11,6 +11,7 @@ import {
   Settings,
   ShieldCheck,
   Stethoscope,
+  UserCog,
   Users,
   Wallet,
   Wheat,
@@ -167,6 +168,7 @@ export function farmNav(slug: string): NavSection[] {
       title: 'Farm',
       links: [
         { href: `${base}/team`, label: 'Team', icon: Users, permission: 'members.view' },
+        { href: `${base}/roles`, label: 'Roles', icon: UserCog, permission: 'roles.view' },
         { href: `${base}/permissions`, label: 'Roles & permissions', icon: ShieldCheck, permission: 'roles.view' },
         { href: `${base}/activity`, label: 'Activity', icon: History, permission: 'activity.view' },
         { href: `${base}/billing`, label: 'Plan & billing', icon: CreditCard, permission: 'billing.view' },
