@@ -1,67 +1,14 @@
 import { z } from 'zod';
+import { animalSchema, penSchema } from '../herd/schemas';
 import {
   CATALOG_IMPORT_LIMIT,
   CATALOG_OPTIONS_LIMIT,
   fieldOf,
   filterColumns,
   importColumns,
-  STATUS,
   type CatalogResource,
 } from './catalog';
-
-const required = (label: string, max: number) =>
-  z.string(`${label} is required`).trim().min(1, `${label} is required`).max(max);
-
-/** Empty strings (forms, CSV cells) become null. */
-const optional = (max: number) =>
-  z
-    .string()
-    .trim()
-    .max(max)
-    .nullish()
-    .transform((v) => v || null);
-
-/** A required reference: the referenced row's key. */
-const ref = (message: string) => z.uuid(message);
-/** An optional reference: key, or empty/null for none. */
-const optionalRef = z
-  .union([z.uuid('Choose a valid option'), z.literal('')])
-  .nullish()
-  .transform((v) => v || null);
-
-/** Accepts numbers or numeric strings; empty → null, or an error when `required` (a label) is set. */
-const decimal = (max: number, required?: string) =>
-  z
-    .union([z.number(), z.string().trim()])
-    .nullish()
-    .transform((v, ctx) => {
-      if (v === '' || v == null) {
-        if (!required) return null;
-        ctx.addIssue({ code: 'custom', message: `${required} is required` });
-        return z.NEVER;
-      }
-      const n = Number(v);
-      if (!Number.isFinite(n) || n < 0 || n > max) {
-        ctx.addIssue({
-          code: 'custom',
-          message: `Enter a number between 0 and ${max.toLocaleString('en')}`,
-        });
-        return z.NEVER;
-      }
-      return n;
-    });
-
-/** 1/0, "1"/"0" or "active"/"inactive" (any case); missing → active. */
-const status = z
-  .union([z.number(), z.string().trim().toLowerCase()])
-  .nullish()
-  .transform((v, ctx) => {
-    if (v === '' || v == null) return STATUS.active;
-    if (v === 1 || v === '1' || v === 'active') return STATUS.active;
-    if (v === 0 || v === '0' || v === 'inactive') return STATUS.inactive;
-    ctx.addIssue({ code: 'custom', message: 'Use Active or Inactive' });
-    return z.NEVER;
-  });
+import { decimal, optional, optionalRef, ref, required, status } from './fields';
 
 const name = required('Name', 100);
 const description = optional(500);
@@ -111,6 +58,8 @@ export const catalogSchemas = {
   units: unitSchema,
   sizes: sizeSchema,
   colors: colorSchema,
+  animals: animalSchema,
+  pens: penSchema,
 } satisfies Record<CatalogResource, z.ZodObject>;
 
 // ─── Import rows ─────────────────────────────────────────────────
@@ -168,6 +117,7 @@ export function catalogFilterSchema(resource: CatalogResource) {
   for (const c of filterColumns(resource)) {
     if (c.ref) shape[c.csv] = param(z.uuid());
     else if (c.input === 'status') shape[c.csv] = param(z.enum(['1', '0']).transform(Number));
+    else if (c.input === 'select') shape[c.csv] = param(z.enum(c.options!.map((o) => o.value) as [string, ...string[]]));
     else if (c.input === 'number') {
       shape[`${c.csv}Min`] = param(z.coerce.number());
       shape[`${c.csv}Max`] = param(z.coerce.number());

@@ -18,7 +18,7 @@ const keyParam = (req: Request) => {
 };
 
 /**
- * The same request handlers for every catalog (products, categories, brands…);
+ * The same request handlers for every catalog (products, categories, animals…);
  * the catalog's engine does the work.
  */
 export function catalogController(catalog: Catalog) {
@@ -27,7 +27,7 @@ export function catalogController(catalog: Catalog) {
   /** Writes to the farm's activity log. */
   const record = (req: Request, tenantId: string, action: string, metadata: Record<string, unknown>) =>
     audit(req, {
-      action: `products.${action}`,
+      action: `${catalog.definition.module}.${action}`,
       targetType: 'farm',
       targetId: tenantId,
       metadata: { resource, ...metadata },

@@ -90,7 +90,7 @@ export function permissionOperations(module: PermissionModule): PermissionOperat
 export type CatalogAction = 'list' | 'create' | 'edit' | 'delete' | 'import' | 'export';
 
 /** One catalog screen's key, e.g. `catalogPermission('categories', 'create')` → `products.category_create`. */
-export const catalogPermission = (resource: CatalogResource, action: CatalogAction) => `products.${CATALOG_OPERATIONS[resource]}_${action}` as Permission;
+export const catalogPermission = (resource: CatalogResource, action: CatalogAction) => `${CATALOG_OPERATIONS[resource]}_${action}` as Permission;
 
 /** Keys of a module ending in `action`, e.g. (`products`, `list`) → every `products.*_list`. */
 export const permissionsWithAction = (module: PermissionModule, action: string) =>
@@ -103,7 +103,8 @@ export const isOwnerOnly = (p: Permission) => OWNER_ONLY_PERMISSIONS.includes(p)
 /** What every role sees: the team and the operational records. */
 const BASE: Permission[] = [
   'members.view',
-  ...(['herd', 'milk', 'health', 'breeding', 'feed'] as const).map((m) => `${m}.view` as Permission),
+  ...(['milk', 'health', 'breeding', 'feed'] as const).map((m) => `${m}.view` as Permission),
+  ...permissionsWithAction('herd', 'list'),
   ...permissionsWithAction('products', 'list'),
   ...permissionsWithAction('products', 'export'),
 ];
@@ -114,9 +115,9 @@ const ordered = (keys: readonly Permission[]) => PERMISSIONS.filter((p) => keys.
 export const ROLE_PERMISSIONS: Record<FarmRole, readonly Permission[]> = {
   owner: PERMISSIONS,
   manager: PERMISSIONS.filter((p) => !isOwnerOnly(p) && p !== 'billing.manage' && p !== 'roles.manage'),
-  veterinarian: ordered([...BASE, 'herd.create', 'herd.update', ...modulePermissions('health'), ...modulePermissions('breeding'), 'reports.view']),
+  veterinarian: ordered([...BASE, 'herd.animal_create', 'herd.animal_edit', ...modulePermissions('health'), ...modulePermissions('breeding'), 'reports.view']),
   accountant: ordered([...BASE, 'billing.view', ...modulePermissions('finance'), ...modulePermissions('reports')]),
-  worker: ordered([...BASE, 'herd.create', 'herd.update', 'milk.create', 'milk.update', 'feed.create', 'feed.update']),
+  worker: ordered([...BASE, 'herd.animal_create', 'herd.animal_edit', 'milk.create', 'milk.update', 'feed.create', 'feed.update']),
   viewer: ordered(BASE),
 };
 

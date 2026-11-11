@@ -59,8 +59,8 @@ describe('farms', () => {
     const ctx = await worker.c.get(`/api/farms/${farm.slug}`);
     expect(ctx.body.membership.role).toBe('worker');
     expect(ctx.body.membership.permissions).toEqual([...ROLE_PERMISSIONS.worker]);
-    expect(ctx.body.membership.permissions).toContain('herd.create');
-    expect(ctx.body.membership.permissions).not.toContain('herd.delete');
+    expect(ctx.body.membership.permissions).toContain('herd.animal_create');
+    expect(ctx.body.membership.permissions).not.toContain('herd.animal_delete');
 
     expect((await worker.c.patch(`/api/farms/${farm.slug}`, { name: 'Hijacked' })).status).toBe(403);
     expect((await worker.c.get(`/api/farms/${farm.slug}/billing`)).status).toBe(403);
@@ -230,7 +230,7 @@ describe('farm permissions', () => {
     // Managers can see the permissions but not change them by default.
     expect((await manager.c.get(`${base}/permissions`)).status).toBe(200);
     expect((await worker.c.get(`${base}/permissions`)).status).toBe(403);
-    expect((await manager.c.put(`${base}/members/${worker.id}/permissions`, { overrides: { 'herd.delete': true } })).status).toBe(403);
+    expect((await manager.c.put(`${base}/members/${worker.id}/permissions`, { overrides: { 'herd.animal_delete': true } })).status).toBe(403);
 
     // Owners always hold everything; owner-only keys can't be handed out.
     expect((await owner.c.put(`${base}/roles/owner/permissions`, { permissions: [] })).status).toBe(400);
@@ -242,7 +242,7 @@ describe('farm permissions', () => {
 
     // Given roles.manage, a manager may only change keys they hold — and never their own.
     await owner.c.put(`${base}/members/${manager.id}/permissions`, { overrides: { 'roles.manage': true } });
-    expect((await manager.c.put(`${base}/members/${worker.id}/permissions`, { overrides: { 'herd.delete': true } })).status).toBe(200);
+    expect((await manager.c.put(`${base}/members/${worker.id}/permissions`, { overrides: { 'herd.animal_delete': true } })).status).toBe(200);
     const escalate = await manager.c.put(`${base}/members/${worker.id}/permissions`, { overrides: { 'billing.manage': true } });
     expect(escalate.status).toBe(403);
     expect(escalate.body.error.code).toBe('PERMISSION_ESCALATION');
@@ -265,10 +265,10 @@ describe('farm custom roles', () => {
     const created = await owner.c.post(`${base}/roles`, {
       name: 'Milker',
       description: 'Milking shifts only',
-      permissions: ['milk.view', 'milk.create', 'herd.view'],
+      permissions: ['milk.view', 'milk.create', 'herd.animal_list'],
     });
     expect(created.status).toBe(201);
-    expect(created.body.role).toMatchObject({ name: 'Milker', permissions: ['herd.view', 'milk.view', 'milk.create'], memberCount: 0 });
+    expect(created.body.role).toMatchObject({ name: 'Milker', permissions: ['herd.animal_list', 'milk.view', 'milk.create'], memberCount: 0 });
     const id = created.body.role.id;
 
     expect((await owner.c.post(`${base}/roles`, { name: 'milker' })).body.error.code).toBe('ROLE_NAME_TAKEN');

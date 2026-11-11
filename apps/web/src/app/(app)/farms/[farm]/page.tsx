@@ -48,7 +48,7 @@ export default async function FarmOverviewPage({ params, searchParams }: Props) 
     { done: profileComplete, label: 'Add address, phone and registration number', href: `${base}/settings`, show: can('farm.update') },
     { done: usage.members > 1, label: 'Invite your team', href: `${base}/team`, show: can('members.invite') },
     { done: subscription.source !== null, label: 'Choose the right plan', href: `${base}/billing`, show: can('billing.manage') },
-    { done: false, label: 'Add your first animals (Herd module, coming next)', href: `${base}/herd` },
+    { done: usage.animals > 0, label: 'Add your first animals', href: `${base}/herd`, show: can('herd.animal_create') },
   ].filter((i) => i.show !== false);
   const progress = Math.round((checklist.filter((c) => c.done).length / checklist.length) * 100);
   const showSetup = welcome === '1' || progress < 100;

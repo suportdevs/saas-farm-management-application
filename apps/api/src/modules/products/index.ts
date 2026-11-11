@@ -21,8 +21,13 @@ export {
   sizeCatalog,
   unitCatalog,
 } from './services/catalog-definitions';
-export type { Catalog, Tenant } from './services/catalog.service';
+export type { Tenant } from './services/catalog.service';
 export { brands, categories, colors, products, productSizes, sizes, units } from './models';
+
+// The catalog engine, reused by other modules for their own tables (herd: animals, pens).
+export { Catalog } from './services/catalog.service';
+export { catalogRouter } from './routes/catalog.routes';
+// Model files import the shared catalog columns straight from products/models/columns.ts (drizzle-kit loads them directly).
 
 export default defineModule({
   name: 'products',

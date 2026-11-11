@@ -8,6 +8,7 @@ import {
   ListFilter,
   Loader2,
   Package,
+  PawPrint,
   Pencil,
   Plus,
   Printer,
@@ -23,6 +24,7 @@ import {
   catalogPath,
   catalogPermission,
   hasStatus,
+  titleKeyOf,
   STATUS,
   statusLabel,
   type CatalogColumn,
@@ -42,7 +44,7 @@ import { Input } from '@/components/ui/input';
 import { api, errorMessage } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useCan, useFarm } from '@/modules/farms/context';
-import { exportCatalog, imageUrl, printCatalog, rowValue } from '../files';
+import { displayValue, exportCatalog, imageUrl, printCatalog, rowValue } from '../files';
 import { CatalogFilters, filterParams, type FilterValues } from './catalog-filters';
 import { CatalogFormDialog } from './catalog-form-dialog';
 import { CatalogImportDialog } from './catalog-import-dialog';
@@ -54,6 +56,9 @@ type Modal =
   | null;
 
 type Busy = 'export' | 'print' | 'delete' | 'status' | null;
+
+/** Empty-state icon per module. */
+const MODULE_ICONS = { products: Package, herd: PawPrint };
 
 const toQueryString = (params: Record<string, string>) => {
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
@@ -77,7 +82,9 @@ export function CatalogManager({
   const router = useRouter();
   const pathname = usePathname();
   const { farm } = useFarm();
-  const { label, plural, description, columns } = CATALOG[resource];
+  const { label, plural, description, columns, eyebrow, module } = CATALOG[resource];
+  /** What names a row: its name, or e.g. an animal's ear tag. */
+  const titleOf = (row: CatalogRow) => rowValue(row, titleKeyOf(resource));
   const withStatus = hasStatus(resource);
   // One key per button, for this catalog (e.g. products.category_create).
   const canCreate = useCan(catalogPermission(resource, 'create'));
@@ -186,7 +193,7 @@ export function CatalogManager({
   return (
     <>
       <PageHeader
-        eyebrow="Product catalog"
+        eyebrow={eyebrow}
         title={plural}
         description={description}
         actions={
@@ -227,7 +234,7 @@ export function CatalogManager({
 
       {empty ? (
         <EmptyState
-          icon={Package}
+          icon={MODULE_ICONS[module]}
           title={`No ${plural.toLowerCase()} yet`}
           description={
             canCreate || canImport
@@ -356,7 +363,7 @@ export function CatalogManager({
                         <Checkbox
                           checked={selected.has(row.key)}
                           onChange={() => toggle(row.key)}
-                          aria-label={`Select ${row.name}`}
+                          aria-label={`Select ${titleOf(row)}`}
                         />
                       </td>
                     )}
@@ -376,7 +383,7 @@ export function CatalogManager({
                       >
                         <Cell
                           column={c}
-                          value={rowValue(row, c.key)}
+                          value={c.input === 'select' ? displayValue(row, c) : rowValue(row, c.key)}
                           onToggleStatus={canUpdate ? () => toggleStatus([row.key]) : undefined}
                         />
                       </td>
@@ -389,7 +396,7 @@ export function CatalogManager({
                               size="icon"
                               variant="ghost"
                               onClick={() => setModal({ type: 'form', row })}
-                              aria-label={`Edit ${row.name}`}
+                              aria-label={`Edit ${titleOf(row)}`}
                             >
                               <Pencil className="h-4 w-4" />
                             </Button>
@@ -399,7 +406,7 @@ export function CatalogManager({
                               size="icon"
                               variant="ghost"
                               onClick={() => setModal({ type: 'delete', keys: [row.key] })}
-                              aria-label={`Delete ${row.name}`}
+                              aria-label={`Delete ${titleOf(row)}`}
                             >
                               <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>

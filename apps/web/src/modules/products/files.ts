@@ -19,9 +19,13 @@ import { printTable } from '@/lib/print';
 export const rowValue = (row: CatalogRow, key: string) =>
   String((row as unknown as Record<string, unknown>)[key] ?? '');
 
-/** A cell as people read it — status as Active/Inactive (also accepted by import). */
-export const displayValue = (row: CatalogRow, c: CatalogColumn) =>
-  c.input === 'status' ? statusLabel(rowValue(row, c.key)) : rowValue(row, c.key);
+/** A cell as people read it — status as Active/Inactive, a select as its label (both accepted by import). */
+export function displayValue(row: CatalogRow, c: CatalogColumn) {
+  const value = rowValue(row, c.key);
+  if (c.input === 'status') return statusLabel(value);
+  if (c.input === 'select') return c.options?.find((o) => o.value === value)?.label ?? value;
+  return value;
+}
 
 /** URL of a row's image; the file name is the cache-busting version. */
 export const imageUrl = (farmSlug: string, resource: CatalogResource, row: CatalogRow) => {

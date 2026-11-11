@@ -11,9 +11,9 @@ type Props = {
   searchParams: Promise<CatalogSearchParams>;
 };
 
-/** Every catalog except products itself: /products/product-sizes, /categories, /brands, /units, /sizes, /colors. */
+/** Every product-module catalog except products itself: /products/product-sizes, /categories, /brands, /units, /sizes, /colors. */
 const isMasterData = (resource: string): resource is Exclude<CatalogResource, 'products'> =>
-  isCatalogResource(resource) && resource !== 'products';
+  isCatalogResource(resource) && resource !== 'products' && CATALOG[resource].module === 'products';
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { resource } = await params;

@@ -40,8 +40,8 @@ function permissionsFor(resource: CatalogResource) {
     // (the product form picks a category and unit without listing them).
     options: requireFarm([
       catalogPermission(resource, 'list'),
-      ...permissionsWithAction('products', 'create'),
-      ...permissionsWithAction('products', 'edit'),
+      ...permissionsWithAction(CATALOG[resource].module, 'create'),
+      ...permissionsWithAction(CATALOG[resource].module, 'edit'),
     ]),
   };
 }
@@ -62,7 +62,7 @@ const imageBody = express.raw({ type: 'image/*', limit: IMAGE_MAX_BYTES });
  *   DELETE /:key           delete
  *   GET|PUT|DELETE /:key/image   (catalogs with images; PUT takes the raw file)
  */
-function catalogRouter(catalog: Catalog) {
+export function catalogRouter(catalog: Catalog) {
   const router = Router({ mergeParams: true });
   const { resource } = catalog;
   const input = catalogSchemas[resource];

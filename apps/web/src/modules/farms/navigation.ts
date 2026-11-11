@@ -24,6 +24,7 @@ import {
   PERMISSION_MODULES,
   permissionsWithAction,
   type Capability,
+  type CatalogDefinition,
   type Permission,
   type PermissionModule,
 } from '@kit/shared';
@@ -45,6 +46,14 @@ export interface FarmModule {
   children?: { slug: string; label: string; permission?: Permission }[];
 }
 
+/** Sidebar sub-pages of a module: its catalogs (products → Products, Categories…; herd → Animals, Pens). */
+const catalogChildren = (module: CatalogDefinition['module']) =>
+  CATALOG_RESOURCES.filter((r) => CATALOG[r].module === module).map((r) => ({
+    slug: catalogPath(r),
+    label: CATALOG[r].plural,
+    permission: catalogPermission(r, 'list'),
+  }));
+
 /**
  * Operation modules. Phase 2 builds these one by one: add the page under
  * app/(app)/farms/[farm]/<slug>/ and flip `status` to "live".
@@ -55,7 +64,8 @@ export const OPERATION_MODULES: FarmModule[] = [
     label: 'Herd',
     icon: CowMark,
     capability: 'herd',
-    status: 'soon',
+    status: 'live',
+    children: catalogChildren('herd'),
     summary: 'A complete register of every animal — identity, lineage, groups, movements and lifetime history.',
     highlights: ['Ear tag, RFID and national ID tracking', 'Pedigree and family trees', 'Groups, pens and paddocks', 'Purchases, sales and deaths', 'Bulk import from spreadsheets'],
   },
@@ -111,7 +121,7 @@ export const BUSINESS_MODULES: FarmModule[] = [
     label: 'Products',
     icon: Package,
     status: 'live',
-    children: CATALOG_RESOURCES.map((r) => ({ slug: catalogPath(r), label: CATALOG[r].plural, permission: catalogPermission(r, 'list') })),
+    children: catalogChildren('products'),
     summary: 'Your product catalog — feed, medicine, milk and supplies with categories, brands, units, sizes and colors.',
     highlights: ['Products with category and unit', 'Categories, brands, units, sizes and colors', 'CSV import with a ready-made template', 'Export and print any list', 'Bulk delete'],
   },
@@ -219,6 +229,11 @@ export const ACTIVITY_LABELS: Record<string, string> = {
   'products.deleted': 'deleted from the product catalog',
   'products.imported': 'imported into the product catalog',
   'products.status_changed': 'changed status in the product catalog',
+  'herd.created': 'added to the herd',
+  'herd.updated': 'updated the herd',
+  'herd.deleted': 'deleted from the herd',
+  'herd.imported': 'imported into the herd',
+  'herd.status_changed': 'changed status in the herd',
   'admin.farm.plan_changed': 'changed the plan (support)',
   'admin.farm.trial_extended': 'extended the trial (support)',
   'admin.farm.suspended': 'suspended the farm (support)',

@@ -1,9 +1,13 @@
 /**
- * The product catalog: products and the master data they are described with.
- * One definition per resource drives the API (validation, import, filters),
- * the web table, the create/edit modal, the filter panel and the CSV
- * import/export format — add a column here and it shows up everywhere.
+ * The catalog engine: one definition per resource drives the API (validation,
+ * import, filters), the web table, the create/edit modal, the filter panel and
+ * the CSV import/export format — add a column here and it shows up everywhere.
+ *
+ * Products and their master data are defined in this file; other modules add
+ * their own definitions (herd: animals and pens, in herd/catalog.ts).
  */
+
+import { HERD_CATALOG } from '../herd/catalog';
 
 export const CATALOG_RESOURCES = [
   'products',
@@ -13,8 +17,17 @@ export const CATALOG_RESOURCES = [
   'units',
   'sizes',
   'colors',
+  // Herd module
+  'animals',
+  'pens',
 ] as const;
 export type CatalogResource = (typeof CATALOG_RESOURCES)[number];
+
+/** A choice of a `select` input: stored value and label (import accepts either). */
+export interface CatalogChoice {
+  value: string;
+  label: string;
+}
 
 export interface CatalogColumn {
   /** Property on a list row. */
@@ -25,7 +38,11 @@ export interface CatalogColumn {
   /** Column header in import/export files, and the filter's URL parameter. */
   csv: string;
   required?: boolean;
-  input?: 'text' | 'textarea' | 'color' | 'number' | 'status';
+  input?: 'text' | 'textarea' | 'color' | 'number' | 'status' | 'date' | 'select';
+  /** Choices of a `select` input. */
+  options?: readonly CatalogChoice[];
+  /** Value a new row starts with in the form (e.g. a select's usual choice). */
+  defaultValue?: string;
   /** The form shows a searchable select of this catalog; the row shows the referenced name. */
   ref?: CatalogResource;
   /**
@@ -33,6 +50,8 @@ export interface CatalogColumn {
    * (sent as a filter to the options endpoint), and it is cleared when that value changes.
    */
   dependsOn?: string;
+  /** Fixed filters for a reference select, e.g. `{ sex: 'female' }` so only cows can be a mother. */
+  refFilters?: Record<string, string>;
   /** Shown in the form, table and filters but not stored on this table (and not imported). */
   virtual?: boolean;
   /** Sample value written to the import template. */
@@ -40,6 +59,14 @@ export interface CatalogColumn {
 }
 
 export interface CatalogDefinition {
+  /** The permission module it belongs to: its keys are `<module>.<operation>_<action>`. */
+  module: 'products' | 'herd';
+  /** URL path under /farms/:farm — the same for the API and the web app. */
+  path: string;
+  /** Small heading above the page title, e.g. "Product catalog". */
+  eyebrow: string;
+  /** Row property that names a row (aria labels, delete prompts). Defaults to `name`. */
+  titleKey?: string;
   label: string;
   plural: string;
   description: string;
@@ -109,8 +136,11 @@ const ref = (
   example,
 });
 
-export const CATALOG: Record<CatalogResource, CatalogDefinition> = {
+const PRODUCT_CATALOG = {
   products: {
+    module: 'products',
+    path: 'products',
+    eyebrow: 'Product catalog',
     label: 'Product',
     plural: 'Products',
     description: 'Everything the farm buys, stores or sells — feed, medicine, milk, equipment.',
@@ -127,6 +157,9 @@ export const CATALOG: Record<CatalogResource, CatalogDefinition> = {
     image: true,
   },
   'product-sizes': {
+    module: 'products',
+    path: 'products/product-sizes',
+    eyebrow: 'Product catalog',
     label: 'Product size',
     plural: 'Product sizes',
     description: 'The sizes each product comes in, e.g. Dairy concentrate · 25 kg bag.',
@@ -143,6 +176,9 @@ export const CATALOG: Record<CatalogResource, CatalogDefinition> = {
     filters: ['category', 'product', 'size', 'unit', 'status'],
   },
   categories: {
+    module: 'products',
+    path: 'products/categories',
+    eyebrow: 'Product catalog',
     label: 'Category',
     plural: 'Categories',
     description: 'Group products, e.g. Feed, Medicine, Equipment.',
@@ -150,6 +186,9 @@ export const CATALOG: Record<CatalogResource, CatalogDefinition> = {
     filters: [],
   },
   brands: {
+    module: 'products',
+    path: 'products/brands',
+    eyebrow: 'Product catalog',
     label: 'Brand',
     plural: 'Brands',
     description: 'Manufacturers and brands of the products you use.',
@@ -157,6 +196,9 @@ export const CATALOG: Record<CatalogResource, CatalogDefinition> = {
     filters: [],
   },
   units: {
+    module: 'products',
+    path: 'products/units',
+    eyebrow: 'Product catalog',
     label: 'Unit',
     plural: 'Units',
     description: 'Units products are counted or measured in.',
@@ -168,6 +210,9 @@ export const CATALOG: Record<CatalogResource, CatalogDefinition> = {
     filters: [],
   },
   sizes: {
+    module: 'products',
+    path: 'products/sizes',
+    eyebrow: 'Product catalog',
     label: 'Size',
     plural: 'Sizes',
     description: 'Pack or item sizes, e.g. 25 kg bag, 1 L bottle.',
@@ -187,20 +232,29 @@ export const CATALOG: Record<CatalogResource, CatalogDefinition> = {
     filters: ['weight'],
   },
   colors: {
+    module: 'products',
+    path: 'products/colors',
+    eyebrow: 'Product catalog',
     label: 'Color',
     plural: 'Colors',
     description: 'Colors used for tags, equipment and packaging.',
     columns: [name('Red'), { ...code('#DC2626'), input: 'color' }, description('Ear tag colour')],
     filters: [],
   },
-};
+} satisfies Record<string, CatalogDefinition>;
+
+/** Every catalog, by resource: products here, the herd's in herd/catalog.ts. */
+export const CATALOG: Record<CatalogResource, CatalogDefinition> = { ...PRODUCT_CATALOG, ...HERD_CATALOG };
+
 
 export const isCatalogResource = (v: unknown): v is CatalogResource =>
   typeof v === 'string' && (CATALOG_RESOURCES as readonly string[]).includes(v);
 
 /** Path under /farms/:farm — the same for the API and the web app (`products`, `products/units`…). */
-export const catalogPath = (resource: CatalogResource) =>
-  resource === 'products' ? 'products' : `products/${resource}`;
+export const catalogPath = (resource: CatalogResource) => CATALOG[resource].path;
+
+/** Row property that names a row (`name`, or e.g. an animal's ear tag). */
+export const titleKeyOf = (resource: CatalogResource) => CATALOG[resource].titleKey ?? 'name';
 
 /** Body key of a column. */
 export const fieldOf = (c: CatalogColumn) => c.field ?? c.key;

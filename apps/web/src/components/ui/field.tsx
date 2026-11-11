@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { cn } from '@/lib/utils';
 import { Label } from './label';
 
 export function Field({
@@ -8,6 +9,7 @@ export function Field({
   hint,
   action,
   children,
+  className,
 }: {
   id: string;
   label: string;
@@ -15,9 +17,10 @@ export function Field({
   hint?: string;
   action?: ReactNode;
   children: ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="space-y-2">
+    <div className={cn('space-y-2', className)}>
       <div className="flex items-center justify-between">
         <Label htmlFor={id}>{label}</Label>
         {action}

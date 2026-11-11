@@ -10,3 +10,4 @@ export * from './farms';
 export * from './subscriptions';
 export * from './platform';
 export * from './products';
+export * from './herd';

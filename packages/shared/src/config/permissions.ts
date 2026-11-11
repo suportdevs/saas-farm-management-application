@@ -46,8 +46,16 @@ export const PERMISSION_CONFIG = {
   billing: { label: 'Plan & billing', permissions: { view: 'View', manage: 'Manage' } },
   activity: { label: 'Activity log', permissions: { view: 'View' } },
 
+  herd: {
+    label: 'Herd',
+    operations: { animal: 'Animal', pen: 'Pen' },
+    permissions: {
+      ...catalogActions('animal', 'Animal'),
+      ...catalogActions('pen', 'Pen'),
+    },
+  },
+
   // Operation modules not built yet: they get operation keys when their screens are added.
-  herd: { label: 'Herd', permissions: CRUD },
   milk: { label: 'Milk', permissions: CRUD },
   health: { label: 'Health', permissions: CRUD },
   breeding: { label: 'Breeding', permissions: CRUD },
@@ -90,13 +98,15 @@ export const PERMISSION_CONFIG = {
   // },
 } as const satisfies Record<string, PermissionModuleConfig>;
 
-/** The catalog screens and the operation prefix of their permission keys. */
-export const CATALOG_OPERATIONS: Record<CatalogResource, keyof (typeof PERMISSION_CONFIG)['products']['operations']> = {
-  products: 'product',
-  'product-sizes': 'product_size',
-  categories: 'category',
-  brands: 'brand',
-  units: 'unit',
-  sizes: 'size',
-  colors: 'color',
+/** The catalog screens and the `<module>.<operation>` prefix of their permission keys. */
+export const CATALOG_OPERATIONS: Record<CatalogResource, string> = {
+  products: 'products.product',
+  'product-sizes': 'products.product_size',
+  categories: 'products.category',
+  brands: 'products.brand',
+  units: 'products.unit',
+  sizes: 'products.size',
+  colors: 'products.color',
+  animals: 'herd.animal',
+  pens: 'herd.pen',
 };

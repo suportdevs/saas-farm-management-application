@@ -32,7 +32,7 @@ type Values = Record<string, string>;
 const HEX = /^#[0-9a-f]{6}$/i;
 
 const defaultValue = (c: CatalogColumn, row: CatalogRow | null) =>
-  row ? rowValue(row, fieldOf(c)) : c.input === 'status' ? '1' : '';
+  row ? rowValue(row, fieldOf(c)) : (c.defaultValue ?? (c.input === 'status' ? '1' : ''));
 
 /** Create (row = null) or edit a catalog row in a modal. */
 export function CatalogFormDialog({
@@ -108,7 +108,7 @@ export function CatalogFormDialog({
                 // A new parent invalidates the dependent choice.
                 for (const d of dependents(c)) setValue(fieldOf(d), '');
               }}
-              filters={parent && { [parent.csv]: watch(fieldOf(parent)) }}
+              filters={{ ...c.refFilters, ...(parent && { [parent.csv]: watch(fieldOf(parent)) }) }}
               initialLabel={row ? rowValue(row, c.key) : undefined}
               clearable={!c.required}
               invalid={invalid}
@@ -117,7 +117,7 @@ export function CatalogFormDialog({
         />
       );
     }
-    if (c.input === 'status') {
+    if (c.input === 'status' || c.input === 'select') {
       return (
         <Controller
           control={control}
@@ -125,7 +125,8 @@ export function CatalogFormDialog({
           render={({ field }) => (
             <SearchSelect
               id={id}
-              options={STATUS_OPTIONS}
+              options={c.input === 'select' ? c.options! : STATUS_OPTIONS}
+              clearable={c.input === 'select' && !c.required}
               value={field.value ?? ''}
               onChange={field.onChange}
               invalid={invalid}
@@ -134,6 +135,7 @@ export function CatalogFormDialog({
         />
       );
     }
+    if (c.input === 'date') return <Input id={id} type="date" aria-invalid={invalid} {...register(name)} />;
     if (c.input === 'textarea')
       return <Textarea id={id} rows={3} aria-invalid={invalid} {...register(name)} />;
     if (c.input === 'number') {
@@ -167,13 +169,17 @@ export function CatalogFormDialog({
     return <Input id={id} aria-invalid={invalid} {...register(name)} />;
   };
 
+  // Long forms (e.g. animals) get a wider modal with two columns.
+  const wide = columns.length > 8;
+
   const fieldLabel = (c: CatalogColumn) =>
-    c.required || c.input === 'status' || c.virtual ? c.label : `${c.label} (optional)`;
+    c.required || c.input === 'status' || c.virtual || c.defaultValue ? c.label : `${c.label} (optional)`;
 
   return (
     <Dialog
       open
       onClose={onClose}
+      className={wide ? 'max-w-3xl' : undefined}
       title={row ? `Edit ${label.toLowerCase()}` : `Add ${label.toLowerCase()}`}
       footer={
         <>
@@ -186,8 +192,17 @@ export function CatalogFormDialog({
         </>
       }
     >
-      <form id="catalog-form" onSubmit={onSubmit} className="space-y-4" noValidate>
-        {hasImage && <ImageField currentUrl={currentImage} onChange={setImage} />}
+      <form
+        id="catalog-form"
+        onSubmit={onSubmit}
+        className={wide ? 'grid gap-4 sm:grid-cols-2' : 'space-y-4'}
+        noValidate
+      >
+        {hasImage && (
+          <div className={wide ? 'sm:col-span-2' : undefined}>
+            <ImageField currentUrl={currentImage} onChange={setImage} />
+          </div>
+        )}
         {columns.map((c) => (
           <Field
             key={c.key}
@@ -197,12 +212,13 @@ export function CatalogFormDialog({
               c.virtual ? `Narrows the ${dependents(c)[0]?.label.toLowerCase()} list` : undefined
             }
             error={errors[fieldOf(c)]?.message}
+            className={wide && c.input === 'textarea' ? 'sm:col-span-2' : undefined}
           >
             {input(c)}
           </Field>
         ))}
         {errors.root && (
-          <p className="text-sm text-destructive" role="alert">
+          <p className="text-sm text-destructive sm:col-span-2" role="alert">
             {errors.root.message}
           </p>
         )}

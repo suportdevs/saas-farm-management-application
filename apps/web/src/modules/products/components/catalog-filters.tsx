@@ -21,7 +21,7 @@ export const filterParams = (resource: CatalogResource) => [
 
 /**
  * Advanced filters: the definition's filter columns (reference, status,
- * number range) plus the created-date range. Applied through the URL.
+ * select, number range) plus the created-date range. Applied through the URL.
  */
 export function CatalogFilters({
   resource,
@@ -65,6 +65,20 @@ export function CatalogFilters({
                   value={text(c.csv)}
                   onChange={(v) => set(c.csv, v)}
                   filters={c.dependsOn ? { [c.dependsOn]: draft[c.dependsOn] } : undefined}
+                  placeholder={`Any ${c.label.toLowerCase()}`}
+                  clearable
+                />
+              </Field>
+            );
+          }
+          if (c.input === 'select') {
+            return (
+              <Field key={c.csv} id={id} label={c.label}>
+                <SearchSelect
+                  id={id}
+                  options={c.options!}
+                  value={text(c.csv)}
+                  onChange={(v) => set(c.csv, v)}
                   placeholder={`Any ${c.label.toLowerCase()}`}
                   clearable
                 />

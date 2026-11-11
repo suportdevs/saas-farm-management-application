@@ -62,8 +62,8 @@ export interface UniqueRule {
 export interface Reference {
   /** Foreign-key column on this catalog's table. */
   column: PgColumn;
-  /** The catalog it points at. */
-  catalog: Catalog;
+  /** The catalog it points at — or a function returning it, for a catalog that points at itself (an animal's mother). */
+  catalog: Catalog | (() => Catalog);
   /** Matched besides the name when importing — e.g. a category's code, a unit's short name. */
   matchBy: PgColumn;
 }
@@ -84,6 +84,10 @@ export interface CatalogConfig {
   joins?: { table: PgTable; on: SQL; left?: boolean }[];
   /** Own columns matched by the search box and the searchable selects. */
   search: PgColumn[];
+  /** What a searchable select shows for a row. Defaults to the name. */
+  title?: SQL<string> | PgColumn;
+  /** Column lists and selects are sorted by. Defaults to the name. */
+  orderBy?: PgColumn;
   unique: UniqueRule[];
   /** Reference fields of the body (`categoryKey`…) and the foreign keys they fill. */
   references?: Record<string, Reference>;
@@ -95,10 +99,16 @@ export interface CatalogConfig {
   cascade?: Omit<Dependent, 'label'>[];
   /** Runs in the same transaction after rows are created (form or import). `rows` include `id`. */
   onCreated?: (tx: Tx, tenantId: string, userId: string, rows: Values[]) => Promise<void>;
+  /** Runs before `adding` rows are created (form or import) — throw to stop it, e.g. a plan limit. */
+  beforeCreate?: (tenantId: string, adding: number) => Promise<void>;
 }
 
 const lower = (column: PgColumn) => sql<string>`lower(${column})`;
 const plural = (n: number, word: string) => (n === 1 ? word : `${word}s`);
+/** "a unit", "an animal". */
+const article = (word: string) => (/^[aeiou]/i.test(word) ? `an ${word}` : `a ${word}`);
+/** The catalog a reference points at. */
+const targetOf = (ref: Reference) => (typeof ref.catalog === 'function' ? ref.catalog() : ref.catalog);
 
 /** Postgres unique violation → the index name. Drizzle wraps driver errors in `cause`. */
 function violatedIndex(err: unknown): string | null {
@@ -165,10 +175,10 @@ export class Catalog {
           hasStatus(this.resource) ? eq(this.column('status'), STATUS.active) : undefined,
         );
     return db
-      .select({ key: t.key, name: t.name })
+      .select({ key: t.key, name: this.config.title ?? t.name })
       .from(t)
       .where(where)
-      .orderBy(asc(t.name))
+      .orderBy(asc(this.config.orderBy ?? t.name))
       .limit(CATALOG_OPTIONS_LIMIT);
   }
 
@@ -204,6 +214,7 @@ export class Catalog {
   // ─── Writes ────────────────────────────────────────────────────
 
   async create(tenantId: string, userId: string, input: Values) {
+    await this.config.beforeCreate?.(tenantId, 1);
     const values = await this.resolveKeys(tenantId, input);
     const [row] = await this.insert(tenantId, userId, [values]);
     return { key: row!.key as string };
@@ -261,6 +272,7 @@ export class Catalog {
 
   /** Inserts all rows or none. Returns how many were imported. */
   async import(tenantId: string, userId: string, rows: Values[]) {
+    await this.config.beforeCreate?.(tenantId, rows.length);
     await this.assertUniqueRows(tenantId, rows);
     const values = await this.resolveNames(tenantId, rows);
     return (await this.insert(tenantId, userId, values)).length;
@@ -359,7 +371,7 @@ export class Catalog {
     const virtual = this.config.virtualFilters?.[csv];
     if (virtual) return virtual(tenantId, key);
     const [, ref] = this.references.find(([f]) => f === field)!;
-    const target = ref.catalog.config.table;
+    const target = targetOf(ref).config.table;
     return inArray(
       ref.column,
       db
@@ -377,7 +389,7 @@ export class Catalog {
         ? query.leftJoin(join.table, join.on)
         : query.innerJoin(join.table, join.on);
     }
-    return query.where(where).orderBy(asc(t.name), asc(t.id));
+    return query.where(where).orderBy(asc(this.config.orderBy ?? t.name), asc(t.id));
   }
 
   /** Inserts rows and runs `onCreated` in one transaction. */
@@ -413,8 +425,8 @@ export class Catalog {
       this.references.map(async ([field, ref, property]) => {
         const key = input[field] as string | null;
         delete values[field];
-        const id = key ? await ref.catalog.idOf(tenantId, key) : null;
-        if (key && !id) errors[field] = [`Choose a ${ref.catalog.definition.label.toLowerCase()}`];
+        const id = key ? await targetOf(ref).idOf(tenantId, key) : null;
+        if (key && !id) errors[field] = [`Choose ${article(targetOf(ref).definition.label.toLowerCase())}`];
         values[property] = id;
       }),
     );
@@ -428,7 +440,7 @@ export class Catalog {
     const errors: FieldErrors = {};
     for (const [field, ref, property] of this.references) {
       const texts = rows.map((r) => r[field] as string | null);
-      const ids = await ref.catalog.idsByName(
+      const ids = await targetOf(ref).idsByName(
         tenantId,
         texts.filter((v): v is string => !!v),
         ref.matchBy,
@@ -439,7 +451,7 @@ export class Catalog {
         row[property] = text ? (ids.get(text.toLowerCase()) ?? null) : null;
         if (text && !row[property]) {
           errors[`rows.${i}.${this.csvColumn(field)}`] = [
-            `No ${ref.catalog.definition.label.toLowerCase()} "${text}"`,
+            `No ${targetOf(ref).definition.label.toLowerCase()} "${text}"`,
           ];
         }
       });
