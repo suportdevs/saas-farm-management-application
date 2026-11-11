@@ -48,10 +48,12 @@ export const PERMISSION_CONFIG = {
 
   herd: {
     label: 'Herd',
-    operations: { animal: 'Animal', pen: 'Pen' },
+    operations: { animal: 'Animal', pen: 'Pen', batch: 'Batch', weight: 'Weight' },
     permissions: {
       ...catalogActions('animal', 'Animal'),
       ...catalogActions('pen', 'Pen'),
+      ...catalogActions('batch', 'Batch'),
+      ...catalogActions('weight', 'Weight'),
     },
   },
 
@@ -109,4 +111,6 @@ export const CATALOG_OPERATIONS: Record<CatalogResource, string> = {
   colors: 'products.color',
   animals: 'herd.animal',
   pens: 'herd.pen',
+  batches: 'herd.batch',
+  weights: 'herd.weight',
 };

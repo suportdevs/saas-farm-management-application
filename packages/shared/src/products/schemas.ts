@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { animalSchema, penSchema } from '../herd/schemas';
+import { animalSchema, batchSchema, penSchema, weightSchema } from '../herd/schemas';
 import {
   CATALOG_IMPORT_LIMIT,
   CATALOG_OPTIONS_LIMIT,
@@ -60,6 +60,8 @@ export const catalogSchemas = {
   colors: colorSchema,
   animals: animalSchema,
   pens: penSchema,
+  batches: batchSchema,
+  weights: weightSchema,
 } satisfies Record<CatalogResource, z.ZodObject>;
 
 // ─── Import rows ─────────────────────────────────────────────────
@@ -106,7 +108,8 @@ const day = z.iso.date('Use YYYY-MM-DD');
 
 /**
  * Search and advanced filters, as URL parameters:
- *   q, from, to (created date), <ref>=<key>, status=1|0, <number>Min / <number>Max
+ *   q, from, to (created date), <ref>=<key>, status=1|0, <select>=<value>,
+ *   <number>Min / <number>Max, <date>From / <date>To
  */
 export function catalogFilterSchema(resource: CatalogResource) {
   const shape: Record<string, z.ZodType> = {
@@ -117,7 +120,10 @@ export function catalogFilterSchema(resource: CatalogResource) {
   for (const c of filterColumns(resource)) {
     if (c.ref) shape[c.csv] = param(z.uuid());
     else if (c.input === 'status') shape[c.csv] = param(z.enum(['1', '0']).transform(Number));
-    else if (c.input === 'select') shape[c.csv] = param(z.enum(c.options!.map((o) => o.value) as [string, ...string[]]));
+    else if (c.input === 'date') {
+      shape[`${c.csv}From`] = param(day);
+      shape[`${c.csv}To`] = param(day);
+    } else if (c.input === 'select') shape[c.csv] = param(z.enum(c.options!.map((o) => o.value) as [string, ...string[]]));
     else if (c.input === 'number') {
       shape[`${c.csv}Min`] = param(z.coerce.number());
       shape[`${c.csv}Max`] = param(z.coerce.number());

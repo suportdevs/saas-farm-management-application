@@ -13,7 +13,7 @@ export type FilterValues = Record<string, string>;
 /** URL parameters the filter panel owns (everything except `q` and `page`). */
 export const filterParams = (resource: CatalogResource) => [
   ...filterColumns(resource).flatMap((c) =>
-    c.input === 'number' ? [`${c.csv}Min`, `${c.csv}Max`] : [c.csv],
+    c.input === 'number' ? [`${c.csv}Min`, `${c.csv}Max`] : c.input === 'date' ? [`${c.csv}From`, `${c.csv}To`] : [c.csv],
   ),
   'from',
   'to',
@@ -21,7 +21,7 @@ export const filterParams = (resource: CatalogResource) => [
 
 /**
  * Advanced filters: the definition's filter columns (reference, status,
- * select, number range) plus the created-date range. Applied through the URL.
+ * select, number range, date range) plus the created-date range. Applied through the URL.
  */
 export function CatalogFilters({
   resource,
@@ -68,6 +68,29 @@ export function CatalogFilters({
                   placeholder={`Any ${c.label.toLowerCase()}`}
                   clearable
                 />
+              </Field>
+            );
+          }
+          if (c.input === 'date') {
+            return (
+              <Field key={c.csv} id={id} label={c.label}>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id={id}
+                    type="date"
+                    value={text(`${c.csv}From`)}
+                    max={text(`${c.csv}To`) || undefined}
+                    onChange={(e) => set(`${c.csv}From`, e.target.value)}
+                  />
+                  <span className="text-muted-foreground">–</span>
+                  <Input
+                    type="date"
+                    aria-label={`${c.label} until`}
+                    value={text(`${c.csv}To`)}
+                    min={text(`${c.csv}From`) || undefined}
+                    onChange={(e) => set(`${c.csv}To`, e.target.value)}
+                  />
+                </div>
               </Field>
             );
           }

@@ -1,5 +1,5 @@
 import type { Status } from '../products/catalog';
-import type { AnimalOrigin, AnimalSex, AnimalType, HerdStatus, PenType } from './catalog';
+import type { AnimalOrigin, AnimalSex, AnimalType, BatchPurpose, HerdStatus, PenType, WeighMethod } from './catalog';
 
 /** Rows as listed by the API — only the columns the herd screens use. */
 export interface PenRow {
@@ -21,6 +21,8 @@ export interface AnimalRow {
   breed: string | null;
   penKey: string | null;
   penName: string | null;
+  batchKey: string | null;
+  batchName: string | null;
   /** YYYY-MM-DD */
   birthDate: string | null;
   origin: AnimalOrigin;
@@ -35,4 +37,29 @@ export interface AnimalRow {
   notes: string | null;
   /** Photo file name (also its cache-busting version), or null. */
   image: string | null;
+}
+
+export interface BatchRow {
+  key: string;
+  name: string;
+  code: string | null;
+  purpose: BatchPurpose | null;
+  penKey: string | null;
+  penName: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  status: Status;
+  description: string | null;
+}
+
+export interface WeightRow {
+  key: string;
+  animalKey: string;
+  /** The animal's ear tag. */
+  animalName: string;
+  /** YYYY-MM-DD */
+  weighedOn: string;
+  weight: number;
+  method: WeighMethod | null;
+  notes: string | null;
 }

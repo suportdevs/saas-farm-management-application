@@ -37,7 +37,8 @@ export type CatalogTable = PgTable & {
   id: PgColumn;
   key: PgColumn;
   tenantId: PgColumn;
-  name: PgColumn;
+  /** Most catalogs have one; ones without it (weight records) set `title` and `orderBy`. */
+  name?: PgColumn;
   createdAt: PgColumn;
   deletedAt: PgColumn;
 };
@@ -73,6 +74,8 @@ export interface Dependent {
   table: CatalogTable;
   column: PgColumn;
   label: string;
+  /** Plural of `label` when it isn't just label + "s" (batch → batches). */
+  plural?: string;
 }
 
 export interface CatalogConfig {
@@ -86,8 +89,8 @@ export interface CatalogConfig {
   search: PgColumn[];
   /** What a searchable select shows for a row. Defaults to the name. */
   title?: SQL<string> | PgColumn;
-  /** Column lists and selects are sorted by. Defaults to the name. */
-  orderBy?: PgColumn;
+  /** How lists and selects are sorted: a column (ascending) or e.g. `desc(column)`. Defaults to the name. */
+  orderBy?: PgColumn | SQL;
   unique: UniqueRule[];
   /** Reference fields of the body (`categoryKey`…) and the foreign keys they fill. */
   references?: Record<string, Reference>;
@@ -101,6 +104,8 @@ export interface CatalogConfig {
   onCreated?: (tx: Tx, tenantId: string, userId: string, rows: Values[]) => Promise<void>;
   /** Runs before `adding` rows are created (form or import) — throw to stop it, e.g. a plan limit. */
   beforeCreate?: (tenantId: string, adding: number) => Promise<void>;
+  /** Runs after rows are created, updated, imported or deleted — e.g. to refresh totals elsewhere. */
+  afterWrite?: (tenantId: string) => Promise<void>;
 }
 
 const lower = (column: PgColumn) => sql<string>`lower(${column})`;
@@ -175,10 +180,10 @@ export class Catalog {
           hasStatus(this.resource) ? eq(this.column('status'), STATUS.active) : undefined,
         );
     return db
-      .select({ key: t.key, name: this.config.title ?? t.name })
+      .select({ key: t.key, name: this.config.title ?? t.name! })
       .from(t)
       .where(where)
-      .orderBy(asc(this.config.orderBy ?? t.name))
+      .orderBy(this.sortOrder)
       .limit(CATALOG_OPTIONS_LIMIT);
   }
 
@@ -196,13 +201,14 @@ export class Catalog {
   /** Rows whose name or `alt` column matches one of `values` (case-insensitive): lowercased value → id. */
   async idsByName(tenantId: string, values: string[], alt: PgColumn): Promise<Map<string, number>> {
     const t = this.config.table;
+    const name = t.name ?? alt;
     const wanted = [...new Set(values.map((v) => v.toLowerCase()))];
     if (!wanted.length) return new Map();
     const rows = await db
-      .select({ id: t.id, name: lower(t.name), alt: lower(alt) })
+      .select({ id: t.id, name: lower(name), alt: lower(alt) })
       .from(t)
       .where(
-        this.active(tenantId, or(inArray(lower(t.name), wanted), inArray(lower(alt), wanted))),
+        this.active(tenantId, or(inArray(lower(name), wanted), inArray(lower(alt), wanted))),
       );
     const ids = new Map<string, number>();
     // A code / short-name match wins over a name match.
@@ -217,6 +223,7 @@ export class Catalog {
     await this.config.beforeCreate?.(tenantId, 1);
     const values = await this.resolveKeys(tenantId, input);
     const [row] = await this.insert(tenantId, userId, [values]);
+    await this.config.afterWrite?.(tenantId);
     return { key: row!.key as string };
   }
 
@@ -231,6 +238,7 @@ export class Catalog {
         .returning({ key: t.key }),
     );
     if (!row) throw notFound(`${this.definition.label} not found`);
+    await this.config.afterWrite?.(tenantId);
     return row as { key: string };
   }
 
@@ -267,6 +275,7 @@ export class Catalog {
           .where(and(eq(table.tenantId, tenantId), isNull(table.deletedAt), inArray(column, ids)));
       }
     });
+    await this.config.afterWrite?.(tenantId);
     return ids.length;
   }
 
@@ -275,7 +284,9 @@ export class Catalog {
     await this.config.beforeCreate?.(tenantId, rows.length);
     await this.assertUniqueRows(tenantId, rows);
     const values = await this.resolveNames(tenantId, rows);
-    return (await this.insert(tenantId, userId, values)).length;
+    const imported = (await this.insert(tenantId, userId, values)).length;
+    await this.config.afterWrite?.(tenantId);
+    return imported;
   }
 
   // ─── Images ────────────────────────────────────────────────────
@@ -325,6 +336,10 @@ export class Catalog {
 
   // ─── Queries ───────────────────────────────────────────────────
 
+  private get sortOrder() {
+    return this.config.orderBy ?? asc(this.config.table.name!);
+  }
+
   private column(property: string) {
     return this.columns[property]!;
   }
@@ -359,6 +374,11 @@ export class Catalog {
         const max = filters[`${c.csv}Max`];
         if (min !== undefined) conditions.push(gte(this.column(fieldOf(c)), min));
         if (max !== undefined) conditions.push(lte(this.column(fieldOf(c)), max));
+      } else if (c.input === 'date') {
+        const from = filters[`${c.csv}From`];
+        const to = filters[`${c.csv}To`];
+        if (from !== undefined) conditions.push(gte(this.column(fieldOf(c)), from));
+        if (to !== undefined) conditions.push(lte(this.column(fieldOf(c)), to));
       } else if (filters[c.csv] !== undefined) {
         conditions.push(eq(this.column(fieldOf(c)), filters[c.csv]));
       }
@@ -389,7 +409,7 @@ export class Catalog {
         ? query.leftJoin(join.table, join.on)
         : query.innerJoin(join.table, join.on);
     }
-    return query.where(where).orderBy(asc(this.config.orderBy ?? t.name), asc(t.id));
+    return query.where(where).orderBy(this.sortOrder, asc(t.id));
   }
 
   /** Inserts rows and runs `onCreated` in one transaction. */
@@ -477,7 +497,7 @@ export class Catalog {
       if (n > 0) {
         const what = n === 1 ? 'it' : 'them';
         throw conflict(
-          `${n} ${plural(n, use.label)} ${n === 1 ? 'uses' : 'use'} this ${this.definition.label.toLowerCase()}. Change or delete ${what} first.`,
+          `${n} ${n === 1 ? use.label : (use.plural ?? plural(n, use.label))} ${n === 1 ? 'uses' : 'use'} this ${this.definition.label.toLowerCase()}. Change or delete ${what} first.`,
           'IN_USE',
         );
       }

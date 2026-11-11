@@ -1,5 +1,5 @@
 import type { Pagination } from '../core/types';
-import type { AnimalRow, PenRow } from '../herd/types';
+import type { AnimalRow, BatchRow, PenRow, WeightRow } from '../herd/types';
 import type { Status } from './catalog';
 
 /** Rows as listed by the API — only the columns the catalog screens use. */
@@ -62,7 +62,7 @@ export interface ProductSizeRow {
   unitName: string | null;
 }
 
-export type CatalogRow = UnitRow | SizeRow | CodedRow | ProductRow | ProductSizeRow | AnimalRow | PenRow;
+export type CatalogRow = UnitRow | SizeRow | CodedRow | ProductRow | ProductSizeRow | AnimalRow | PenRow | BatchRow | WeightRow;
 
 /** A choice in a searchable reference select. */
 export interface CatalogOption {

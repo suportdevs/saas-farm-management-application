@@ -31,8 +31,14 @@ type Values = Record<string, string>;
 
 const HEX = /^#[0-9a-f]{6}$/i;
 
-const defaultValue = (c: CatalogColumn, row: CatalogRow | null) =>
-  row ? rowValue(row, fieldOf(c)) : (c.defaultValue ?? (c.input === 'status' ? '1' : ''));
+/** Today as YYYY-MM-DD in the browser's time zone. */
+const today = () => new Date().toLocaleDateString('en-CA');
+
+function defaultValue(c: CatalogColumn, row: CatalogRow | null) {
+  if (row) return rowValue(row, fieldOf(c));
+  if (c.defaultValue === 'today') return today();
+  return c.defaultValue ?? (c.input === 'status' ? '1' : '');
+}
 
 /** Create (row = null) or edit a catalog row in a modal. */
 export function CatalogFormDialog({

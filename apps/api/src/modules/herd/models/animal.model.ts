@@ -1,5 +1,6 @@
 import { date, index, integer, numeric, pgTable, text, varchar, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import { activeUnique, audit, base } from '../../products/models/columns';
+import { batches } from './batch.model';
 import { pens } from './pen.model';
 
 // NOTE: keep imports in model files relative — drizzle-kit loads them directly.
@@ -18,6 +19,7 @@ export const animals = pgTable(
     type: varchar('type', { length: 10 }),
     breed: varchar('breed', { length: 100 }),
     penId: integer('pen_id').references(() => pens.id),
+    batchId: integer('batch_id').references(() => batches.id),
     birthDate: date('birth_date', { mode: 'string' }),
     /** born · purchased */
     origin: varchar('origin', { length: 10 }).notNull().default('born'),
@@ -35,6 +37,7 @@ export const animals = pgTable(
   (t) => [
     activeUnique('animals_tag_uq', t.tenantId, t.tag),
     index('animals_pen_idx').on(t.penId),
+    index('animals_batch_idx').on(t.batchId),
     index('animals_mother_idx').on(t.motherId),
     index('animals_father_idx').on(t.fatherId),
     index('animals_herd_status_idx').on(t.tenantId, t.herdStatus),

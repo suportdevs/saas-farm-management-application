@@ -174,3 +174,98 @@ describe('herd: animals', () => {
     expect((await keeper.c.get(base)).status).toBe(403);
   });
 });
+
+describe('herd: batches', () => {
+  it('groups animals into batches; blocks deleting a batch or pen in use', async () => {
+    const { owner, base, post } = await setup();
+    const barn = await post('/pens', { name: 'Barn A', code: 'BA' });
+    const calves = await post('/batches', { name: 'Calves 2025', code: 'CALF-25', purpose: 'Calves', penKey: barn, startDate: '2025-01-01' });
+    await post('/batches', { name: 'Dry cows', purpose: 'dry', startDate: '2024-06-01' });
+
+    const list = await owner.c.get(`${base}/batches`);
+    expect(list.body.rows.map((r: { name: string }) => r.name)).toEqual(['Calves 2025', 'Dry cows']);
+    expect(list.body.rows[0]).toMatchObject({ code: 'CALF-25', purpose: 'calves', penName: 'Barn A', startDate: '2025-01-01', status: 1 });
+    // Date range filter on the start date.
+    expect((await owner.c.get(`${base}/batches?start_dateFrom=2025-01-01`)).body.rows).toHaveLength(1);
+    expect((await owner.c.get(`${base}/batches?start_dateTo=2024-12-31`)).body.rows[0].name).toBe('Dry cows');
+    expect((await owner.c.post(`${base}/batches`, { name: 'calves 2025' })).status).toBe(422);
+
+    // The pen now holds a batch: it can't be deleted.
+    expect((await owner.c.delete(`${base}/pens/${barn}`)).body.error.message).toMatch(/1 batch uses/);
+
+    const calf = await post('', { tag: 'C-1', sex: 'female', batchKey: calves });
+    expect((await owner.c.get(`${base}?batch=${calves}`)).body.rows.map((r: { tag: string }) => r.tag)).toEqual(['C-1']);
+    expect((await owner.c.get(base)).body.rows[0]).toMatchObject({ batchKey: calves, batchName: 'Calves 2025' });
+    expect((await owner.c.delete(`${base}/batches/${calves}`)).body.error.code).toBe('IN_USE');
+
+    // Imports match the batch by code.
+    const imported = await owner.c.post(`${base}/import`, { rows: [{ tag: 'C-2', sex: 'male', batch: 'CALF-25' }] });
+    expect(imported.status).toBe(201);
+    expect((await owner.c.get(`${base}?batch=${calves}`)).body.rows).toHaveLength(2);
+
+    await owner.c.put(`${base}/${calf}`, { tag: 'C-1', sex: 'female', batchKey: '' });
+    expect((await owner.c.get(`${base}?batch=${calves}`)).body.rows).toHaveLength(1);
+  });
+});
+
+describe('herd: weights', () => {
+  it('records weighings, keeps the animal on its latest weight, filters by date and imports', async () => {
+    const { owner, base, post } = await setup();
+    const bella = await post('', { tag: 'BD-1', sex: 'female' });
+    const max = await post('', { tag: 'BD-2', sex: 'male', weight: '400' });
+    const weightOf = async (key: string) => (await owner.c.get(base)).body.rows.find((r: { key: string }) => r.key === key).weight;
+
+    const first = await post('/weights', { animalKey: bella, weighedOn: '2025-01-10', weight: '210', method: 'Scale' });
+    const second = await post('/weights', { animalKey: bella, weighedOn: '2025-03-10', weight: '255.5' });
+    // An older weighing entered later doesn't replace the latest one.
+    await post('/weights', { animalKey: bella, weighedOn: '2024-12-01', weight: '190', method: 'tape' });
+    expect(await weightOf(bella)).toBe(255.5);
+    expect(await weightOf(max)).toBe(400);
+
+    const list = await owner.c.get(`${base}/weights`);
+    expect(list.body.rows.map((r: { weighedOn: string }) => r.weighedOn)).toEqual(['2025-03-10', '2025-01-10', '2024-12-01']);
+    expect(list.body.rows[1]).toMatchObject({ key: first, animalKey: bella, animalName: 'BD-1', weight: 210, method: 'scale' });
+
+    expect((await owner.c.get(`${base}/weights?dateFrom=2025-01-01&dateTo=2025-02-28`)).body.rows).toHaveLength(1);
+    expect((await owner.c.get(`${base}/weights?animal=${max}`)).body.rows).toHaveLength(0);
+    expect((await owner.c.get(`${base}/weights?weightMin=200`)).body.rows).toHaveLength(2);
+
+    // Editing or deleting the latest weighing moves the animal back.
+    await owner.c.put(`${base}/weights/${second}`, { animalKey: bella, weighedOn: '2025-03-10', weight: '260' });
+    expect(await weightOf(bella)).toBe(260);
+    expect((await owner.c.delete(`${base}/weights/${second}`)).status).toBe(204);
+    expect(await weightOf(bella)).toBe(210);
+
+    // Validation: animal, date and weight are required.
+    const bad = await owner.c.post(`${base}/weights`, { weight: '' });
+    expect(Object.keys(bad.body.error.details).sort()).toEqual(['animalKey', 'weighedOn', 'weight']);
+
+    // Imports match the animal by ear tag.
+    const imported = await owner.c.post(`${base}/weights/import`, {
+      rows: [
+        { animal: 'BD-2', date: '2025-05-01', weight: '420', method: 'Scale' },
+        { animal: 'bd-1', date: '2025-05-01', weight: '270' },
+      ],
+    });
+    expect(imported.status).toBe(201);
+    expect(await weightOf(max)).toBe(420);
+    expect(await weightOf(bella)).toBe(270);
+    const unknown = await owner.c.post(`${base}/weights/import`, { rows: [{ animal: 'NOPE', date: '2025-05-01', weight: '1' }] });
+    expect(unknown.body.error.details['rows.0.animal']).toEqual(['No animal "NOPE"']);
+
+    // Deleting an animal takes its weight records with it.
+    expect((await owner.c.delete(`${base}/${max}`)).status).toBe(204);
+    expect((await owner.c.get(`${base}/weights`)).body.rows.every((r: { animalName: string }) => r.animalName === 'BD-1')).toBe(true);
+  });
+
+  it('lets workers record weights but not delete them', async () => {
+    const { owner, farm, base, post } = await setup();
+    const cow = await post('', { tag: 'W-1', sex: 'female' });
+    const worker = await inviteAndJoin(app, owner, farm.slug, 'worker');
+    const rec = await worker.c.post(`${base}/weights`, { animalKey: cow, weighedOn: '2025-02-02', weight: '300' });
+    expect(rec.status).toBe(201);
+    expect((await worker.c.delete(`${base}/weights/${rec.body.key}`)).status).toBe(403);
+    expect((await worker.c.post(`${base}/batches`, { name: 'Mine' })).status).toBe(403);
+    expect((await worker.c.get(`${base}/batches`)).status).toBe(200);
+  });
+});

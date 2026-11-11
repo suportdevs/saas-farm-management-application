@@ -20,6 +20,8 @@ export const CATALOG_RESOURCES = [
   // Herd module
   'animals',
   'pens',
+  'batches',
+  'weights',
 ] as const;
 export type CatalogResource = (typeof CATALOG_RESOURCES)[number];
 
@@ -41,7 +43,7 @@ export interface CatalogColumn {
   input?: 'text' | 'textarea' | 'color' | 'number' | 'status' | 'date' | 'select';
   /** Choices of a `select` input. */
   options?: readonly CatalogChoice[];
-  /** Value a new row starts with in the form (e.g. a select's usual choice). */
+  /** Value a new row starts with in the form (e.g. a select's usual choice; `today` for a date). */
   defaultValue?: string;
   /** The form shows a searchable select of this catalog; the row shows the referenced name. */
   ref?: CatalogResource;

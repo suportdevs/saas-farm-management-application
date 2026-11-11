@@ -60,6 +60,9 @@ export const status = z
     return z.NEVER;
   });
 
+/** A required day as YYYY-MM-DD. */
+export const requiredDate = (label: string) => z.iso.date(`${label} is required (YYYY-MM-DD)`);
+
 /** An optional day as YYYY-MM-DD; empty → null. */
 export const optionalDate = z
   .union([z.iso.date('Use YYYY-MM-DD'), z.literal('')])
