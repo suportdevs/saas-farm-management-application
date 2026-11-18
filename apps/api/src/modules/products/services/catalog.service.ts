@@ -28,7 +28,7 @@ import {
   type CatalogResource,
   type ImageType,
 } from '@kit/shared';
-import { conflict, db, escapeLike, notFound, storage, validationError } from '../../../core';
+import { conflict, db, escapeLike, forbidden, notFound, storage, validationError } from '../../../core';
 import type { Tx } from '../../farms';
 import { imageFileName, imageTypeOf } from './image.service';
 
@@ -106,6 +106,11 @@ export interface CatalogConfig {
   beforeCreate?: (tenantId: string, adding: number) => Promise<void>;
   /** Runs after rows are created, updated, imported or deleted — e.g. to refresh totals elsewhere. */
   afterWrite?: (tenantId: string) => Promise<void>;
+  /**
+   * The table also holds built-in rows (`tenant_id` null) that every farm sees
+   * in lists and selects but can't change — e.g. the system breeds.
+   */
+  systemRows?: boolean;
 }
 
 const lower = (column: PgColumn) => sql<string>`lower(${column})`;
@@ -173,7 +178,7 @@ export class Catalog {
   options(tenant: Tenant, { keys, ...filters }: CatalogFilters & { keys?: string[] }) {
     const t = this.config.table;
     const where = keys
-      ? this.active(tenant.id, inArray(t.key, keys))
+      ? this.visibleTo(tenant.id, inArray(t.key, keys))
       : this.filtered(
           tenant,
           filters,
@@ -193,7 +198,7 @@ export class Catalog {
     const [row] = await db
       .select({ id: t.id })
       .from(t)
-      .where(this.active(tenantId, eq(t.key, key)))
+      .where(this.visibleTo(tenantId, eq(t.key, key)))
       .limit(1);
     return (row?.id as number | undefined) ?? null;
   }
@@ -208,7 +213,7 @@ export class Catalog {
       .select({ id: t.id, name: lower(name), alt: lower(alt) })
       .from(t)
       .where(
-        this.active(tenantId, or(inArray(lower(name), wanted), inArray(lower(alt), wanted))),
+        this.visibleTo(tenantId, or(inArray(lower(name), wanted), inArray(lower(alt), wanted))),
       );
     const ids = new Map<string, number>();
     // A code / short-name match wins over a name match.
@@ -237,7 +242,7 @@ export class Catalog {
         .where(this.active(tenantId, eq(t.key, key)))
         .returning({ key: t.key }),
     );
-    if (!row) throw notFound(`${this.definition.label} not found`);
+    if (!row) throw await this.missing(tenantId, [key]);
     await this.config.afterWrite?.(tenantId);
     return row as { key: string };
   }
@@ -251,7 +256,7 @@ export class Catalog {
       .set({ status: sql`${STATUS.active} - ${status}`, updatedBy: userId } as never)
       .where(this.active(tenantId, inArray(t.key, keys)))
       .returning({ key: t.key });
-    if (!rows.length) throw notFound(`${this.definition.label} not found`);
+    if (!rows.length) throw await this.missing(tenantId, keys);
     return rows.length;
   }
 
@@ -262,7 +267,7 @@ export class Catalog {
       .select({ id: t.id })
       .from(t)
       .where(this.active(tenantId, inArray(t.key, keys)));
-    if (!found.length) throw notFound(`${this.definition.label} not found`);
+    if (!found.length) throw await this.missing(tenantId, keys);
     const ids = found.map((r) => r.id as number);
     await this.assertUnused(tenantId, ids);
     const deleted = { deletedAt: new Date(), deletedBy: userId } as never;
@@ -344,6 +349,29 @@ export class Catalog {
     return this.columns[property]!;
   }
 
+  /** Rows a farm can read: its own, plus the built-in ones when the catalog has them. */
+  visibleTo(tenantId: string, extra?: SQL) {
+    const t = this.config.table;
+    const owner = this.config.systemRows ? or(eq(t.tenantId, tenantId), isNull(t.tenantId)) : eq(t.tenantId, tenantId);
+    return and(owner, isNull(t.deletedAt), extra);
+  }
+
+  /** The error for rows a write didn't find: 403 when they are built-in rows, else 404. */
+  private async missing(tenantId: string, keys: string[]) {
+    const t = this.config.table;
+    if (this.config.systemRows) {
+      const [system] = await db
+        .select({ id: t.id })
+        .from(t)
+        .where(and(isNull(t.tenantId), isNull(t.deletedAt), inArray(t.key, keys)))
+        .limit(1);
+      const label = this.definition.plural.toLowerCase();
+      if (system) return forbidden(`Built-in ${label} can't be changed. Add your own instead.`, 'SYSTEM_ROW');
+    }
+    return notFound(`${this.definition.label} not found`);
+  }
+
+  /** A farm's own rows — what it may change. */
   private active(tenantId: string, extra?: SQL) {
     const t = this.config.table;
     return and(eq(t.tenantId, tenantId), isNull(t.deletedAt), extra);
@@ -383,7 +411,7 @@ export class Catalog {
         conditions.push(eq(this.column(fieldOf(c)), filters[c.csv]));
       }
     }
-    return this.active(tenant.id, and(...conditions));
+    return this.visibleTo(tenant.id, and(...conditions));
   }
 
   /** Rows pointing at the referenced row with this key (of the same tenant). */
@@ -397,7 +425,7 @@ export class Catalog {
       db
         .select({ id: target.id })
         .from(target)
-        .where(and(eq(target.tenantId, tenantId), eq(target.key, key))),
+        .where(targetOf(ref).visibleTo(tenantId, eq(target.key, key))),
     );
   }
 

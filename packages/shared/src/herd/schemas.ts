@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { choice, decimal, optional, optionalDate, optionalRef, ref, required, requiredDate, status } from '../products/fields';
-import { ANIMAL_ORIGINS, ANIMAL_SEXES, ANIMAL_TYPES, BATCH_PURPOSES, HERD_STATUSES, WEIGH_METHODS } from './catalog';
+import { ANIMAL_ORIGINS, ANIMAL_SEXES, ANIMAL_TYPES, BATCH_PURPOSES, BREED_TYPES, HERD_STATUSES, WEIGH_METHODS } from './catalog';
 
 // Create / update bodies of the herd catalogs (the modal form and each import row).
 
@@ -55,7 +55,23 @@ export const weightSchema = z.object({
   notes: optional(500),
 });
 
+export const breedSchema = z.object({
+  name: required('Breed name', 100),
+  code: optional(50),
+  type: choice(BREED_TYPES, 'Breed type'),
+  originCountry: optional(100),
+  avgMatureWeight: decimal(5_000),
+  description: optional(500),
+});
+
+export const colorMarkingSchema = z.object({
+  name: required('Color name', 50),
+  description: optional(500),
+});
+
 export type PenData = z.output<typeof penSchema>;
+export type BreedData = z.output<typeof breedSchema>;
+export type ColorMarkingData = z.output<typeof colorMarkingSchema>;
 export type PenTypeData = z.output<typeof penTypeSchema>;
 export type BatchData = z.output<typeof batchSchema>;
 export type AnimalInput = z.input<typeof animalSchema>;

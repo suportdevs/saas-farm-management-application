@@ -3,7 +3,7 @@ import { alias } from 'drizzle-orm/pg-core';
 import { db } from '../../../core';
 import { Catalog } from '../../products';
 import { assertWithinLimit } from '../../subscriptions';
-import { animals, batches, pens, penTypes, weights } from '../models';
+import { animals, batches, breeds, colorMarkings, pens, penTypes, weights } from '../models';
 
 /** Animals still on the farm — what the plan's animal limit counts. */
 export async function countAnimals(farmId: string) {
@@ -13,6 +13,37 @@ export async function countAnimals(farmId: string) {
     .where(and(eq(animals.tenantId, farmId), eq(animals.herdStatus, 'in_herd'), isNull(animals.deletedAt)));
   return row?.value ?? 0;
 }
+
+export const breedCatalog = new Catalog({
+  resource: 'breeds',
+  table: breeds,
+  fields: {
+    key: breeds.key,
+    name: breeds.name,
+    code: breeds.code,
+    type: breeds.type,
+    originCountry: breeds.originCountry,
+    avgMatureWeight: breeds.avgMatureWeight,
+    description: breeds.description,
+    isSystem: breeds.isSystem,
+  },
+  search: [breeds.name, breeds.code, breeds.originCountry],
+  unique: [{ index: 'breeds_breed_name_uq', column: breeds.name, field: 'name' }],
+  // Built-in breeds (tenant_id null) show for every farm and can't be changed.
+  systemRows: true,
+});
+
+export const colorMarkingCatalog = new Catalog({
+  resource: 'color-markings',
+  table: colorMarkings,
+  fields: {
+    key: colorMarkings.key,
+    name: colorMarkings.name,
+    description: colorMarkings.description,
+  },
+  search: [colorMarkings.name],
+  unique: [{ index: 'color_markings_color_name_uq', column: colorMarkings.name, field: 'name' }],
+});
 
 export const penTypeCatalog = new Catalog({
   resource: 'pen-types',

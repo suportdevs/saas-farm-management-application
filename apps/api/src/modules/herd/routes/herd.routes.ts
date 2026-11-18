@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { catalogRouter } from '../../products';
-import { animalCatalog, batchCatalog, penCatalog, penTypeCatalog, weightCatalog } from '../services/herd-catalogs';
+import { animalCatalog, batchCatalog, breedCatalog, colorMarkingCatalog, penCatalog, penTypeCatalog, weightCatalog } from '../services/herd-catalogs';
 
 /**
  * Mounted at /api/farms. Each herd catalog gets the standard catalog endpoints
@@ -10,6 +10,8 @@ import { animalCatalog, batchCatalog, penCatalog, penTypeCatalog, weightCatalog 
  *   /api/farms/:farm/herd/pen-types pen types
  *   /api/farms/:farm/herd/batches   batches
  *   /api/farms/:farm/herd/weights   weight records
+ *   /api/farms/:farm/herd/breeds    breeds (built-in ones read-only)
+ *   /api/farms/:farm/herd/color-markings  color markings
  *   /api/farms/:farm/herd           animals (with photo upload)
  *
  * Sub-paths first, so /herd/pens isn't taken for an animal key.
@@ -20,4 +22,6 @@ router.use('/:farm/herd/pens', catalogRouter(penCatalog));
 router.use('/:farm/herd/pen-types', catalogRouter(penTypeCatalog));
 router.use('/:farm/herd/batches', catalogRouter(batchCatalog));
 router.use('/:farm/herd/weights', catalogRouter(weightCatalog));
+router.use('/:farm/herd/breeds', catalogRouter(breedCatalog));
+router.use('/:farm/herd/color-markings', catalogRouter(colorMarkingCatalog));
 router.use('/:farm/herd', catalogRouter(animalCatalog));

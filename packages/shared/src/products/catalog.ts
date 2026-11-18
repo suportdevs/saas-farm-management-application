@@ -23,6 +23,8 @@ export const CATALOG_RESOURCES = [
   'pen-types',
   'batches',
   'weights',
+  'breeds',
+  'color-markings',
 ] as const;
 export type CatalogResource = (typeof CATALOG_RESOURCES)[number];
 

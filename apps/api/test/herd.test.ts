@@ -310,3 +310,61 @@ describe('herd: weights', () => {
     expect((await worker.c.get(`${base}/batches`)).status).toBe(200);
   });
 });
+
+describe('herd: breeds', () => {
+  it('lists built-in breeds next to the farm’s own; built-in ones are read-only', async () => {
+    const { owner, farm, base, post } = await setup();
+    const all = (await owner.c.get(`${base}/breeds?pageSize=100`)).body;
+    const holstein = all.rows.find((r: { name: string }) => r.name === 'Holstein Friesian');
+    expect(holstein).toMatchObject({ code: 'HF', type: 'dairy', originCountry: 'Netherlands', avgMatureWeight: 680, isSystem: true });
+
+    const own = await post('/breeds', { name: 'Local Cross', code: 'LX', type: 'Dual-purpose', originCountry: 'Bangladesh', avgMatureWeight: '320' });
+    const list = (await owner.c.get(`${base}/breeds?pageSize=100`)).body.rows;
+    expect(list.find((r: { key: string }) => r.key === own)).toMatchObject({ type: 'dual_purpose', avgMatureWeight: 320, isSystem: false });
+    expect((await owner.c.get(`${base}/breeds?breed_type=beef`)).body.rows.every((r: { type: string }) => r.type === 'beef')).toBe(true);
+    expect((await owner.c.get(`${base}/breeds?q=bangladesh`)).body.rows.map((r: { name: string }) => r.name).sort()).toEqual(['Local Cross', 'Red Chittagong']);
+
+    // Built-in breeds can't be edited or deleted; the farm's own can.
+    const edit = await owner.c.put(`${base}/breeds/${holstein.key}`, { name: 'Holstein' });
+    expect(edit.status).toBe(403);
+    expect(edit.body.error.code).toBe('SYSTEM_ROW');
+    expect((await owner.c.delete(`${base}/breeds/${holstein.key}`)).status).toBe(403);
+    expect((await owner.c.post(`${base}/breeds/bulk-delete`, { keys: [holstein.key] })).status).toBe(403);
+    expect((await owner.c.put(`${base}/breeds/${own}`, { name: 'Local Cross', avgMatureWeight: 330 })).status).toBe(200);
+    expect((await owner.c.post(`${base}/breeds`, { name: 'local cross' })).body.error.details.name).toBeDefined();
+
+    // Another farm sees the built-in breeds but not this farm's own.
+    const other = await signUp(app);
+    const { farm: otherFarm } = await createFarm(other.c);
+    const theirs = (await other.c.get(`/api/farms/${otherFarm.slug}/herd/breeds?pageSize=100`)).body.rows;
+    expect(theirs.some((r: { name: string }) => r.name === 'Jersey')).toBe(true);
+    expect(theirs.some((r: { name: string }) => r.name === 'Local Cross')).toBe(false);
+    expect((await other.c.delete(`/api/farms/${otherFarm.slug}/herd/breeds/${own}`)).status).toBe(404);
+
+    // Selects offer built-in breeds too.
+    const options = (await owner.c.get(`${base}/breeds/options?q=jers`)).body.options;
+    expect(options.map((o: { name: string }) => o.name)).toEqual(['Jersey']);
+
+    expect((await owner.c.delete(`${base}/breeds/${own}`)).status).toBe(204);
+    const worker = await inviteAndJoin(app, owner, farm.slug, 'worker');
+    expect((await worker.c.get(`${base}/breeds`)).status).toBe(200);
+    expect((await worker.c.post(`${base}/breeds`, { name: 'Mine' })).status).toBe(403);
+  });
+});
+
+describe('herd: color markings', () => {
+  it('creates, lists, updates, imports and deletes color markings', async () => {
+    const { owner, base, post } = await setup();
+    const bw = await post('/color-markings', { name: 'Black & white', description: 'Patched' });
+    await post('/color-markings', { name: 'Brindle' });
+    expect((await owner.c.get(`${base}/color-markings`)).body.rows.map((r: { name: string }) => r.name)).toEqual(['Black & white', 'Brindle']);
+    expect((await owner.c.post(`${base}/color-markings`, { name: 'brindle' })).body.error.details.name).toBeDefined();
+    expect((await owner.c.post(`${base}/color-markings`, { name: 'x'.repeat(51) })).status).toBe(422);
+    expect((await owner.c.put(`${base}/color-markings/${bw}`, { name: 'Black and white' })).status).toBe(200);
+    const imported = await owner.c.post(`${base}/color-markings/import`, { rows: [{ color_name: 'Red', description: '' }, { color_name: 'Roan' }] });
+    expect(imported.body.imported).toBe(2);
+    expect((await owner.c.get(`${base}/color-markings?q=r`)).body.rows.map((r: { name: string }) => r.name)).toEqual(["Brindle", "Red", "Roan"]);
+    expect((await owner.c.delete(`${base}/color-markings/${bw}`)).status).toBe(204);
+    expect((await owner.c.get(`${base}/color-markings`)).body.rows).toHaveLength(3);
+  });
+});

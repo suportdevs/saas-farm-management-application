@@ -127,6 +127,13 @@
       "when": 1794996094506,
       "tag": "0017_drop_pen_type_column",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1794998798733,
+      "tag": "0018_breeds_color_markings",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,5 @@
 import type { Status } from '../products/catalog';
-import type { AnimalOrigin, AnimalSex, AnimalType, BatchPurpose, HerdStatus, WeighMethod } from './catalog';
+import type { AnimalOrigin, AnimalSex, AnimalType, BatchPurpose, BreedType, HerdStatus, WeighMethod } from './catalog';
 
 /** Rows as listed by the API — only the columns the herd screens use. */
 export interface PenRow {
@@ -69,4 +69,22 @@ export interface WeightRow {
   weight: number;
   method: WeighMethod | null;
   notes: string | null;
+}
+
+export interface BreedRow {
+  key: string;
+  name: string;
+  code: string | null;
+  type: BreedType | null;
+  originCountry: string | null;
+  avgMatureWeight: number | null;
+  description: string | null;
+  /** Built-in breed shared by every farm: read-only. */
+  isSystem: boolean;
+}
+
+export interface ColorMarkingRow {
+  key: string;
+  name: string;
+  description: string | null;
 }

@@ -4,3 +4,5 @@ export * from './pen.model';
 export * from './batch.model';
 export * from './animal.model';
 export * from './weight.model';
+export * from './breed.model';
+export * from './color-marking.model';

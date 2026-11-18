@@ -7,6 +7,7 @@ import {
   ImageIcon,
   ListFilter,
   Loader2,
+  Lock,
   Package,
   PawPrint,
   Pencil,
@@ -185,8 +186,11 @@ export function CatalogManager({
       if (!next.delete(key)) next.add(key);
       return next;
     });
-  const allSelected = rows.length > 0 && selected.size === rows.length;
-  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.key)));
+  /** Built-in rows shared by every farm (e.g. system breeds) can't be changed or selected. */
+  const isBuiltIn = (row: CatalogRow) => (row as { isSystem?: boolean }).isSystem === true;
+  const selectable = rows.filter((r) => !isBuiltIn(r));
+  const allSelected = selectable.length > 0 && selected.size === selectable.length;
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(selectable.map((r) => r.key)));
 
   const empty = rows.length === 0 && !q && !activeFilters;
 
@@ -360,11 +364,13 @@ export function CatalogManager({
                   >
                     {canSelect && (
                       <td className="px-4 py-3">
-                        <Checkbox
-                          checked={selected.has(row.key)}
-                          onChange={() => toggle(row.key)}
-                          aria-label={`Select ${titleOf(row)}`}
-                        />
+                        {!isBuiltIn(row) && (
+                          <Checkbox
+                            checked={selected.has(row.key)}
+                            onChange={() => toggle(row.key)}
+                            aria-label={`Select ${titleOf(row)}`}
+                          />
+                        )}
                       </td>
                     )}
                     {withImage && (
@@ -390,6 +396,11 @@ export function CatalogManager({
                     ))}
                     {(canUpdate || canDelete) && (
                       <td className="px-4 py-2 text-right">
+                        {isBuiltIn(row) ? (
+                          <Badge variant="outline" title="Built in and shared by every farm — read-only">
+                            <Lock className="h-3 w-3" /> Built-in
+                          </Badge>
+                        ) : (
                         <div className="flex justify-end gap-1">
                           {canUpdate && (
                             <Button
@@ -412,6 +423,7 @@ export function CatalogManager({
                             </Button>
                           )}
                         </div>
+                        )}
                       </td>
                     )}
                   </tr>

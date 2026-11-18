@@ -51,7 +51,14 @@ export const WEIGH_METHODS = [
   { value: 'estimate', label: 'Visual estimate' },
 ] as const satisfies readonly CatalogChoice[];
 
+export const BREED_TYPES = [
+  { value: 'beef', label: 'Beef' },
+  { value: 'dairy', label: 'Dairy' },
+  { value: 'dual_purpose', label: 'Dual-purpose' },
+] as const satisfies readonly CatalogChoice[];
+
 type Values<T extends readonly CatalogChoice[]> = T[number]['value'];
+export type BreedType = Values<typeof BREED_TYPES>;
 export type BatchPurpose = Values<typeof BATCH_PURPOSES>;
 export type WeighMethod = Values<typeof WEIGH_METHODS>;
 export type AnimalSex = Values<typeof ANIMAL_SEXES>;
@@ -181,4 +188,34 @@ export const HERD_CATALOG = {
     ],
     filters: ['animal', 'date', 'weight', 'method'],
   },
-} satisfies Record<'animals' | 'pens' | 'pen-types' | 'batches' | 'weights', CatalogDefinition>;
+  breeds: {
+    module: 'herd',
+    path: 'herd/breeds',
+    eyebrow: 'Herd',
+    label: 'Breed',
+    plural: 'Breeds',
+    description: 'Cattle breeds. Built-in breeds are shared by every farm and read-only; add your own as needed.',
+    columns: [
+      { key: 'name', label: 'Breed name', csv: 'breed_name', required: true, example: 'Holstein Friesian' },
+      { key: 'code', label: 'Breed code', csv: 'breed_code', example: 'HF' },
+      select('type', 'breed_type', 'Breed type', BREED_TYPES, 'Dairy'),
+      { key: 'originCountry', label: 'Origin country', csv: 'origin_country', example: 'Netherlands' },
+      { key: 'avgMatureWeight', label: 'Avg. mature weight (kg)', csv: 'avg_mature_weight', input: 'number', example: '680' },
+      { key: 'description', label: 'Description', csv: 'description', input: 'textarea', example: 'High-yielding black-and-white dairy breed' },
+    ],
+    filters: ['breed_type', 'avg_mature_weight'],
+  },
+  'color-markings': {
+    module: 'herd',
+    path: 'herd/color-markings',
+    eyebrow: 'Herd',
+    label: 'Color marking',
+    plural: 'Color markings',
+    description: 'Coat colors and markings used to describe animals, e.g. Black & white, Red, Brindle.',
+    columns: [
+      { key: 'name', label: 'Color name', csv: 'color_name', required: true, example: 'Black & white' },
+      { key: 'description', label: 'Description', csv: 'description', input: 'textarea', example: 'Patched coat, typical of Holsteins' },
+    ],
+    filters: [],
+  },
+} satisfies Record<'animals' | 'pens' | 'pen-types' | 'batches' | 'weights' | 'breeds' | 'color-markings', CatalogDefinition>;
