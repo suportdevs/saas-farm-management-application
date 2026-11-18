@@ -3,7 +3,7 @@ import { alias } from 'drizzle-orm/pg-core';
 import { db } from '../../../core';
 import { Catalog } from '../../products';
 import { assertWithinLimit } from '../../subscriptions';
-import { animals, batches, pens, weights } from '../models';
+import { animals, batches, pens, penTypes, weights } from '../models';
 
 /** Animals still on the farm — what the plan's animal limit counts. */
 export async function countAnimals(farmId: string) {
@@ -14,6 +14,19 @@ export async function countAnimals(farmId: string) {
   return row?.value ?? 0;
 }
 
+export const penTypeCatalog = new Catalog({
+  resource: 'pen-types',
+  table: penTypes,
+  fields: {
+    key: penTypes.key,
+    name: penTypes.name,
+    description: penTypes.description,
+  },
+  search: [penTypes.name],
+  unique: [{ index: 'pen_types_type_name_uq', column: penTypes.name, field: 'name' }],
+  usedBy: [{ table: pens, column: pens.penTypeId, label: 'pen' }],
+});
+
 export const penCatalog = new Catalog({
   resource: 'pens',
   table: pens,
@@ -21,16 +34,22 @@ export const penCatalog = new Catalog({
     key: pens.key,
     name: pens.name,
     code: pens.code,
-    type: pens.type,
+    typeKey: penTypes.key,
+    typeName: penTypes.name,
     capacity: pens.capacity,
     status: pens.status,
     description: pens.description,
   },
+  joins: [{ table: penTypes, on: eq(penTypes.id, pens.penTypeId), left: true }],
   search: [pens.name, pens.code],
   unique: [
     { index: 'pens_name_uq', column: pens.name, field: 'name' },
     { index: 'pens_code_uq', column: pens.code, field: 'code' },
   ],
+  references: {
+    // Imports match the pen type by name.
+    typeKey: { column: pens.penTypeId, catalog: penTypeCatalog, matchBy: penTypes.name },
+  },
   usedBy: [
     { table: animals, column: animals.penId, label: 'animal' },
     { table: batches, column: batches.penId, label: 'batch', plural: 'batches' },

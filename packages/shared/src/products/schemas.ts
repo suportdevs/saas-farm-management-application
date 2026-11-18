@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { animalSchema, batchSchema, penSchema, weightSchema } from '../herd/schemas';
+import { animalSchema, batchSchema, penSchema, penTypeSchema, weightSchema } from '../herd/schemas';
 import {
   CATALOG_IMPORT_LIMIT,
   CATALOG_OPTIONS_LIMIT,
@@ -60,6 +60,7 @@ export const catalogSchemas = {
   colors: colorSchema,
   animals: animalSchema,
   pens: penSchema,
+  'pen-types': penTypeSchema,
   batches: batchSchema,
   weights: weightSchema,
 } satisfies Record<CatalogResource, z.ZodObject>;

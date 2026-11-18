@@ -35,16 +35,6 @@ export const HERD_STATUSES = [
   { value: 'dead', label: 'Dead' },
 ] as const satisfies readonly CatalogChoice[];
 
-export const PEN_TYPES = [
-  { value: 'barn', label: 'Barn' },
-  { value: 'free_stall', label: 'Free stall' },
-  { value: 'paddock', label: 'Paddock' },
-  { value: 'calf_pen', label: 'Calf pen' },
-  { value: 'maternity', label: 'Maternity' },
-  { value: 'isolation', label: 'Isolation' },
-  { value: 'other', label: 'Other' },
-] as const satisfies readonly CatalogChoice[];
-
 export const BATCH_PURPOSES = [
   { value: 'calves', label: 'Calves' },
   { value: 'heifers', label: 'Heifers' },
@@ -68,7 +58,6 @@ export type AnimalSex = Values<typeof ANIMAL_SEXES>;
 export type AnimalType = Values<typeof ANIMAL_TYPES>;
 export type AnimalOrigin = Values<typeof ANIMAL_ORIGINS>;
 export type HerdStatus = Values<typeof HERD_STATUSES>;
-export type PenType = Values<typeof PEN_TYPES>;
 
 /** Label of a select value, e.g. `choiceLabel(ANIMAL_SEXES, 'female')` → "Female". */
 export const choiceLabel = (options: readonly CatalogChoice[], value: unknown) => options.find((o) => o.value === value)?.label ?? String(value ?? '');
@@ -76,7 +65,7 @@ export const choiceLabel = (options: readonly CatalogChoice[], value: unknown) =
 // ─── Definitions ─────────────────────────────────────────────────
 
 /** A reference to another herd catalog: `pen` → row `penName`, body `penKey`. */
-const ref = (csv: string, label: string, resource: 'animals' | 'pens' | 'batches', example: string, extra: Partial<CatalogColumn> = {}): CatalogColumn => ({
+const ref = (csv: string, label: string, resource: 'animals' | 'pens' | 'pen-types' | 'batches', example: string, extra: Partial<CatalogColumn> = {}): CatalogColumn => ({
   key: `${csv}Name`,
   field: `${csv}Key`,
   label,
@@ -135,12 +124,26 @@ export const HERD_CATALOG = {
     columns: [
       { key: 'name', label: 'Name', csv: 'name', required: true, example: 'Barn A' },
       { key: 'code', label: 'Code', csv: 'code', example: 'BA' },
-      select('type', 'type', 'Type', PEN_TYPES, 'Barn'),
+      // Row `typeName`, body `typeKey`; imports match the pen type by name.
+      ref('type', 'Pen type', 'pen-types', 'Barn'),
       { key: 'capacity', label: 'Capacity (animals)', csv: 'capacity', input: 'number', example: '60' },
       { key: 'status', label: 'Status', csv: 'status', input: 'status', example: 'Active' },
       { key: 'description', label: 'Description', csv: 'description', input: 'textarea', example: 'Milking herd, east side' },
     ],
     filters: ['type', 'status', 'capacity'],
+  },
+  'pen-types': {
+    module: 'herd',
+    path: 'herd/pen-types',
+    eyebrow: 'Herd',
+    label: 'Pen type',
+    plural: 'Pen types',
+    description: 'Kinds of pens on the farm, e.g. Feedlot, Quarantine, Hospital, Sorting.',
+    columns: [
+      { key: 'name', label: 'Type name', csv: 'type_name', required: true, example: 'Feedlot' },
+      { key: 'description', label: 'Description', csv: 'description', input: 'textarea', example: 'Finishing cattle on a ration' },
+    ],
+    filters: [],
   },
   batches: {
     module: 'herd',
@@ -178,4 +181,4 @@ export const HERD_CATALOG = {
     ],
     filters: ['animal', 'date', 'weight', 'method'],
   },
-} satisfies Record<'animals' | 'pens' | 'batches' | 'weights', CatalogDefinition>;
+} satisfies Record<'animals' | 'pens' | 'pen-types' | 'batches' | 'weights', CatalogDefinition>;

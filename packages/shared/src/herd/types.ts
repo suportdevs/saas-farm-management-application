@@ -1,14 +1,21 @@
 import type { Status } from '../products/catalog';
-import type { AnimalOrigin, AnimalSex, AnimalType, BatchPurpose, HerdStatus, PenType, WeighMethod } from './catalog';
+import type { AnimalOrigin, AnimalSex, AnimalType, BatchPurpose, HerdStatus, WeighMethod } from './catalog';
 
 /** Rows as listed by the API — only the columns the herd screens use. */
 export interface PenRow {
   key: string;
   name: string;
   code: string | null;
-  type: PenType | null;
+  typeKey: string | null;
+  typeName: string | null;
   capacity: number | null;
   status: Status;
+  description: string | null;
+}
+
+export interface PenTypeRow {
+  key: string;
+  name: string;
   description: string | null;
 }
 

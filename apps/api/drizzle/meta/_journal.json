@@ -113,6 +113,20 @@
       "when": 1794388263480,
       "tag": "0015_herd_batches_weights",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794996078089,
+      "tag": "0016_pen_types",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794996094506,
+      "tag": "0017_drop_pen_type_column",
+      "breakpoints": true
     }
   ]
 }

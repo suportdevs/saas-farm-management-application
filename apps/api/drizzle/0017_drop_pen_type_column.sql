@@ -1,0 +1,1 @@
+ALTER TABLE "pens" DROP COLUMN "type";

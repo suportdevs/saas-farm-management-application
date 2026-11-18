@@ -1,4 +1,5 @@
 // Tables owned by the herd module, one model per file.
+export * from './pen-type.model';
 export * from './pen.model';
 export * from './batch.model';
 export * from './animal.model';

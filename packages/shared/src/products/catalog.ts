@@ -20,6 +20,7 @@ export const CATALOG_RESOURCES = [
   // Herd module
   'animals',
   'pens',
+  'pen-types',
   'batches',
   'weights',
 ] as const;

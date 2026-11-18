@@ -32,17 +32,17 @@ const tags = (body: { rows: { tag: string }[] }) => body.rows.map((r) => r.tag);
 describe('herd: pens', () => {
   it('creates, lists, updates and deletes pens; blocks deleting a pen with animals', async () => {
     const { owner, base, post } = await setup();
-    const barn = await post('/pens', { name: 'Barn A', code: 'BA', type: 'barn', capacity: '60' });
-    await post('/pens', { name: 'Calf pen', type: 'Calf pen' });
+    const feedlot = await post('/pen-types', { name: 'Feedlot' });
+    const barn = await post('/pens', { name: 'Barn A', code: 'BA', typeKey: feedlot, capacity: '60' });
+    await post('/pens', { name: 'Calf pen' });
 
     const list = await owner.c.get(`${base}/pens`);
     expect(list.status).toBe(200);
     expect(list.body.rows.map((r: { name: string }) => r.name)).toEqual(['Barn A', 'Calf pen']);
-    expect(list.body.rows[0]).toMatchObject({ code: 'BA', type: 'barn', capacity: 60, status: 1 });
-    // Labels are accepted and stored as values.
-    expect(list.body.rows[1].type).toBe('calf_pen');
+    expect(list.body.rows[0]).toMatchObject({ code: 'BA', typeKey: feedlot, typeName: 'Feedlot', capacity: 60, status: 1 });
+    expect(list.body.rows[1]).toMatchObject({ typeKey: null, typeName: null });
 
-    expect((await owner.c.get(`${base}/pens?type=barn`)).body.rows).toHaveLength(1);
+    expect((await owner.c.get(`${base}/pens?type=${feedlot}`)).body.rows).toHaveLength(1);
     const dup = await owner.c.post(`${base}/pens`, { name: 'barn a' });
     expect(dup.status).toBe(422);
     expect(dup.body.error.details.name).toBeDefined();
@@ -54,6 +54,47 @@ describe('herd: pens', () => {
     const blocked = await owner.c.delete(`${base}/pens/${barn}`);
     expect(blocked.status).toBe(409);
     expect(blocked.body.error.code).toBe('IN_USE');
+  });
+});
+
+describe('herd: pen types', () => {
+  it('manages pen types, links pens to them and imports pens by type name', async () => {
+    const { owner, farm, base, post } = await setup();
+    const quarantine = await post('/pen-types', { name: 'Quarantine', description: 'New arrivals' });
+    await post('/pen-types', { name: 'Hospital' });
+
+    const list = await owner.c.get(`${base}/pen-types`);
+    expect(list.body.rows.map((r: { name: string }) => r.name)).toEqual(['Hospital', 'Quarantine']);
+    expect(list.body.rows[1]).toMatchObject({ key: quarantine, description: 'New arrivals' });
+    // Type names are unique per farm (any case).
+    const dup = await owner.c.post(`${base}/pen-types`, { name: 'quarantine' });
+    expect(dup.body.error.details.name).toBeDefined();
+    expect((await owner.c.post(`${base}/pen-types`, { name: '' })).status).toBe(422);
+    // Another farm can use the same name.
+    const other = await signUp(app);
+    const { farm: otherFarm } = await createFarm(other.c);
+    expect((await other.c.post(`/api/farms/${otherFarm.slug}/herd/pen-types`, { name: 'Quarantine' })).status).toBe(201);
+    expect((await other.c.get(`/api/farms/${otherFarm.slug}/herd/pen-types`)).body.rows).toHaveLength(1);
+
+    // Pens import the type by name; an unknown name is reported.
+    const imported = await owner.c.post(`${base}/pens/import`, { rows: [{ name: 'Q1', type: 'quarantine' }] });
+    expect(imported.status).toBe(201);
+    expect((await owner.c.get(`${base}/pens`)).body.rows[0]).toMatchObject({ name: 'Q1', typeName: 'Quarantine' });
+    const unknown = await owner.c.post(`${base}/pens/import`, { rows: [{ name: 'Q2', type: 'Feedlot' }] });
+    expect(unknown.body.error.details['rows.0.type']).toEqual(['No pen type "Feedlot"']);
+    // Another farm's pen type can't be used.
+    const foreign = (await other.c.get(`/api/farms/${otherFarm.slug}/herd/pen-types`)).body.rows[0].key;
+    expect((await owner.c.post(`${base}/pens`, { name: 'Q3', typeKey: foreign })).body.error.details.typeKey).toEqual(['Choose a pen type']);
+
+    // A type in use can't be deleted; renaming shows on its pens.
+    expect((await owner.c.delete(`${base}/pen-types/${quarantine}`)).body.error.message).toMatch(/1 pen uses this pen type/);
+    expect((await owner.c.put(`${base}/pen-types/${quarantine}`, { name: 'Isolation' })).status).toBe(200);
+    expect((await owner.c.get(`${base}/pens`)).body.rows[0].typeName).toBe('Isolation');
+
+    // Workers see pen types but can't change them.
+    const worker = await inviteAndJoin(app, owner, farm.slug, 'worker');
+    expect((await worker.c.get(`${base}/pen-types`)).status).toBe(200);
+    expect((await worker.c.post(`${base}/pen-types`, { name: 'Sorting' })).status).toBe(403);
   });
 });
 

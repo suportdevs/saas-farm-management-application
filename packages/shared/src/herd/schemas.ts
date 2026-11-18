@@ -1,15 +1,20 @@
 import { z } from 'zod';
 import { choice, decimal, optional, optionalDate, optionalRef, ref, required, requiredDate, status } from '../products/fields';
-import { ANIMAL_ORIGINS, ANIMAL_SEXES, ANIMAL_TYPES, BATCH_PURPOSES, HERD_STATUSES, PEN_TYPES, WEIGH_METHODS } from './catalog';
+import { ANIMAL_ORIGINS, ANIMAL_SEXES, ANIMAL_TYPES, BATCH_PURPOSES, HERD_STATUSES, WEIGH_METHODS } from './catalog';
 
 // Create / update bodies of the herd catalogs (the modal form and each import row).
 
 export const penSchema = z.object({
   name: required('Name', 100),
   code: optional(30),
-  type: choice(PEN_TYPES, 'Type'),
+  typeKey: optionalRef,
   capacity: decimal(100_000, undefined, { whole: true }),
   status,
+  description: optional(500),
+});
+
+export const penTypeSchema = z.object({
+  name: required('Type name', 100),
   description: optional(500),
 });
 
@@ -51,6 +56,7 @@ export const weightSchema = z.object({
 });
 
 export type PenData = z.output<typeof penSchema>;
+export type PenTypeData = z.output<typeof penTypeSchema>;
 export type BatchData = z.output<typeof batchSchema>;
 export type AnimalInput = z.input<typeof animalSchema>;
 export type AnimalData = z.output<typeof animalSchema>;
