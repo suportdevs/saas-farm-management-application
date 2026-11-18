@@ -215,7 +215,7 @@ export function CatalogFormDialog({
             id={`catalog-${fieldOf(c)}`}
             label={fieldLabel(c)}
             hint={
-              c.virtual ? `Narrows the ${dependents(c)[0]?.label.toLowerCase()} list` : undefined
+              c.hint ?? (c.virtual ? `Narrows the ${dependents(c)[0]?.label.toLowerCase()} list` : undefined)
             }
             error={errors[fieldOf(c)]?.message}
             className={wide && c.input === 'textarea' ? 'sm:col-span-2' : undefined}

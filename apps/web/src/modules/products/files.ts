@@ -50,13 +50,15 @@ export function exportCatalog(resource: CatalogResource, rows: CatalogRow[]) {
   );
 }
 
+/** Prints the list columns (details marked `list: false` are left out, as on screen). */
 export function printCatalog(resource: CatalogResource, rows: CatalogRow[], farmName: string) {
   const { plural, columns } = CATALOG[resource];
+  const shown = columns.filter((c) => c.list !== false);
   printTable({
     title: plural,
     subtitle: `${farmName} · ${rows.length} ${rows.length === 1 ? 'row' : 'rows'} · ${new Date().toLocaleDateString()}`,
-    headers: columns.map((c) => c.label),
-    rows: cells(resource, rows),
+    headers: shown.map((c) => c.label),
+    rows: rows.map((row) => shown.map((c) => displayValue(row, c))),
   });
 }
 

@@ -1,4 +1,5 @@
 import type { Pagination } from '../core/types';
+import type { CustomerRow, CustomerTypeRow, SupplierRow, SupplierTypeRow } from '../distribution/types';
 import type { AnimalRow, BatchRow, BreedRow, ColorMarkingRow, PenRow, PenTypeRow, WeightRow } from '../herd/types';
 import type { Status } from './catalog';
 
@@ -62,7 +63,7 @@ export interface ProductSizeRow {
   unitName: string | null;
 }
 
-export type CatalogRow = UnitRow | SizeRow | CodedRow | ProductRow | ProductSizeRow | AnimalRow | PenRow | PenTypeRow | BatchRow | WeightRow | BreedRow | ColorMarkingRow;
+export type CatalogRow = UnitRow | SizeRow | CodedRow | ProductRow | ProductSizeRow | AnimalRow | PenRow | PenTypeRow | BatchRow | WeightRow | BreedRow | ColorMarkingRow | SupplierRow | SupplierTypeRow | CustomerRow | CustomerTypeRow;
 
 /** A choice in a searchable reference select. */
 export interface CatalogOption {

@@ -88,6 +88,17 @@ export const PERMISSION_CONFIG = {
     },
   },
 
+  distribution: {
+    label: 'Distribution',
+    operations: { supplier: 'Supplier', supplier_type: 'Supplier type', customer: 'Customer', customer_type: 'Customer type' },
+    permissions: {
+      ...catalogActions('supplier', 'Supplier'),
+      ...catalogActions('supplier_type', 'Supplier Type'),
+      ...catalogActions('customer', 'Customer'),
+      ...catalogActions('customer_type', 'Customer Type'),
+    },
+  },
+
   finance: { label: 'Finance', permissions: { ...CRUD, export: 'Export' } },
   reports: { label: 'Reports', permissions: { view: 'View', export: 'Export' } },
 
@@ -119,4 +130,8 @@ export const CATALOG_OPERATIONS: Record<CatalogResource, string> = {
   weights: 'herd.weight',
   breeds: 'herd.breed',
   'color-markings': 'herd.color_marking',
+  suppliers: 'distribution.supplier',
+  'supplier-types': 'distribution.supplier_type',
+  customers: 'distribution.customer',
+  'customer-types': 'distribution.customer_type',
 };

@@ -7,6 +7,7 @@
  * their own definitions (herd: animals and pens, in herd/catalog.ts).
  */
 
+import { DISTRIBUTION_CATALOG } from '../distribution/catalog';
 import { HERD_CATALOG } from '../herd/catalog';
 
 export const CATALOG_RESOURCES = [
@@ -25,6 +26,11 @@ export const CATALOG_RESOURCES = [
   'weights',
   'breeds',
   'color-markings',
+  // Distribution module
+  'suppliers',
+  'supplier-types',
+  'customers',
+  'customer-types',
 ] as const;
 export type CatalogResource = (typeof CATALOG_RESOURCES)[number];
 
@@ -57,6 +63,10 @@ export interface CatalogColumn {
   dependsOn?: string;
   /** Fixed filters for a reference select, e.g. `{ sex: 'female' }` so only cows can be a mother. */
   refFilters?: Record<string, string>;
+  /** Help text under the form field. */
+  hint?: string;
+  /** `false`: shown in the modal and CSV files but not as a list column (keeps wide records readable). */
+  list?: false;
   /** Shown in the form, table and filters but not stored on this table (and not imported). */
   virtual?: boolean;
   /** Sample value written to the import template. */
@@ -65,7 +75,7 @@ export interface CatalogColumn {
 
 export interface CatalogDefinition {
   /** The permission module it belongs to: its keys are `<module>.<operation>_<action>`. */
-  module: 'products' | 'herd';
+  module: 'products' | 'herd' | 'distribution';
   /** URL path under /farms/:farm — the same for the API and the web app. */
   path: string;
   /** Small heading above the page title, e.g. "Product catalog". */
@@ -249,7 +259,7 @@ const PRODUCT_CATALOG = {
 } satisfies Record<string, CatalogDefinition>;
 
 /** Every catalog, by resource: products here, the herd's in herd/catalog.ts. */
-export const CATALOG: Record<CatalogResource, CatalogDefinition> = { ...PRODUCT_CATALOG, ...HERD_CATALOG };
+export const CATALOG: Record<CatalogResource, CatalogDefinition> = { ...PRODUCT_CATALOG, ...HERD_CATALOG, ...DISTRIBUTION_CATALOG };
 
 
 export const isCatalogResource = (v: unknown): v is CatalogResource =>

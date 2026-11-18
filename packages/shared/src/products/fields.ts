@@ -17,6 +17,9 @@ export const optional = (max: number) =>
     .nullish()
     .transform((v) => v || null);
 
+/** An optional email address; empty → null. */
+export const optionalEmail = optional(255).refine((v) => v === null || z.email().safeParse(v).success, 'Enter a valid email');
+
 /** A required reference: the referenced row's key. */
 export const ref = (message: string) => z.uuid(message);
 /** An optional reference: key, or empty/null for none. */

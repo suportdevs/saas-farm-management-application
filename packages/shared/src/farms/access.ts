@@ -116,7 +116,8 @@ export const ROLE_PERMISSIONS: Record<FarmRole, readonly Permission[]> = {
   owner: PERMISSIONS,
   manager: PERMISSIONS.filter((p) => !isOwnerOnly(p) && p !== 'billing.manage' && p !== 'roles.manage'),
   veterinarian: ordered([...BASE, 'herd.animal_create', 'herd.animal_edit', 'herd.weight_create', 'herd.weight_edit', ...modulePermissions('health'), ...modulePermissions('breeding'), 'reports.view']),
-  accountant: ordered([...BASE, 'billing.view', ...modulePermissions('finance'), ...modulePermissions('reports')]),
+  // Accountants handle buying and selling, so they manage suppliers and customers too.
+  accountant: ordered([...BASE, 'billing.view', ...modulePermissions('distribution'), ...modulePermissions('finance'), ...modulePermissions('reports')]),
   worker: ordered([...BASE, 'herd.animal_create', 'herd.animal_edit', 'herd.weight_create', 'herd.weight_edit', 'milk.create', 'milk.update', 'feed.create', 'feed.update']),
   viewer: ordered(BASE),
 };

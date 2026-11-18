@@ -30,7 +30,7 @@ function detail(e: FarmActivityEntry, plans: PublicPlan[]): string | null {
   if (e.action.startsWith('farm.payment_') && typeof m.amount === 'string') return m.amount;
   if (e.action === 'admin.farm.plan_changed' && typeof m.to === 'string') return `${m.from} → ${m.to}`;
   if (e.action === 'admin.farm.suspended' && typeof m.reason === 'string') return m.reason;
-  if ((e.action.startsWith('products.') || e.action.startsWith('herd.')) && isCatalogResource(m.resource)) {
+  if (isCatalogResource(m.resource) && e.action.startsWith(`${CATALOG[m.resource].module}.`)) {
     const what = typeof m.name === 'string' ? m.name : `${m.count} ${m.count === 1 ? 'row' : 'rows'}`;
     return `${CATALOG[m.resource].label} · ${what}`;
   }

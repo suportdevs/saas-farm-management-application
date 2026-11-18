@@ -9,6 +9,7 @@ import {
   Loader2,
   Lock,
   Package,
+  Truck,
   PawPrint,
   Pencil,
   Plus,
@@ -59,7 +60,7 @@ type Modal =
 type Busy = 'export' | 'print' | 'delete' | 'status' | null;
 
 /** Empty-state icon per module. */
-const MODULE_ICONS = { products: Package, herd: PawPrint };
+const MODULE_ICONS = { products: Package, herd: PawPrint, distribution: Truck };
 
 const toQueryString = (params: Record<string, string>) => {
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
@@ -84,6 +85,8 @@ export function CatalogManager({
   const pathname = usePathname();
   const { farm } = useFarm();
   const { label, plural, description, columns, eyebrow, module } = CATALOG[resource];
+  /** Table columns: details marked `list: false` stay in the modal and CSV only. */
+  const listColumns = columns.filter((c) => c.list !== false);
   /** What names a row: its name, or e.g. an animal's ear tag. */
   const titleOf = (row: CatalogRow) => rowValue(row, titleKeyOf(resource));
   const withStatus = hasStatus(resource);
@@ -348,7 +351,7 @@ export function CatalogManager({
                       <span className="sr-only">Image</span>
                     </th>
                   )}
-                  {columns.map((c) => (
+                  {listColumns.map((c) => (
                     <th key={c.key} className="whitespace-nowrap px-4 py-3 font-medium">
                       {c.label}
                     </th>
@@ -378,7 +381,7 @@ export function CatalogManager({
                         <Thumbnail src={imageUrl(farm.slug, resource, row)} />
                       </td>
                     )}
-                    {columns.map((c) => (
+                    {listColumns.map((c) => (
                       <td
                         key={c.key}
                         className={cn(
@@ -431,7 +434,7 @@ export function CatalogManager({
                 {!rows.length && (
                   <tr>
                     <td
-                      colSpan={columns.length + 3}
+                      colSpan={listColumns.length + 3}
                       className="px-4 py-10 text-center text-muted-foreground"
                     >
                       Nothing matches your search and filters.

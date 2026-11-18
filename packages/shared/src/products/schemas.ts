@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { customerSchema, customerTypeSchema, supplierSchema, supplierTypeSchema } from '../distribution/schemas';
 import { animalSchema, batchSchema, breedSchema, colorMarkingSchema, penSchema, penTypeSchema, weightSchema } from '../herd/schemas';
 import {
   CATALOG_IMPORT_LIMIT,
@@ -65,6 +66,10 @@ export const catalogSchemas = {
   weights: weightSchema,
   breeds: breedSchema,
   'color-markings': colorMarkingSchema,
+  suppliers: supplierSchema,
+  'supplier-types': supplierTypeSchema,
+  customers: customerSchema,
+  'customer-types': customerTypeSchema,
 } satisfies Record<CatalogResource, z.ZodObject>;
 
 // ─── Import rows ─────────────────────────────────────────────────

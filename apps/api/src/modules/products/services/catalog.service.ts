@@ -111,6 +111,11 @@ export interface CatalogConfig {
    * in lists and selects but can't change — e.g. the system breeds.
    */
   systemRows?: boolean;
+  /**
+   * Turns body fields into table columns before a write (form or import), e.g.
+   * several bank fields into one JSON column. Reads undo it in `fields`.
+   */
+  encode?: (values: Values) => Values;
 }
 
 const lower = (column: PgColumn) => sql<string>`lower(${column})`;
@@ -226,7 +231,7 @@ export class Catalog {
 
   async create(tenantId: string, userId: string, input: Values) {
     await this.config.beforeCreate?.(tenantId, 1);
-    const values = await this.resolveKeys(tenantId, input);
+    const values = this.encode(await this.resolveKeys(tenantId, input));
     const [row] = await this.insert(tenantId, userId, [values]);
     await this.config.afterWrite?.(tenantId);
     return { key: row!.key as string };
@@ -234,7 +239,7 @@ export class Catalog {
 
   async update(tenantId: string, userId: string, key: string, input: Values) {
     const t = this.config.table;
-    const values = await this.resolveKeys(tenantId, input);
+    const values = this.encode(await this.resolveKeys(tenantId, input));
     const [row] = await this.guard(() =>
       db
         .update(t)
@@ -288,7 +293,7 @@ export class Catalog {
   async import(tenantId: string, userId: string, rows: Values[]) {
     await this.config.beforeCreate?.(tenantId, rows.length);
     await this.assertUniqueRows(tenantId, rows);
-    const values = await this.resolveNames(tenantId, rows);
+    const values = (await this.resolveNames(tenantId, rows)).map((v) => this.encode(v));
     const imported = (await this.insert(tenantId, userId, values)).length;
     await this.config.afterWrite?.(tenantId);
     return imported;
@@ -369,6 +374,10 @@ export class Catalog {
       if (system) return forbidden(`Built-in ${label} can't be changed. Add your own instead.`, 'SYSTEM_ROW');
     }
     return notFound(`${this.definition.label} not found`);
+  }
+
+  private encode(values: Values) {
+    return this.config.encode ? this.config.encode(values) : values;
   }
 
   /** A farm's own rows — what it may change. */
