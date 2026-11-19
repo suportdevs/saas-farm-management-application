@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { choice, decimal, optional, optionalDate, optionalRef, ref, required, requiredDate, status } from '../products/fields';
-import { ANIMAL_ORIGINS, ANIMAL_SEXES, ANIMAL_TYPES, BATCH_PURPOSES, BREED_TYPES, HERD_STATUSES, WEIGH_METHODS } from './catalog';
+import { ANIMAL_ORIGINS, ANIMAL_SEXES, ANIMAL_TYPES, BATCH_PURPOSES, BATCH_STATUSES, BREED_TYPES, HERD_STATUSES, TARGET_WEIGHT_UNITS, WEIGH_METHODS } from './catalog';
 
 // Create / update bodies of the herd catalogs (the modal form and each import row).
 
@@ -18,15 +18,24 @@ export const penTypeSchema = z.object({
   description: optional(500),
 });
 
+/** A money total: empty → 0. */
+const money = decimal(9_999_999_999).transform((v) => v ?? 0);
+
 export const batchSchema = z.object({
-  name: required('Name', 100),
-  code: optional(30),
+  number: required('Batch number', 50),
+  name: optional(255),
+  arrivalDate: requiredDate('Arrival date'),
+  expectedExitDate: optionalDate,
+  actualExitDate: optionalDate,
+  supplierKey: optionalRef,
+  status: choice(BATCH_STATUSES, 'Status', { fallback: 'active' }),
+  targetWeight: decimal(5_000),
+  targetWeightUnit: choice(TARGET_WEIGHT_UNITS, 'Weight unit', { fallback: 'kg' }),
+  totalPurchaseCost: money,
+  totalSaleRevenue: money,
   purpose: choice(BATCH_PURPOSES, 'Purpose'),
   penKey: optionalRef,
-  startDate: optionalDate,
-  endDate: optionalDate,
-  status,
-  description: optional(500),
+  notes: optional(2000),
 });
 
 export const animalSchema = z.object({

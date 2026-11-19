@@ -217,35 +217,80 @@ describe('herd: animals', () => {
 });
 
 describe('herd: batches', () => {
-  it('groups animals into batches; blocks deleting a batch or pen in use', async () => {
-    const { owner, base, post } = await setup();
+  it('manages batches with supplier, dates, targets and money; counts their animals', async () => {
+    const { owner, farm, base, post } = await setup();
     const barn = await post('/pens', { name: 'Barn A', code: 'BA' });
-    const calves = await post('/batches', { name: 'Calves 2025', code: 'CALF-25', purpose: 'Calves', penKey: barn, startDate: '2025-01-01' });
-    await post('/batches', { name: 'Dry cows', purpose: 'dry', startDate: '2024-06-01' });
+    const supplier = (await owner.c.post(`/api/farms/${farm.slug}/distribution/suppliers`, { name: 'Hat Traders', code: 'SUP-1' })).body.key;
+    const calves = await post('/batches', {
+      number: 'CALF-25',
+      name: 'Calves 2025',
+      arrivalDate: '2025-01-01',
+      expectedExitDate: '2025-07-01',
+      supplierKey: supplier,
+      targetWeight: '450',
+      totalPurchaseCost: '250000.50',
+      purpose: 'Calves',
+      penKey: barn,
+    });
+    await post('/batches', { number: 'DRY-24', arrivalDate: '2024-06-01', status: 'Completed', targetWeightUnit: 'lb' });
 
     const list = await owner.c.get(`${base}/batches`);
-    expect(list.body.rows.map((r: { name: string }) => r.name)).toEqual(['Calves 2025', 'Dry cows']);
-    expect(list.body.rows[0]).toMatchObject({ code: 'CALF-25', purpose: 'calves', penName: 'Barn A', startDate: '2025-01-01', status: 1 });
-    // Date range filter on the start date.
-    expect((await owner.c.get(`${base}/batches?start_dateFrom=2025-01-01`)).body.rows).toHaveLength(1);
-    expect((await owner.c.get(`${base}/batches?start_dateTo=2024-12-31`)).body.rows[0].name).toBe('Dry cows');
-    expect((await owner.c.post(`${base}/batches`, { name: 'calves 2025' })).status).toBe(422);
+    // Newest arrival first.
+    expect(list.body.rows.map((r: { number: string }) => r.number)).toEqual(['CALF-25', 'DRY-24']);
+    expect(list.body.rows[0]).toMatchObject({
+      name: 'Calves 2025',
+      arrivalDate: '2025-01-01',
+      expectedExitDate: '2025-07-01',
+      actualExitDate: null,
+      supplierKey: supplier,
+      supplierName: 'Hat Traders',
+      status: 'active',
+      targetWeight: 450,
+      targetWeightUnit: 'kg',
+      totalPurchaseCost: 250000.5,
+      totalSaleRevenue: 0,
+      purpose: 'calves',
+      penName: 'Barn A',
+      totalAnimals: 0,
+      activeAnimals: 0,
+    });
+    expect(list.body.rows[1]).toMatchObject({ name: null, status: 'completed', targetWeightUnit: 'lb', supplierName: null });
 
-    // The pen now holds a batch: it can't be deleted.
+    // Filters: arrival range, status, supplier.
+    expect((await owner.c.get(`${base}/batches?arrival_dateFrom=2025-01-01`)).body.rows).toHaveLength(1);
+    expect((await owner.c.get(`${base}/batches?arrival_dateTo=2024-12-31`)).body.rows[0].number).toBe('DRY-24');
+    expect((await owner.c.get(`${base}/batches?status=completed`)).body.rows[0].number).toBe('DRY-24');
+    expect((await owner.c.get(`${base}/batches?supplier=${supplier}`)).body.rows[0].number).toBe('CALF-25');
+
+    // Validation: batch number unique and required, arrival date required, status from the list.
+    expect((await owner.c.post(`${base}/batches`, { number: 'calf-25', arrivalDate: '2025-02-01' })).body.error.details.number).toBeDefined();
+    const bad = await owner.c.post(`${base}/batches`, { status: 'sold' });
+    expect(Object.keys(bad.body.error.details).sort()).toEqual(['arrivalDate', 'number', 'status']);
+
+    // The pen and the supplier now hold a batch: neither can be deleted.
     expect((await owner.c.delete(`${base}/pens/${barn}`)).body.error.message).toMatch(/1 batch uses/);
+    expect((await owner.c.delete(`/api/farms/${farm.slug}/distribution/suppliers/${supplier}`)).body.error.message).toMatch(/1 batch uses this supplier/);
 
     const calf = await post('', { tag: 'C-1', sex: 'female', batchKey: calves });
-    expect((await owner.c.get(`${base}?batch=${calves}`)).body.rows.map((r: { tag: string }) => r.tag)).toEqual(['C-1']);
-    expect((await owner.c.get(base)).body.rows[0]).toMatchObject({ batchKey: calves, batchName: 'Calves 2025' });
+    await post('', { tag: 'C-0', sex: 'male', batchKey: calves, herdStatus: 'sold' });
+    expect((await owner.c.get(`${base}/batches`)).body.rows[0]).toMatchObject({ totalAnimals: 2, activeAnimals: 1 });
+    expect((await owner.c.get(`${base}?batch=${calves}`)).body.rows.map((r: { tag: string }) => r.tag)).toEqual(['C-0', 'C-1']);
+    expect((await owner.c.get(`${base}?q=C-1`)).body.rows[0]).toMatchObject({ batchKey: calves, batchName: 'CALF-25' });
     expect((await owner.c.delete(`${base}/batches/${calves}`)).body.error.code).toBe('IN_USE');
 
-    // Imports match the batch by code.
+    // Batch selects show "number · name".
+    expect((await owner.c.get(`${base}/batches/options?q=calf`)).body.options[0].name).toBe('CALF-25 · Calves 2025');
+
+    // Batch imports match the supplier by code; animal imports match the batch by number.
+    const batchImport = await owner.c.post(`${base}/batches/import`, { rows: [{ batch_number: 'B-3', arrival_date: '2025-03-01', supplier: 'sup-1', status: 'Active' }] });
+    expect(batchImport.status).toBe(201);
+    expect((await owner.c.get(`${base}/batches?supplier=${supplier}`)).body.rows).toHaveLength(2);
     const imported = await owner.c.post(`${base}/import`, { rows: [{ tag: 'C-2', sex: 'male', batch: 'CALF-25' }] });
     expect(imported.status).toBe(201);
-    expect((await owner.c.get(`${base}?batch=${calves}`)).body.rows).toHaveLength(2);
+    expect((await owner.c.get(`${base}?batch=${calves}`)).body.rows).toHaveLength(3);
 
     await owner.c.put(`${base}/${calf}`, { tag: 'C-1', sex: 'female', batchKey: '' });
-    expect((await owner.c.get(`${base}?batch=${calves}`)).body.rows).toHaveLength(1);
+    expect((await owner.c.get(`${base}?batch=${calves}`)).body.rows).toHaveLength(2);
   });
 });
 

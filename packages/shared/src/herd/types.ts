@@ -1,5 +1,5 @@
 import type { Status } from '../products/catalog';
-import type { AnimalOrigin, AnimalSex, AnimalType, BatchPurpose, BreedType, HerdStatus, WeighMethod } from './catalog';
+import type { AnimalOrigin, AnimalSex, AnimalType, BatchPurpose, BatchStatus, BreedType, HerdStatus, TargetWeightUnit, WeighMethod } from './catalog';
 
 /** Rows as listed by the API — only the columns the herd screens use. */
 export interface PenRow {
@@ -48,15 +48,27 @@ export interface AnimalRow {
 
 export interface BatchRow {
   key: string;
-  name: string;
-  code: string | null;
+  number: string;
+  name: string | null;
+  /** YYYY-MM-DD */
+  arrivalDate: string;
+  expectedExitDate: string | null;
+  actualExitDate: string | null;
+  supplierKey: string | null;
+  supplierName: string | null;
+  /** Counted live from the batch's animals. */
+  totalAnimals: number;
+  /** Of those, the ones still in the herd. */
+  activeAnimals: number;
+  status: BatchStatus;
+  targetWeight: number | null;
+  targetWeightUnit: TargetWeightUnit;
+  totalPurchaseCost: number;
+  totalSaleRevenue: number;
   purpose: BatchPurpose | null;
   penKey: string | null;
   penName: string | null;
-  startDate: string | null;
-  endDate: string | null;
-  status: Status;
-  description: string | null;
+  notes: string | null;
 }
 
 export interface WeightRow {

@@ -153,6 +153,14 @@ export class Catalog {
     ]);
   }
 
+  /**
+   * Adds rows that block deleting a row of this catalog, from a module that can't be
+   * imported here (e.g. herd batches pointing at distribution suppliers).
+   */
+  addUsedBy(dependent: Dependent) {
+    this.config.usedBy = [...(this.config.usedBy ?? []), dependent];
+  }
+
   get resource() {
     return this.config.resource;
   }

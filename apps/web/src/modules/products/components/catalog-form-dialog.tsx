@@ -9,6 +9,7 @@ import {
   catalogPath,
   catalogSchemas,
   fieldOf,
+  formColumns,
   STATUS_OPTIONS,
   type CatalogColumn,
   type CatalogResource,
@@ -53,7 +54,9 @@ export function CatalogFormDialog({
   onSaved: () => void;
 }) {
   const { farm } = useFarm();
-  const { label, columns, image: hasImage } = CATALOG[resource];
+  const { label, image: hasImage } = CATALOG[resource];
+  // Read-only columns (e.g. a batch's animal counts) are worked out by the API.
+  const columns = formColumns(resource);
   const path = `/farms/${farm.slug}/${catalogPath(resource)}`;
   const currentImage = row && hasImage ? imageUrl(farm.slug, resource, row) : null;
   const [image, setImage] = useState<ImageChange>({ type: 'keep' });

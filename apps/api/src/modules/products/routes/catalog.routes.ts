@@ -2,6 +2,7 @@ import express, { Router } from 'express';
 import {
   bulkKeysSchema,
   CATALOG,
+  CATALOG_RESOURCES,
   catalogFilterSchema,
   catalogImportSchema,
   catalogListSchema,
@@ -27,6 +28,9 @@ const uploadLimiter = limiter({ name: 'catalog-upload', windowMs: 60 * 60 * 1000
  * One key per endpoint group, per catalog: categories need
  * `products.category_create` to create, units `products.unit_create`, …
  */
+/** Catalogs whose form has a select of `resource` (e.g. batches for suppliers). */
+const referrersOf = (resource: CatalogResource) => CATALOG_RESOURCES.filter((r) => CATALOG[r].columns.some((c) => c.ref === resource));
+
 function permissionsFor(resource: CatalogResource) {
   const key = (action: CatalogAction) => requireFarm(catalogPermission(resource, action));
   return {
@@ -36,12 +40,14 @@ function permissionsFor(resource: CatalogResource) {
     delete: key('delete'),
     import: key('import'),
     export: key('export'),
-    // Select choices: the catalog's own list, or any create / edit in the module
-    // (the product form picks a category and unit without listing them).
+    // Select choices: the catalog's own list, any create / edit in the module (the
+    // product form picks a category and unit without listing them), or create / edit
+    // of a catalog in another module that picks from this one (a batch's supplier).
     options: requireFarm([
       catalogPermission(resource, 'list'),
       ...permissionsWithAction(CATALOG[resource].module, 'create'),
       ...permissionsWithAction(CATALOG[resource].module, 'edit'),
+      ...referrersOf(resource).flatMap((r) => [catalogPermission(r, 'create'), catalogPermission(r, 'edit')]),
     ]),
   };
 }

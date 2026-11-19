@@ -45,6 +45,17 @@ export const BATCH_PURPOSES = [
   { value: 'other', label: 'Other' },
 ] as const satisfies readonly CatalogChoice[];
 
+export const BATCH_STATUSES = [
+  { value: 'active', label: 'Active' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'cancelled', label: 'Cancelled' },
+] as const satisfies readonly CatalogChoice[];
+
+export const TARGET_WEIGHT_UNITS = [
+  { value: 'kg', label: 'kg' },
+  { value: 'lb', label: 'lb' },
+] as const satisfies readonly CatalogChoice[];
+
 export const WEIGH_METHODS = [
   { value: 'scale', label: 'Scale' },
   { value: 'tape', label: 'Weigh tape' },
@@ -60,6 +71,8 @@ export const BREED_TYPES = [
 type Values<T extends readonly CatalogChoice[]> = T[number]['value'];
 export type BreedType = Values<typeof BREED_TYPES>;
 export type BatchPurpose = Values<typeof BATCH_PURPOSES>;
+export type BatchStatus = Values<typeof BATCH_STATUSES>;
+export type TargetWeightUnit = Values<typeof TARGET_WEIGHT_UNITS>;
 export type WeighMethod = Values<typeof WEIGH_METHODS>;
 export type AnimalSex = Values<typeof ANIMAL_SEXES>;
 export type AnimalType = Values<typeof ANIMAL_TYPES>;
@@ -72,7 +85,7 @@ export const choiceLabel = (options: readonly CatalogChoice[], value: unknown) =
 // ─── Definitions ─────────────────────────────────────────────────
 
 /** A reference to another herd catalog: `pen` → row `penName`, body `penKey`. */
-const ref = (csv: string, label: string, resource: 'animals' | 'pens' | 'pen-types' | 'batches', example: string, extra: Partial<CatalogColumn> = {}): CatalogColumn => ({
+const ref = (csv: string, label: string, resource: 'animals' | 'pens' | 'pen-types' | 'batches' | 'suppliers', example: string, extra: Partial<CatalogColumn> = {}): CatalogColumn => ({
   key: `${csv}Name`,
   field: `${csv}Key`,
   label,
@@ -158,18 +171,28 @@ export const HERD_CATALOG = {
     eyebrow: 'Herd',
     label: 'Batch',
     plural: 'Batches',
-    description: 'Groups of animals managed together, e.g. this year’s calves or the dry cows.',
+    titleKey: 'number',
+    description: 'Groups of animals bought, raised and sold together — arrival to exit, with costs and revenue.',
     columns: [
-      { key: 'name', label: 'Name', csv: 'name', required: true, example: 'Calves 2025' },
-      { key: 'code', label: 'Code', csv: 'code', example: 'CALF-25' },
-      select('purpose', 'purpose', 'Purpose', BATCH_PURPOSES, 'Calves'),
-      ref('pen', 'Pen', 'pens', 'Barn A'),
-      { key: 'startDate', label: 'Start date', csv: 'start_date', input: 'date', example: '2025-01-01' },
-      { key: 'endDate', label: 'End date', csv: 'end_date', input: 'date', example: '' },
-      { key: 'status', label: 'Status', csv: 'status', input: 'status', example: 'Active' },
-      { key: 'description', label: 'Description', csv: 'description', input: 'textarea', example: 'Spring-born calves' },
+      { key: 'number', label: 'Batch number', csv: 'batch_number', required: true, example: 'B-2025-01' },
+      { key: 'name', label: 'Batch name', csv: 'batch_name', example: 'Spring feeders' },
+      { key: 'arrivalDate', label: 'Arrival date', csv: 'arrival_date', input: 'date', required: true, defaultValue: 'today', example: '2025-01-15' },
+      { key: 'expectedExitDate', label: 'Expected exit', csv: 'expected_exit_date', input: 'date', example: '2025-07-15' },
+      { key: 'actualExitDate', label: 'Actual exit', csv: 'actual_exit_date', input: 'date', example: '', list: false },
+      { key: 'supplierName', field: 'supplierKey', label: 'Supplier', csv: 'supplier', ref: 'suppliers', example: 'SUP-001' },
+      // Counted from the batch's animals, never typed in.
+      { key: 'totalAnimals', label: 'Animals', csv: 'total_animals', input: 'number', readOnly: true, example: '' },
+      { key: 'activeAnimals', label: 'In herd', csv: 'active_animals', input: 'number', readOnly: true, example: '' },
+      select('status', 'status', 'Status', BATCH_STATUSES, 'Active', { required: true, defaultValue: 'active' }),
+      { key: 'targetWeight', label: 'Target exit weight', csv: 'target_weight', input: 'number', example: '450', list: false },
+      select('targetWeightUnit', 'target_weight_unit', 'Weight unit', TARGET_WEIGHT_UNITS, 'kg', { defaultValue: 'kg', list: false }),
+      { key: 'totalPurchaseCost', label: 'Total purchase cost', csv: 'total_purchase_cost', input: 'number', example: '250000', list: false },
+      { key: 'totalSaleRevenue', label: 'Total sale revenue', csv: 'total_sale_revenue', input: 'number', example: '0', list: false },
+      select('purpose', 'purpose', 'Purpose', BATCH_PURPOSES, 'Fattening', { list: false }),
+      ref('pen', 'Pen', 'pens', 'Barn A', { list: false }),
+      { key: 'notes', label: 'Notes', csv: 'notes', input: 'textarea', example: 'Bought at the Hat market', list: false },
     ],
-    filters: ['purpose', 'pen', 'status', 'start_date'],
+    filters: ['status', 'supplier', 'arrival_date', 'purpose', 'pen'],
   },
   weights: {
     module: 'herd',

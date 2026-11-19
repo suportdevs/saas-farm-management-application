@@ -1,6 +1,7 @@
 import { and, count, desc, eq, isNull, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { db } from '../../../core';
+import { supplierCatalog, suppliers } from '../../distribution';
 import { Catalog } from '../../products';
 import { assertWithinLimit } from '../../subscriptions';
 import { animals, batches, breeds, colorMarkings, pens, penTypes, weights } from '../models';
@@ -87,32 +88,54 @@ export const penCatalog = new Catalog({
   ],
 });
 
+/** Animals of a batch (not deleted), optionally only the ones still in the herd. */
+const batchAnimals = (inHerd: boolean) =>
+  sql<number>`(select count(*)::int from ${animals} a where a.batch_id = ${batches.id} and a.deleted_at is null${inHerd ? sql` and a.herd_status = 'in_herd'` : sql``})`;
+
 export const batchCatalog = new Catalog({
   resource: 'batches',
   table: batches,
   fields: {
     key: batches.key,
+    number: batches.number,
     name: batches.name,
-    code: batches.code,
+    arrivalDate: batches.arrivalDate,
+    expectedExitDate: batches.expectedExitDate,
+    actualExitDate: batches.actualExitDate,
+    supplierKey: suppliers.key,
+    supplierName: suppliers.name,
+    // Counted live, so they never drift from the animal register.
+    totalAnimals: batchAnimals(false),
+    activeAnimals: batchAnimals(true),
+    status: batches.status,
+    targetWeight: batches.targetWeight,
+    targetWeightUnit: batches.targetWeightUnit,
+    totalPurchaseCost: batches.totalPurchaseCost,
+    totalSaleRevenue: batches.totalSaleRevenue,
     purpose: batches.purpose,
     penKey: pens.key,
     penName: pens.name,
-    startDate: batches.startDate,
-    endDate: batches.endDate,
-    status: batches.status,
-    description: batches.description,
+    notes: batches.notes,
   },
-  joins: [{ table: pens, on: eq(pens.id, batches.penId), left: true }],
-  search: [batches.name, batches.code],
-  unique: [
-    { index: 'batches_name_uq', column: batches.name, field: 'name' },
-    { index: 'batches_code_uq', column: batches.code, field: 'code' },
+  joins: [
+    { table: suppliers, on: eq(suppliers.id, batches.supplierId), left: true },
+    { table: pens, on: eq(pens.id, batches.penId), left: true },
   ],
+  search: [batches.number, batches.name],
+  // Selects show "B-2025-01 · Spring feeders"; newest arrivals first.
+  title: sql<string>`concat_ws(' · ', ${batches.number}, ${batches.name})`,
+  orderBy: desc(batches.arrivalDate),
+  unique: [{ index: 'batches_batch_number_uq', column: batches.number, field: 'number' }],
   references: {
+    // Imports match the supplier by code (or name) and the pen by code (or name).
+    supplierKey: { column: batches.supplierId, catalog: supplierCatalog, matchBy: suppliers.code },
     penKey: { column: batches.penId, catalog: penCatalog, matchBy: pens.code },
   },
   usedBy: [{ table: animals, column: animals.batchId, label: 'animal' }],
 });
+
+// Distribution can't import the herd module, so the herd tells it: a supplier with batches can't be deleted.
+supplierCatalog.addUsedBy({ table: batches, column: batches.supplierId, label: 'batch', plural: 'batches' });
 
 // An animal's parents are animals too: the same table joined twice under other names.
 const mother = alias(animals, 'mother');
@@ -132,7 +155,8 @@ export const animalCatalog: Catalog = new Catalog({
     penKey: pens.key,
     penName: pens.name,
     batchKey: batches.key,
-    batchName: batches.name,
+    // The batch number: a batch name is optional.
+    batchName: batches.number,
     birthDate: animals.birthDate,
     origin: animals.origin,
     purchaseDate: animals.purchaseDate,
@@ -158,7 +182,7 @@ export const animalCatalog: Catalog = new Catalog({
   unique: [{ index: 'animals_tag_uq', column: animals.tag, field: 'tag' }],
   references: {
     penKey: { column: animals.penId, catalog: penCatalog, matchBy: pens.code },
-    batchKey: { column: animals.batchId, catalog: batchCatalog, matchBy: batches.code },
+    batchKey: { column: animals.batchId, catalog: batchCatalog, matchBy: batches.number },
     // Imports match parents by ear tag.
     motherKey: { column: animals.motherId, catalog: () => animalCatalog, matchBy: animals.tag },
     fatherKey: { column: animals.fatherId, catalog: () => animalCatalog, matchBy: animals.tag },

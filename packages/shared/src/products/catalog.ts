@@ -69,6 +69,8 @@ export interface CatalogColumn {
   list?: false;
   /** Shown in the form, table and filters but not stored on this table (and not imported). */
   virtual?: boolean;
+  /** Worked out by the API (e.g. a count): shown in the list and exports, never in the form or imports. */
+  readOnly?: true;
   /** Sample value written to the import template. */
   example: string;
 }
@@ -277,9 +279,12 @@ export const fieldOf = (c: CatalogColumn) => c.field ?? c.key;
 export const hasStatus = (resource: CatalogResource) =>
   CATALOG[resource].columns.some((c) => c.input === 'status');
 
-/** Columns of import files and the import template (virtual columns aren't stored). */
+/** Columns of import files and the import template (virtual and read-only columns aren't stored). */
 export const importColumns = (resource: CatalogResource) =>
-  CATALOG[resource].columns.filter((c) => !c.virtual);
+  CATALOG[resource].columns.filter((c) => !c.virtual && !c.readOnly);
+
+/** Columns of the create/edit modal (read-only ones are worked out by the API). */
+export const formColumns = (resource: CatalogResource) => CATALOG[resource].columns.filter((c) => !c.readOnly);
 
 export const filterColumns = (resource: CatalogResource) =>
   CATALOG[resource].filters.map((csv) => CATALOG[resource].columns.find((c) => c.csv === csv)!);
