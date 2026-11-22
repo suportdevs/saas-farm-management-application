@@ -16,6 +16,11 @@ export function useFarm(): FarmContext {
   return ctx;
 }
 
+/** The farm workspace, or null outside one (e.g. admin pages). */
+export function useOptionalFarm(): FarmContext | null {
+  return useContext(Ctx);
+}
+
 export function useCan(permission: Permission): boolean {
   return useFarm().membership.permissions.includes(permission);
 }

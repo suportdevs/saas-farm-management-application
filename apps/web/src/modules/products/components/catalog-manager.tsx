@@ -49,6 +49,7 @@ import { usePreferences } from '@/components/shell/preferences-provider';
 import { useCan, useFarm } from '@/modules/farms/context';
 import type { ExportFormat } from '@/lib/table-export';
 import { catalogExportTable, displayValue, imageUrl, rowValue } from '../files';
+import { ModuleExport } from './module-export';
 import { CatalogFilters, filterParams, type FilterValues } from './catalog-filters';
 import { CatalogFormDialog } from './catalog-form-dialog';
 import { CatalogImportDialog } from './catalog-import-dialog';
@@ -207,6 +208,7 @@ export function CatalogManager({
         compact
         actions={
           <>
+            <ModuleExport module={module} />
             {canImport && (
               <Button variant="outline" onClick={() => setModal({ type: 'import' })}>
                 <Upload className="h-4 w-4" /> Import

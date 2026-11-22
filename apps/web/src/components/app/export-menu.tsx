@@ -6,7 +6,9 @@ import { toast } from 'sonner';
 import { buttonClasses } from '@/components/ui/button';
 import { Menu, menuItemClasses } from '@/components/ui/menu';
 import { errorMessage } from '@/lib/api';
-import { EXPORT_FORMATS, exportTable, type ExportFormat, type ExportTable } from '@/lib/table-export';
+import { farmLetterhead, PLATFORM_LETTERHEAD } from '@/lib/letterhead';
+import { EXPORT_FORMATS, exportTable, rowCount, type ExportDoc, type ExportFormat, type ExportTable } from '@/lib/table-export';
+import { useOptionalFarm } from '@/modules/farms/context';
 import { cn } from '@/lib/utils';
 
 const ICONS = { excel: FileSpreadsheet, csv: Sheet, pdf: FileText, tsv: TableProperties, json: Braces, print: Printer, copy: Copy };
@@ -14,7 +16,9 @@ const ICONS = { excel: FileSpreadsheet, csv: Sheet, pdf: FileText, tsv: TablePro
 /**
  * "Download" button with a menu of formats (Excel, CSV, PDF, TSV, JSON, Print, Copy).
  * `load` fetches the rows when a format is picked, e.g. every row matching
- * the current filters. Pass `formats` to offer only some of them.
+ * the current filters, or an ExportDoc with several lists. Pass `formats` to
+ * offer only some of them. PDF, Excel and Print get the farm's letterhead
+ * (HerdSphere's on admin pages) unless `load` sets its own.
  */
 export function ExportMenu({
   load,
@@ -22,21 +26,24 @@ export function ExportMenu({
   disabled,
   label = 'Download',
 }: {
-  load: (format: ExportFormat) => Promise<ExportTable>;
+  load: (format: ExportFormat) => Promise<ExportTable | ExportDoc>;
   formats?: ExportFormat[];
   disabled?: boolean;
   label?: string;
 }) {
   const [busy, setBusy] = useState<ExportFormat | null>(null);
+  const farm = useOptionalFarm();
   const shown = EXPORT_FORMATS.filter((f) => !formats || formats.includes(f.value));
 
   const run = async (format: ExportFormat) => {
     setBusy(format);
     try {
       const table = await load(format);
-      await exportTable(format, table);
-      if (format === 'copy') toast.success(`Copied ${table.rows.length} ${table.rows.length === 1 ? 'row' : 'rows'}`);
-      else if (format !== 'print') toast.success(`Downloaded ${table.rows.length} ${table.rows.length === 1 ? 'row' : 'rows'}`);
+      const letterhead = table.letterhead ?? (farm ? farmLetterhead(farm) : PLATFORM_LETTERHEAD);
+      await exportTable(format, { ...table, letterhead });
+      const n = rowCount(table);
+      if (format === 'copy') toast.success(`Copied ${n} ${n === 1 ? 'row' : 'rows'}`);
+      else if (format !== 'print') toast.success(`Downloaded ${n} ${n === 1 ? 'row' : 'rows'}`);
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {

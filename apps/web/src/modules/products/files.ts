@@ -40,13 +40,14 @@ export const imageUrl = (farmSlug: string, resource: CatalogResource, row: Catal
  * (CSV with the import headers, so it can be imported again); PDF, print and
  * copy show the list columns, as on screen.
  */
-export function catalogExportTable(resource: CatalogResource, rows: CatalogRow[], farmName: string, format: ExportFormat): ExportTable {
+export function catalogExportTable(resource: CatalogResource, rows: CatalogRow[], _farmName: string, format: ExportFormat): ExportTable {
   const { plural, columns } = CATALOG[resource];
   const shown = ['csv', 'excel', 'tsv', 'json'].includes(format) ? columns : columns.filter((c) => c.list !== false);
   return {
     filename: resource,
     title: plural,
-    subtitle: `${farmName} · ${rows.length} ${rows.length === 1 ? 'row' : 'rows'} · ${new Date().toLocaleDateString()}`,
+    // The farm name is on the letterhead and the date in the "Generated" line.
+    subtitle: `${rows.length} ${rows.length === 1 ? 'row' : 'rows'}`,
     headers: shown.map((c) => (format === 'csv' ? c.csv : c.label)),
     rows: rows.map((row) => shown.map((c) => displayValue(row, c))),
   };
