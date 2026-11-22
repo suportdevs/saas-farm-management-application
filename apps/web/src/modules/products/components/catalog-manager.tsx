@@ -50,7 +50,7 @@ import { useCan, useFarm } from '@/modules/farms/context';
 import type { ExportFormat } from '@/lib/table-export';
 import { catalogExportTable, displayValue, imageUrl, rowValue } from '../files';
 import { ModuleExport } from './module-export';
-import { CatalogFilters, filterParams, type FilterValues } from './catalog-filters';
+import { CatalogCriteria, CatalogFilters, filterParams, type FilterValues } from './catalog-filters';
 import { CatalogFormDialog } from './catalog-form-dialog';
 import { CatalogImportDialog } from './catalog-import-dialog';
 
@@ -111,8 +111,8 @@ export function CatalogManager({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<Busy>(null);
   const [search, setSearch] = useState(q);
-  // Search criteria are shown above the table; the Filters button hides them.
-  // Filters start collapsed; the Filters button opens them.
+  // Filters start collapsed; the Filters button opens them. The criteria in
+  // use are always listed above the table (CatalogCriteria).
   const [showFilters, setShowFilters] = useState(false);
   const { prefs } = usePreferences();
   const [navigating, startNavigation] = useTransition();
@@ -137,6 +137,16 @@ export function CatalogManager({
       Object.entries(query).filter(([k]) => !filterParams(resource).includes(k)),
     );
     navigate({ ...kept, ...filters });
+  };
+
+  /** Drops some criteria (a chip's ×) or all of them. */
+  const removeCriteria = (keys: string[]) => {
+    if (keys.includes('q')) setSearch('');
+    navigate(Object.fromEntries(Object.entries(query).filter(([k]) => !keys.includes(k))));
+  };
+  const clearCriteria = () => {
+    setSearch('');
+    navigate(Object.fromEntries(Object.entries(query).filter(([k]) => k !== 'q' && !filterParams(resource).includes(k))));
   };
 
   const refresh = () => {
@@ -291,6 +301,8 @@ export function CatalogManager({
             </span>
             </div>
           </div>
+
+          <CatalogCriteria resource={resource} query={query} total={pagination.total} onRemove={removeCriteria} onClear={clearCriteria} />
 
           {showFilters && (
             <div className="shrink-0">
