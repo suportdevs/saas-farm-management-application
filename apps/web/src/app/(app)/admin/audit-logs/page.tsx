@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import type { AuditLogEntry, Pagination as PaginationInfo } from '@kit/shared';
 import { Pagination } from '@/components/app/pagination';
+import { TableFrame } from '@/components/app/table-frame';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { actionLabel, describeAgent } from '@/lib/audit';
 import { requireAdmin, serverFetch } from '@/lib/session';
@@ -23,10 +23,12 @@ export default async function AuditLogPage({ searchParams }: { searchParams: Pro
 
   return (
     <>
-      <form className="mb-4 flex flex-wrap gap-2">
-        <Input name="action" defaultValue={action} placeholder="Action prefix, e.g. auth. or admin." className="max-w-xs" />
+      <TableFrame
+        toolbar={
+      <form className="flex flex-wrap items-center gap-2">
+        <Input name="action" defaultValue={action} placeholder="Action prefix, e.g. auth. or admin." className="h-8 max-w-xs text-xs" />
         {userId && <input type="hidden" name="userId" value={userId} />}
-        <Button type="submit" variant="outline">
+        <Button type="submit" variant="outline" size="sm">
           Filter
         </Button>
         {(action || userId) && (
@@ -35,7 +37,9 @@ export default async function AuditLogPage({ searchParams }: { searchParams: Pro
           </Link>
         )}
       </form>
-      <Card className="overflow-x-auto">
+        }
+      >
+
         <table className="w-full text-sm">
           <thead className="border-b bg-muted/40 text-left text-xs uppercase text-muted-foreground">
             <tr>
@@ -88,7 +92,7 @@ export default async function AuditLogPage({ searchParams }: { searchParams: Pro
             )}
           </tbody>
         </table>
-      </Card>
+      </TableFrame>
       <Pagination pagination={data.pagination} basePath="/admin/audit-logs" params={filters} />
     </>
   );

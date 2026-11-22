@@ -4,9 +4,9 @@ import { CreditCard, Search } from 'lucide-react';
 import { type Pagination as PaginationInfo, type PlatformSubscription } from '@kit/shared';
 import { SubscriptionsExport } from '@/components/admin/list-exports';
 import { Pagination } from '@/components/app/pagination';
+import { TableFrame } from '@/components/app/table-frame';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -40,13 +40,15 @@ export default async function AdminSubscriptionsPage({ searchParams }: { searchP
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start gap-2">
+      <TableFrame
+        toolbar={
+      <div className="flex flex-wrap items-center gap-2">
         <form className="flex flex-1 flex-wrap gap-2" action="/admin/subscriptions">
           <div className="relative min-w-60 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input name="q" defaultValue={params.q} placeholder="Search tenant or owner email…" className="pl-9" />
+            <Input name="q" defaultValue={params.q} placeholder="Search tenant or owner email…" className="h-8 pl-9 text-xs" />
           </div>
-          <Select name="plan" defaultValue={params.plan ?? ''} aria-label="Plan">
+          <Select className="h-8 text-xs" name="plan" defaultValue={params.plan ?? ''} aria-label="Plan">
             <option value="">All plans</option>
             {plans.map((p) => (
               <option key={p.id} value={p.id}>
@@ -54,7 +56,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: { searchP
               </option>
             ))}
           </Select>
-          <Select name="state" defaultValue={params.state ?? ''} aria-label="State">
+          <Select className="h-8 text-xs" name="state" defaultValue={params.state ?? ''} aria-label="State">
             <option value="">Any state</option>
             <option value="active">Active</option>
             <option value="trialing">Trialing</option>
@@ -62,18 +64,18 @@ export default async function AdminSubscriptionsPage({ searchParams }: { searchP
             <option value="free">Free</option>
             <option value="canceled">Canceled</option>
           </Select>
-          <Select name="source" defaultValue={params.source ?? ''} aria-label="Billing source">
+          <Select className="h-8 text-xs" name="source" defaultValue={params.source ?? ''} aria-label="Billing source">
             <option value="">Any billing</option>
             <option value="manual">Manual (invoice)</option>
             <option value="stripe">Stripe (card)</option>
             <option value="none">Not paying</option>
           </Select>
-          <Select name="billing" defaultValue={params.billing ?? ''} aria-label="Unpaid invoices">
+          <Select className="h-8 text-xs" name="billing" defaultValue={params.billing ?? ''} aria-label="Unpaid invoices">
             <option value="">Any balance</option>
             <option value="unpaid">Has unpaid invoices</option>
             <option value="overdue">Has overdue invoices</option>
           </Select>
-          <Button type="submit" variant="outline">
+          <Button type="submit" variant="outline" size="sm">
             Filter
           </Button>
         </form>
@@ -82,11 +84,11 @@ export default async function AdminSubscriptionsPage({ searchParams }: { searchP
           {me.platformPermissions?.includes('platform.billing.manage') && <RecordPaymentButton plans={plans} />}
         </div>
       </div>
-
+        }
+      >
       {rows.length === 0 ? (
-        <EmptyState icon={CreditCard} title="No subscriptions found" description="Try a different search or filter." />
+        <EmptyState className="m-4" icon={CreditCard} title="No subscriptions found" description="Try a different search or filter." />
       ) : (
-        <Card className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
@@ -155,8 +157,8 @@ export default async function AdminSubscriptionsPage({ searchParams }: { searchP
               })}
             </tbody>
           </table>
-        </Card>
       )}
+      </TableFrame>
       {data && (
         <Pagination
           pagination={data.pagination}

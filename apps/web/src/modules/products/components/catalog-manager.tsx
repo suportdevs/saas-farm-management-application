@@ -3,7 +3,6 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
 import {
-  Download,
   ImageIcon,
   ListFilter,
   Loader2,
@@ -13,7 +12,6 @@ import {
   PawPrint,
   Pencil,
   Plus,
-  Printer,
   RefreshCw,
   Search,
   Trash2,
@@ -34,6 +32,7 @@ import {
   type CatalogResource,
   type CatalogRow,
 } from '@kit/shared';
+import { ExportMenu } from '@/components/app/export-menu';
 import { PageHeader } from '@/components/app/page-header';
 import { Pagination } from '@/components/app/pagination';
 import { Badge } from '@/components/ui/badge';
@@ -45,8 +44,10 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { api, errorMessage } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { usePreferences } from '@/components/shell/preferences-provider';
 import { useCan, useFarm } from '@/modules/farms/context';
-import { displayValue, exportCatalog, imageUrl, printCatalog, rowValue } from '../files';
+import type { ExportFormat } from '@/lib/table-export';
+import { catalogExportTable, displayValue, imageUrl, rowValue } from '../files';
 import { CatalogFilters, filterParams, type FilterValues } from './catalog-filters';
 import { CatalogFormDialog } from './catalog-form-dialog';
 import { CatalogImportDialog } from './catalog-import-dialog';
@@ -57,7 +58,7 @@ type Modal =
   | { type: 'delete'; keys: string[] }
   | null;
 
-type Busy = 'export' | 'print' | 'delete' | 'status' | null;
+type Busy = 'delete' | 'status' | null;
 
 /** Empty-state icon per module. */
 const MODULE_ICONS = { products: Package, herd: PawPrint, distribution: Truck };
@@ -108,7 +109,9 @@ export function CatalogManager({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<Busy>(null);
   const [search, setSearch] = useState(q);
-  const [showFilters, setShowFilters] = useState(activeFilters > 0);
+  // Search criteria are shown above the table; the Filters button hides them.
+  const [showFilters, setShowFilters] = useState(true);
+  const { prefs } = usePreferences();
   const [navigating, startNavigation] = useTransition();
 
   // Selection belongs to the rows on screen.
@@ -149,15 +152,11 @@ export function CatalogManager({
     }
   };
 
-  /** Export and print use every row matching the current search and filters. */
-  const download = (kind: 'export' | 'print') =>
-    run(kind, async () => {
-      const { rows: all } = await api.get<{ rows: CatalogRow[] }>(
-        `${apiPath}/export${toQueryString(query)}`,
-      );
-      if (kind === 'export') exportCatalog(resource, all);
-      else printCatalog(resource, all, farm.name);
-    });
+  /** Every download format uses every row matching the current search and filters. */
+  const download = async (format: ExportFormat) => {
+    const { rows: all } = await api.get<{ rows: CatalogRow[] }>(`${apiPath}/export${toQueryString(query)}`);
+    return catalogExportTable(resource, all, farm.name, format);
+  };
 
   const remove = (keys: string[]) =>
     run('delete', async () => {
@@ -203,6 +202,7 @@ export function CatalogManager({
         eyebrow={eyebrow}
         title={plural}
         description={description}
+        compact
         actions={
           <>
             {canImport && (
@@ -210,26 +210,7 @@ export function CatalogManager({
                 <Upload className="h-4 w-4" /> Import
               </Button>
             )}
-            {canExport && (
-              <>
-                <Button
-                  variant="outline"
-                  onClick={() => download('export')}
-                  loading={busy === 'export'}
-                  disabled={empty}
-                >
-                  {busy !== 'export' && <Download className="h-4 w-4" />} Export
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => download('print')}
-                  loading={busy === 'print'}
-                  disabled={empty}
-                >
-                  {busy !== 'print' && <Printer className="h-4 w-4" />} Print
-                </Button>
-              </>
-            )}
+            {canExport && <ExportMenu load={download} disabled={empty} />}
             {canCreate && (
               <Button onClick={() => setModal({ type: 'form', row: null })}>
                 <Plus className="h-4 w-4" /> Add {label.toLowerCase()}
@@ -266,15 +247,22 @@ export function CatalogManager({
           }
         />
       ) : (
-        <Card className="overflow-visible">
-          <div className="flex flex-wrap items-center gap-3 border-b px-4 py-3">
+        // The card fits the screen: search, filters and the table header stay in
+        // place and only the rows scroll.
+        <Card
+          className={cn(
+            'flex max-h-[calc(100dvh-6rem)] flex-col overflow-visible',
+            prefs.nav === 'top' || prefs.nav === 'bottom' ? 'lg:max-h-[calc(100dvh-16rem)]' : 'lg:max-h-[calc(100dvh-12.5rem)]',
+          )}
+        >
+          <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-4 py-2">
             <div className="relative w-full max-w-xs">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder={`Search ${plural.toLowerCase()}…`}
-                className="pl-9"
+                className="h-8 pl-9 text-xs"
                 aria-label="Search"
               />
               {navigating && (
@@ -283,6 +271,7 @@ export function CatalogManager({
             </div>
             <Button
               variant={showFilters ? 'secondary' : 'outline'}
+              size="sm"
               onClick={() => setShowFilters((s) => !s)}
               aria-expanded={showFilters}
             >
@@ -324,17 +313,19 @@ export function CatalogManager({
           </div>
 
           {showFilters && (
-            <CatalogFilters
-              key={toQueryString(query)}
-              resource={resource}
-              values={query}
-              onApply={applyFilters}
-            />
+            <div className="shrink-0">
+              <CatalogFilters
+                key={toQueryString(query)}
+                resource={resource}
+                values={query}
+                onApply={applyFilters}
+              />
+            </div>
           )}
 
-          <div className="overflow-x-auto">
+          <div className="min-h-0 flex-1 overflow-auto">
             <table className="w-full text-left text-sm">
-              <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+              <thead className="sticky top-0 z-10 bg-muted text-xs uppercase tracking-wide text-muted-foreground shadow-[0_1px_0_var(--color-border)]">
                 <tr>
                   {canSelect && (
                     <th className="w-10 px-4 py-3">

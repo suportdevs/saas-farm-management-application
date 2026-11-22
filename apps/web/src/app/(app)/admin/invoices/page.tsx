@@ -4,8 +4,8 @@ import { Receipt, Search } from 'lucide-react';
 import { PAYMENT_METHOD_LABELS, planName, type ManualInvoice, type Pagination as PaginationInfo } from '@kit/shared';
 import { InvoicesExport } from '@/components/admin/list-exports';
 import { Pagination } from '@/components/app/pagination';
+import { TableFrame } from '@/components/app/table-frame';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -34,20 +34,22 @@ export default async function AdminInvoicesPage({ searchParams }: { searchParams
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start gap-2">
+      <TableFrame
+        toolbar={
+      <div className="flex flex-wrap items-center gap-2">
         <form className="flex flex-1 flex-wrap gap-2" action="/admin/invoices">
           <div className="relative min-w-60 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input name="q" defaultValue={params.q} placeholder="Invoice number, description or tenant…" className="pl-9" />
+            <Input name="q" defaultValue={params.q} placeholder="Invoice number, description or tenant…" className="h-8 pl-9 text-xs" />
           </div>
-          <Select name="status" defaultValue={params.status ?? ''} aria-label="Status">
+          <Select className="h-8 text-xs" name="status" defaultValue={params.status ?? ''} aria-label="Status">
             <option value="">Any status</option>
             <option value="open">Open</option>
             <option value="overdue">Overdue</option>
             <option value="paid">Paid</option>
             <option value="void">Void</option>
           </Select>
-          <Button type="submit" variant="outline">
+          <Button type="submit" variant="outline" size="sm">
             Filter
           </Button>
         </form>
@@ -56,15 +58,16 @@ export default async function AdminInvoicesPage({ searchParams }: { searchParams
           {canBill && <RecordPaymentButton plans={plans} />}
         </div>
       </div>
-
+        }
+      >
       {invoices.length === 0 ? (
         <EmptyState
+          className="m-4"
           icon={Receipt}
           title="No invoices found"
           description="Use Record payment for money already received, or issue an invoice from a tenant's page (Tenants → a tenant → Manual invoices)."
         />
       ) : (
-        <Card className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
@@ -115,8 +118,8 @@ export default async function AdminInvoicesPage({ searchParams }: { searchParams
               ))}
             </tbody>
           </table>
-        </Card>
       )}
+      </TableFrame>
       {data && <Pagination pagination={data.pagination} basePath="/admin/invoices" params={{ q: params.q, status: params.status }} />}
     </div>
   );

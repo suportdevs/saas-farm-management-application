@@ -2,11 +2,11 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import type { AdminUser, Pagination as PaginationInfo } from '@kit/shared';
 import { Pagination } from '@/components/app/pagination';
+import { TableFrame } from '@/components/app/table-frame';
 import { UserStatus } from '@/components/admin/user-status';
 import { Avatar } from '@/components/app/user-menu';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { requireAdmin, serverFetch } from '@/lib/session';
@@ -33,20 +33,23 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
 
   return (
     <>
-      <form className="mb-4 flex flex-wrap gap-2">
-        <Input name="q" defaultValue={q} placeholder="Search by name or email…" className="max-w-xs" />
-        <Select name="role" defaultValue={role} aria-label="Role">
+      <TableFrame
+        toolbar={
+      <>
+      <form className="flex flex-wrap items-center gap-2">
+        <Input name="q" defaultValue={q} placeholder="Search by name or email…" className="h-8 max-w-xs text-xs" />
+        <Select className="h-8 text-xs" name="role" defaultValue={role} aria-label="Role">
           <option value="">All roles</option>
           <option value="user">Members</option>
           <option value="admin">Admins</option>
         </Select>
-        <Select name="status" defaultValue={status} aria-label="Status">
+        <Select className="h-8 text-xs" name="status" defaultValue={status} aria-label="Status">
           <option value="">Any status</option>
           <option value="active">Active</option>
           <option value="unverified">Unverified</option>
           <option value="banned">Suspended</option>
         </Select>
-        <Button type="submit" variant="outline">
+        <Button type="submit" variant="outline" size="sm">
           Filter
         </Button>
         {me.platformPermissions?.includes('platform.tenants.create') && (
@@ -55,8 +58,11 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
           </div>
         )}
       </form>
-      <p className="mb-2 text-sm text-muted-foreground">{pagination.total.toLocaleString()} users</p>
-      <Card className="overflow-x-auto">
+      <p className="mt-2 text-xs text-muted-foreground">{pagination.total.toLocaleString()} users</p>
+      </>
+        }
+      >
+
         <table className="w-full text-sm">
           <thead className="border-b bg-muted/40 text-left text-xs uppercase text-muted-foreground">
             <tr>
@@ -100,7 +106,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
             )}
           </tbody>
         </table>
-      </Card>
+      </TableFrame>
       <Pagination pagination={pagination} basePath="/admin/users" params={filters} />
     </>
   );

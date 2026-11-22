@@ -1,36 +1,25 @@
 'use client';
 
-import { useState } from 'react';
-import { Download } from 'lucide-react';
-import { toast } from 'sonner';
 import { planName, type Plan, type ManualInvoice, type PlatformFarm, type PlatformSubscription } from '@kit/shared';
-import { Button } from '@/components/ui/button';
-import { api, errorMessage } from '@/lib/api';
-import { downloadFile, toCsv } from '@/lib/csv';
+import { ExportMenu } from '@/components/app/export-menu';
+import { api } from '@/lib/api';
 
 const money = (minor: number) => (minor / 100).toFixed(2);
 const day = (iso: string | null) => (iso ? iso.slice(0, 10) : '');
-const stamp = () => new Date().toISOString().slice(0, 10);
 
-/** Fetches every row matching the page's filters (up to 1,000) and saves it as CSV. */
+/**
+ * Download menu (Excel, CSV, PDF, Print, Copy) over every row matching the
+ * page's filters (up to 1,000).
+ */
 function ExportButton<T>({ load, toRows, headers, filename }: { load: () => Promise<T[]>; toRows: (rows: T[]) => unknown[][]; headers: string[]; filename: string }) {
-  const [busy, setBusy] = useState(false);
-  const run = async () => {
-    setBusy(true);
-    try {
-      const rows = await load();
-      downloadFile(`${filename}-${stamp()}.csv`, toCsv(headers, toRows(rows)));
-      toast.success(`Exported ${rows.length} ${rows.length === 1 ? 'row' : 'rows'}`);
-    } catch (err) {
-      toast.error(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  };
+  const title = filename.charAt(0).toUpperCase() + filename.slice(1);
   return (
-    <Button type="button" variant="outline" onClick={run} loading={busy}>
-      {!busy && <Download className="h-4 w-4" />} Export CSV
-    </Button>
+    <ExportMenu
+      load={async () => {
+        const rows = await load();
+        return { filename, title, subtitle: `${rows.length} ${rows.length === 1 ? 'row' : 'rows'} · ${new Date().toLocaleDateString()}`, headers, rows: toRows(rows) };
+      }}
+    />
   );
 }
 

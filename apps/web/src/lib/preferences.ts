@@ -36,6 +36,8 @@ export const SIZES = [
 
 export const NAV_POSITIONS = ['left', 'right', 'top', 'bottom'] as const;
 export const ZOOM_LEVELS = [80, 90, 100, 110, 125, 150] as const;
+/** Rows per page offered on every list; the default one is a preference. */
+export const PAGE_SIZES = [10, 25, 50, 100] as const;
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 export type ColorKey = (typeof COLORS)[number]['key'];
@@ -55,9 +57,11 @@ export interface UiPrefs {
   width: 'boxed' | 'full';
   /** Content zoom in percent. */
   zoom: number;
+  /** Default rows per page on lists (PAGE_SIZES); a list's own selector overrides it. */
+  pageSize: number;
 }
 
-export const DEFAULT_PREFS: UiPrefs = { color: 'forest', font: 'geist', size: 'md', sidebar: 'brand', nav: 'left', collapsed: false, width: 'boxed', zoom: 100 };
+export const DEFAULT_PREFS: UiPrefs = { color: 'forest', font: 'geist', size: 'md', sidebar: 'brand', nav: 'left', collapsed: false, width: 'boxed', zoom: 100, pageSize: 25 };
 
 const oneOf = <T extends string>(value: unknown, options: readonly T[], fallback: T): T => (options.includes(value as T) ? (value as T) : fallback);
 
@@ -78,6 +82,7 @@ export function parsePrefs(raw: string | undefined | null): UiPrefs {
     collapsed: data.collapsed === true,
     width: oneOf(data.width, ['boxed', 'full'] as const, DEFAULT_PREFS.width),
     zoom: ZOOM_LEVELS.includes(data.zoom as never) ? (data.zoom as number) : DEFAULT_PREFS.zoom,
+    pageSize: PAGE_SIZES.includes(data.pageSize as never) ? (data.pageSize as number) : DEFAULT_PREFS.pageSize,
   };
 }
 

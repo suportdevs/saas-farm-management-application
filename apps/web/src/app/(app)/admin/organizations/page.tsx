@@ -3,8 +3,8 @@ import Link from 'next/link';
 import { Building2, Search } from 'lucide-react';
 import type { Pagination as PaginationInfo, PlatformOrganization } from '@kit/shared';
 import { Pagination } from '@/components/app/pagination';
+import { TableFrame } from '@/components/app/table-frame';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { formatDate } from '@/lib/format';
@@ -22,20 +22,22 @@ export default async function AdminOrganizationsPage({ searchParams }: { searchP
 
   return (
     <div className="space-y-4">
+      <TableFrame
+        toolbar={
       <form className="flex flex-wrap gap-2" action="/admin/organizations">
         <div className="relative min-w-60 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input name="q" defaultValue={params.q} placeholder="Search organization or owner email…" className="pl-9" />
+          <Input name="q" defaultValue={params.q} placeholder="Search organization or owner email…" className="h-8 pl-9 text-xs" />
         </div>
-        <Button type="submit" variant="outline">
+        <Button type="submit" variant="outline" size="sm">
           Search
         </Button>
       </form>
-
+        }
+      >
       {rows.length === 0 ? (
-        <EmptyState icon={Building2} title="No clients found" description="Organizations appear when a farm is created." />
+        <EmptyState className="m-4" icon={Building2} title="No clients found" description="Organizations appear when a farm is created." />
       ) : (
-        <Card className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
@@ -71,8 +73,8 @@ export default async function AdminOrganizationsPage({ searchParams }: { searchP
               ))}
             </tbody>
           </table>
-        </Card>
       )}
+      </TableFrame>
       {data && <Pagination pagination={data.pagination} basePath="/admin/organizations" params={{ q: params.q }} />}
     </div>
   );

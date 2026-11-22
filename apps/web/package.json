@@ -12,6 +12,8 @@
     "@hookform/resolvers": "^5.2.0",
     "@kit/shared": "*",
     "clsx": "^2.1.1",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.9",
     "lucide-react": "^1.0.0",
     "next": "^16.4.3",
     "react": "^19.2.0",
@@ -20,6 +22,7 @@
     "server-only": "^0.0.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.3.0",
+    "write-excel-file": "^4.1.1",
     "zod": "^4.1.0"
   },
   "devDependencies": {

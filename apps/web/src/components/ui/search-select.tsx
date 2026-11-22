@@ -25,6 +25,8 @@ export interface SearchSelectProps {
   invalid?: boolean;
   disabled?: boolean;
   className?: string;
+  /** 'sm' = compact trigger, used in filter bars. */
+  size?: 'md' | 'sm';
   'aria-label'?: string;
 }
 
@@ -44,6 +46,7 @@ export function SearchSelect({
   invalid,
   disabled,
   className,
+  size = 'md',
   'aria-label': ariaLabel,
 }: SearchSelectProps) {
   const listId = useId();
@@ -130,7 +133,8 @@ export function SearchSelect({
         disabled={disabled}
         onClick={() => (open ? close() : setOpen(true))}
         className={cn(
-          'flex h-10 w-full items-center gap-2 rounded-lg border border-input bg-card px-3 text-left text-sm shadow-xs transition-colors',
+          'flex w-full items-center gap-2 rounded-lg border border-input bg-card text-left shadow-xs transition-colors',
+          size === 'sm' ? 'h-8 px-2.5 text-xs' : 'h-10 px-3 text-sm',
           'focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring focus-visible:border-primary',
           'disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive',
           open && 'border-primary ring-4 ring-ring',

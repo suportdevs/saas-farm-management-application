@@ -8,7 +8,7 @@ import {
   type CatalogRow,
 } from '@kit/shared';
 import { downloadFile, toCsv } from '@/lib/csv';
-import { printTable } from '@/lib/print';
+import type { ExportFormat, ExportTable } from '@/lib/table-export';
 
 /**
  * Export, print and the import template. All use the catalog's columns, so an
@@ -35,31 +35,21 @@ export const imageUrl = (farmSlug: string, resource: CatalogResource, row: Catal
     : null;
 };
 
-const today = () => new Date().toISOString().slice(0, 10);
-const cells = (resource: CatalogResource, rows: CatalogRow[]) =>
-  rows.map((row) => CATALOG[resource].columns.map((c) => displayValue(row, c)));
-
-export function exportCatalog(resource: CatalogResource, rows: CatalogRow[]) {
-  const { columns } = CATALOG[resource];
-  downloadFile(
-    `${resource}-${today()}.csv`,
-    toCsv(
-      columns.map((c) => c.csv),
-      cells(resource, rows),
-    ),
-  );
-}
-
-/** Prints the list columns (details marked `list: false` are left out, as on screen). */
-export function printCatalog(resource: CatalogResource, rows: CatalogRow[], farmName: string) {
+/**
+ * A catalog export in the picked format. CSV and Excel carry every column
+ * (CSV with the import headers, so it can be imported again); PDF, print and
+ * copy show the list columns, as on screen.
+ */
+export function catalogExportTable(resource: CatalogResource, rows: CatalogRow[], farmName: string, format: ExportFormat): ExportTable {
   const { plural, columns } = CATALOG[resource];
-  const shown = columns.filter((c) => c.list !== false);
-  printTable({
+  const shown = format === 'csv' || format === 'excel' ? columns : columns.filter((c) => c.list !== false);
+  return {
+    filename: resource,
     title: plural,
     subtitle: `${farmName} · ${rows.length} ${rows.length === 1 ? 'row' : 'rows'} · ${new Date().toLocaleDateString()}`,
-    headers: shown.map((c) => c.label),
+    headers: shown.map((c) => (format === 'csv' ? c.csv : c.label)),
     rows: rows.map((row) => shown.map((c) => displayValue(row, c))),
-  });
+  };
 }
 
 export function downloadImportTemplate(resource: CatalogResource) {

@@ -5,9 +5,9 @@ import { FARM_TYPE_INFO, type Pagination as PaginationInfo, type PlatformFarm } 
 import { TenantsExport } from '@/components/admin/list-exports';
 import { NewTenantButton } from '@/modules/platform/components/new-tenant-dialog';
 import { Pagination } from '@/components/app/pagination';
+import { TableFrame } from '@/components/app/table-frame';
 import { SubscriptionBadge } from '@/modules/platform/components/subscription-badge';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -31,15 +31,17 @@ export default async function AdminFarmsPage({ searchParams }: { searchParams: P
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start gap-2">
+      <TableFrame
+        toolbar={
+      <div className="flex flex-wrap items-center gap-2">
       <form className="flex flex-1 flex-wrap gap-2" action="/admin/farms">
         {/* Keeps the client filter (from Admin → Clients) while searching. */}
         {params.organizationId && <input type="hidden" name="organizationId" value={params.organizationId} />}
         <div className="relative min-w-60 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input name="q" defaultValue={params.q} placeholder="Search farm, town or owner email…" className="pl-9" />
+          <Input name="q" defaultValue={params.q} placeholder="Search farm, town or owner email…" className="h-8 pl-9 text-xs" />
         </div>
-        <Select name="plan" defaultValue={params.plan ?? ''} aria-label="Plan">
+        <Select className="h-8 text-xs" name="plan" defaultValue={params.plan ?? ''} aria-label="Plan">
           <option value="">All plans</option>
           {plans.map((p) => (
             <option key={p.id} value={p.id}>
@@ -47,7 +49,7 @@ export default async function AdminFarmsPage({ searchParams }: { searchParams: P
             </option>
           ))}
         </Select>
-        <Select name="status" defaultValue={params.status ?? ''} aria-label="Status">
+        <Select className="h-8 text-xs" name="status" defaultValue={params.status ?? ''} aria-label="Status">
           <option value="">Any status</option>
           <option value="paying">Paying</option>
           <option value="trialing">On trial</option>
@@ -56,7 +58,7 @@ export default async function AdminFarmsPage({ searchParams }: { searchParams: P
           <option value="suspended">Suspended</option>
         </Select>
         {params.country && <input type="hidden" name="country" value={params.country} />}
-        <Button type="submit" variant="outline">
+        <Button type="submit" variant="outline" size="sm">
           Filter
         </Button>
       </form>
@@ -65,11 +67,11 @@ export default async function AdminFarmsPage({ searchParams }: { searchParams: P
           {me.platformPermissions?.includes('platform.tenants.create') && <NewTenantButton plans={plans.filter((p) => !p.archived)} />}
         </div>
       </div>
-
+        }
+      >
       {farms.length === 0 ? (
-        <EmptyState icon={Tractor} title="No tenants found" description="Try a different search or filter." />
+        <EmptyState className="m-4" icon={Tractor} title="No tenants found" description="Try a different search or filter." />
       ) : (
-        <Card className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
@@ -113,8 +115,8 @@ export default async function AdminFarmsPage({ searchParams }: { searchParams: P
               ))}
             </tbody>
           </table>
-        </Card>
       )}
+      </TableFrame>
       {data && <Pagination pagination={data.pagination} basePath="/admin/farms" params={{ q: params.q, plan: params.plan, status: params.status, country: params.country, organizationId: params.organizationId }} />}
     </div>
   );
