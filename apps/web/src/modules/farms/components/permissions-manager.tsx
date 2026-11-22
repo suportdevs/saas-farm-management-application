@@ -24,7 +24,9 @@ import {
   type PermissionModule,
   type PermissionOverrides,
 } from '@kit/shared';
+import { ExportMenu } from '@/components/app/export-menu';
 import { PageHeader } from '@/components/app/page-header';
+import type { ExportTable } from '@/lib/table-export';
 import { Avatar } from '@/components/app/user-menu';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -66,6 +68,7 @@ export function PermissionsManager({
       <PageHeader
         title="Roles & permissions"
         description={`Choose exactly what each role can do on ${farm.name}, then fine-tune single members with overrides.`}
+        actions={<ExportMenu load={async () => permissionsTable(data, farm.name)} />}
       />
 
       <div role="tablist" aria-label="Permission views" className="mb-6 inline-flex rounded-lg border bg-card p-1">
@@ -104,6 +107,30 @@ export function PermissionsManager({
       )}
     </>
   );
+}
+
+/** Download: one row per permission, one yes/no column per role (saved values). */
+function permissionsTable(data: FarmPermissions, farmName: string): ExportTable {
+  const yes = (has: boolean) => (has ? 'yes' : '');
+  const rows: unknown[][] = [];
+  for (const m of PERMISSION_MODULE_KEYS)
+    for (const op of permissionOperations(m))
+      for (const key of op.permissions)
+        rows.push([
+          PERMISSION_MODULES[m].label,
+          op.label,
+          permissionLabel(key),
+          key,
+          ...FARM_ROLES.map((r) => yes(r === 'owner' || data.roles[r].permissions.includes(key))),
+          ...data.customRoles.map((c) => yes(c.permissions.includes(key))),
+        ]);
+  return {
+    filename: 'roles-permissions',
+    title: 'Roles & permissions',
+    subtitle: farmName,
+    headers: ['Module', 'Operation', 'Permission', 'Key', ...FARM_ROLES.map((r) => ROLE_INFO[r].label), ...data.customRoles.map((c) => c.name)],
+    rows,
+  };
 }
 
 // ─── Shared pieces ───────────────────────────────────────────────

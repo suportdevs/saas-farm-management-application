@@ -20,6 +20,7 @@ import {
   type PlatformPermission,
   type TenantEntitlements,
 } from '@kit/shared';
+import { DataExport } from '@/components/app/data-export';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -330,15 +331,38 @@ function InvoicesCard({
               {outstanding.length > 0 && ` ${outstanding.length} unpaid.`}
             </CardDescription>
           </div>
+          <div className="flex flex-wrap gap-2">
+            <DataExport
+              table={{
+                filename: 'tenant-invoices',
+                title: `${farmName} · Manual invoices`,
+                subtitle: `${invoices.length} invoices`,
+                headers: ['Invoice', 'Description', 'Plan', 'Amount', 'Paid', 'Balance', 'Currency', 'Status', 'Issued', 'Due', 'Paid on'],
+                rows: invoices.map((i) => [
+                  i.number,
+                  i.description,
+                  i.planId ?? '',
+                  (i.amount / 100).toFixed(2),
+                  (i.paid / 100).toFixed(2),
+                  (i.balance / 100).toFixed(2),
+                  i.currency.toUpperCase(),
+                  i.status,
+                  i.issuedAt.slice(0, 10),
+                  i.dueAt.slice(0, 10),
+                  i.paidAt ? i.paidAt.slice(0, 10) : '',
+                ]),
+              }}
+            />
           {canBill && (
-            <div className="flex flex-wrap gap-2">
+            <>
               {/* Money already received: a paid invoice in one step. */}
               <RecordPaymentButton plans={plans} tenant={{ id: farmId, name: farmName, currency }} variant="outline" size="sm" />
               <Button size="sm" onClick={() => setCreating(true)}>
                 <FilePlus2 className="h-4 w-4" /> New invoice
               </Button>
-            </div>
+            </>
           )}
+          </div>
         </div>
       </CardHeader>
       {invoices.length === 0 ? (

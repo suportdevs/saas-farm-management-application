@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { Plus, Trash2, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { canManageOrg, ORG_ROLE_INFO, ORG_ROLES, type OrganizationDetail, type OrgRole } from '@kit/shared';
+import { DataExport } from '@/components/app/data-export';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonClasses } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -42,16 +43,27 @@ export function OrganizationManager({ detail, currentUserId }: { detail: Organiz
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader className="flex-row flex-wrap items-start justify-between gap-3 space-y-0">
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
           <div>
             <CardTitle>Farms</CardTitle>
             <CardDescription>Each farm has its own team, plan and billing.</CardDescription>
           </div>
-          {canManage && (
-            <Link href={`/onboarding?org=${organization.id}`} className={buttonClasses('outline', 'sm')}>
-              <Plus className="h-4 w-4" /> Add farm
-            </Link>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <DataExport
+              table={{
+                filename: 'organization-farms',
+                title: `${organization.name} · Farms`,
+                subtitle: `${farms.length} farms`,
+                headers: ['Farm', 'Type', 'Country', 'Plan', 'Members', 'Suspended', 'Created'],
+                rows: farms.map((f) => [f.name, f.type, countryName(f.country), f.planName || f.planId, f.memberCount, f.suspended ? 'yes' : 'no', f.createdAt.slice(0, 10)]),
+              }}
+            />
+            {canManage && (
+              <Link href={`/onboarding?org=${organization.id}`} className={buttonClasses('outline', 'sm')}>
+                <Plus className="h-4 w-4" /> Add farm
+              </Link>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="divide-y p-0">
           {farms.length === 0 && <p className="px-6 py-8 text-center text-sm text-muted-foreground">No farms yet.</p>}
@@ -72,18 +84,29 @@ export function OrganizationManager({ detail, currentUserId }: { detail: Organiz
       </Card>
 
       <Card>
-        <CardHeader className="flex-row flex-wrap items-start justify-between gap-3 space-y-0">
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
           <div>
             <CardTitle>Members</CardTitle>
             <CardDescription>
               Owners act as owner on every farm, admins as manager. Members get farm access from each farm&apos;s team.
             </CardDescription>
           </div>
-          {canManage && (
-            <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
-              <UserPlus className="h-4 w-4" /> Add member
-            </Button>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <DataExport
+              table={{
+                filename: 'organization-members',
+                title: `${organization.name} · Members`,
+                subtitle: `${members.length} members`,
+                headers: ['Name', 'Email', 'Role', 'Joined'],
+                rows: members.map((m) => [m.name, m.email, ORG_ROLE_INFO[m.role].label, m.joinedAt.slice(0, 10)]),
+              }}
+            />
+            {canManage && (
+              <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+                <UserPlus className="h-4 w-4" /> Add member
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="divide-y p-0">
           {members.map((m) => {

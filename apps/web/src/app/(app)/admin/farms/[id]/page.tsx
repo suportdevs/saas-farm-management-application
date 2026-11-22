@@ -18,6 +18,7 @@ import { FarmAdminActions } from '@/modules/platform/components/farm-admin-actio
 import { TenantBilling } from '@/modules/platform/components/tenant-billing';
 import { TenantTeam } from '@/modules/platform/components/tenant-team';
 import { SubscriptionBadge } from '@/modules/platform/components/subscription-badge';
+import { DataExport } from '@/components/app/data-export';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ACTIVITY_LABELS } from '@/modules/farms/navigation';
 import { countryName, flag, formatDate, timeAgo } from '@/lib/format';
@@ -126,8 +127,16 @@ export default async function AdminFarmPage({ params }: { params: Promise<{ id: 
           canManage={Boolean(me.platformPermissions?.includes('platform.tenants.manage'))}
         />
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
             <CardTitle className="text-base">Recent activity</CardTitle>
+            <DataExport
+              table={{
+                filename: 'tenant-activity',
+                title: `${farm.name} · Recent activity`,
+                headers: ['When', 'Who', 'Email', 'Action'],
+                rows: activity.map((e) => [e.createdAt.slice(0, 16).replace('T', ' '), e.actor?.name ?? 'System', e.actor?.email ?? '', ACTIVITY_LABELS[e.action] ?? e.action]),
+              }}
+            />
           </CardHeader>
           <CardContent>
             {activity.length === 0 ? (

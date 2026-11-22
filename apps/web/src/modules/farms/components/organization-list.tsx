@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { Building2, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { ORG_ROLE_INFO, type OrganizationSummary } from '@kit/shared';
+import { DataExport } from '@/components/app/data-export';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -36,7 +37,16 @@ export function OrganizationList({ organizations }: { organizations: Organizatio
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <DataExport
+          table={{
+            filename: 'organizations',
+            title: 'Organizations',
+            subtitle: `${organizations.length} organizations`,
+            headers: ['Organization', 'Your role', 'Farms', 'Members', 'Created'],
+            rows: organizations.map((o) => [o.name, ORG_ROLE_INFO[o.role].label, o.farmCount, o.memberCount, o.createdAt.slice(0, 10)]),
+          }}
+        />
         <Button onClick={() => setOpen(true)}>
           <Plus className="h-4 w-4" /> New organization
         </Button>

@@ -8,6 +8,8 @@ import { UserStatus } from '@/components/admin/user-status';
 import { Avatar } from '@/components/app/user-menu';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { AuditLogExport } from '@/components/admin/list-exports';
+import { DataExport } from '@/components/app/data-export';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { actionLabel, describeAgent } from '@/lib/audit';
 import { requireAdmin, serverFetch } from '@/lib/session';
@@ -67,8 +69,16 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
       <UserActions user={user} isSelf={user.id === me.id} permissions={me.platformPermissions ?? []} staffRoles={staffRoles?.roles} />
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
           <CardTitle>Active sessions ({sessions.length})</CardTitle>
+          <DataExport
+            table={{
+              filename: 'sessions',
+              title: `${user.name} · Active sessions`,
+              headers: ['Device', 'IP', 'Last active', 'Impersonation'],
+              rows: sessions.map((s) => [describeAgent(s.userAgent).label, s.ip ?? '', dt(s.lastSeenAt), s.impersonated ? 'yes' : 'no']),
+            }}
+          />
         </CardHeader>
         <CardContent>
           {sessions.length === 0 ? (
@@ -91,11 +101,15 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
       </Card>
 
       <Card>
-        <CardHeader className="flex-row items-center justify-between sm:flex">
+        <CardHeader className="flex flex-row items-center justify-between sm:flex">
           <CardTitle>Recent activity</CardTitle>
-          <Link href={`/admin/audit-logs?userId=${user.id}`} className="text-sm text-primary hover:underline">
-            View all
-          </Link>
+          <div className="flex items-center gap-3">
+            {/* Downloads the user's whole audit trail, not only the recent rows. */}
+            <AuditLogExport query={`userId=${user.id}`} />
+            <Link href={`/admin/audit-logs?userId=${user.id}`} className="text-sm text-primary hover:underline">
+              View all
+            </Link>
+          </div>
         </CardHeader>
         <CardContent>
           {!activity?.events.length ? (

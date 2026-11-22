@@ -7,6 +7,7 @@ import { Building2, Crown, Mail, RotateCw, Trash2, UserPlus } from 'lucide-react
 import { toast } from 'sonner';
 import { FARM_ROLES, ROLE_INFO, roleLabel, type FarmInvitation, type FarmMember, type FarmRole, type PlatformOrganization } from '@kit/shared';
 import { Avatar } from '@/components/app/user-menu';
+import { DataExport } from '@/components/app/data-export';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -60,18 +61,32 @@ export function TenantTeam({
 
   return (
     <Card>
-      <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 space-y-0">
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
         <CardTitle className="text-base">Team ({members.length})</CardTitle>
+        <div className="flex flex-wrap gap-1">
+          <DataExport
+            table={{
+              filename: 'tenant-team',
+              title: 'Team',
+              subtitle: `${members.length} members · ${invitations.length} pending invitations`,
+              headers: ['Name', 'Email', 'Role', 'Status', 'Date'],
+              rows: [
+                ...members.map((m) => [m.name, m.email, roleLabel(m.role, m.customRole), 'Member', m.joinedAt.slice(0, 10)]),
+                ...invitations.map((i) => ['', i.email, roleLabel(i.role, i.customRole), 'Invited', i.createdAt.slice(0, 10)]),
+              ],
+            }}
+          />
         {canManage && (
-          <div className="flex flex-wrap gap-1">
+          <>
             <Button size="sm" variant="outline" onClick={() => setOpen('add')}>
               <UserPlus className="h-4 w-4" /> Add
             </Button>
             <Button size="sm" variant="outline" onClick={() => setOpen('owner')}>
               <Crown className="h-4 w-4" /> Transfer
             </Button>
-          </div>
+          </>
         )}
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/40 px-3 py-2 text-sm">

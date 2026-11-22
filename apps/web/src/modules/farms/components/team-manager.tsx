@@ -24,6 +24,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { Avatar } from '@/components/app/user-menu';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonClasses } from '@/components/ui/button';
+import { DataExport } from '@/components/app/data-export';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
@@ -136,11 +137,22 @@ export function TeamManager({
       <div className="grid gap-6 xl:grid-cols-[1fr_20rem]">
         <div className="space-y-6">
           <Card className="overflow-hidden">
-            <CardHeader className="border-b pb-4">
-              <CardTitle className="text-base">Members</CardTitle>
-              <CardDescription>
-                {members.length} {members.length === 1 ? 'person' : 'people'} on this farm
-              </CardDescription>
+            <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0 border-b pb-4">
+              <div className="space-y-1.5">
+                <CardTitle className="text-base">Members</CardTitle>
+                <CardDescription>
+                  {members.length} {members.length === 1 ? 'person' : 'people'} on this farm
+                </CardDescription>
+              </div>
+              <DataExport
+                table={{
+                  filename: 'members',
+                  title: 'Team members',
+                  subtitle: `${farm.name} · ${members.length} people`,
+                  headers: ['Name', 'Email', 'Title', 'Role', 'Joined', 'Last active'],
+                  rows: members.map((m) => [m.name, m.email, m.title ?? '', roleLabel(m.role, m.customRole), m.joinedAt.slice(0, 10), m.lastActiveAt ? m.lastActiveAt.slice(0, 10) : '']),
+                }}
+              />
             </CardHeader>
             <ul className="divide-y">
               {members.map((m) => (
@@ -205,9 +217,20 @@ export function TeamManager({
 
           {canInvite && (
             <Card className="overflow-hidden">
-              <CardHeader className="border-b pb-4">
-                <CardTitle className="text-base">Pending invitations</CardTitle>
-                <CardDescription>Invitations expire after 7 days. Re-inviting sends a fresh link.</CardDescription>
+              <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0 border-b pb-4">
+                <div className="space-y-1.5">
+                  <CardTitle className="text-base">Pending invitations</CardTitle>
+                  <CardDescription>Invitations expire after 7 days. Re-inviting sends a fresh link.</CardDescription>
+                </div>
+                <DataExport
+                  table={{
+                    filename: 'invitations',
+                    title: 'Pending invitations',
+                    subtitle: `${farm.name} · ${invitations.length} invitations`,
+                    headers: ['Email', 'Role', 'Title', 'Invited by', 'Sent', 'Expires'],
+                    rows: invitations.map((inv) => [inv.email, roleLabel(inv.role, inv.customRole), inv.title ?? '', inv.invitedBy ?? '', inv.createdAt.slice(0, 10), inv.expiresAt.slice(0, 10)]),
+                  }}
+                />
               </CardHeader>
               {invitations.length === 0 ? (
                 <p className="flex items-center gap-2 px-6 py-6 text-sm text-muted-foreground">

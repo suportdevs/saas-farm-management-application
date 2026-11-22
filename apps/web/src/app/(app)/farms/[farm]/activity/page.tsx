@@ -1,12 +1,14 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { History } from 'lucide-react';
-import { CATALOG, isCatalogResource, planName, ROLE_INFO, type FarmActivityEntry, type PublicPlan, type FarmRole, type Pagination as PaginationInfo } from '@kit/shared';
+import type { FarmActivityEntry, Pagination as PaginationInfo } from '@kit/shared';
 import { PageHeader } from '@/components/app/page-header';
 import { Pagination } from '@/components/app/pagination';
 import { Avatar } from '@/components/app/user-menu';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
+import { activityDetail } from '@/modules/farms/activity';
+import { ActivityExport } from '@/modules/farms/components/activity-export';
 import { getFarmContext } from '@/modules/farms/server';
 import { ACTIVITY_LABELS } from '@/modules/farms/navigation';
 import { formatFarmDate } from '@/lib/format';
@@ -14,28 +16,6 @@ import { serverFetch } from '@/lib/session';
 import { getPlans } from '@/modules/subscriptions/server';
 
 export const metadata: Metadata = { title: 'Activity' };
-
-function detail(e: FarmActivityEntry, plans: PublicPlan[]): string | null {
-  const m = e.metadata;
-  if (e.action === 'farm.member_invited' && typeof m.email === 'string') return `${m.email} as ${typeof m.roleLabel === 'string' ? m.roleLabel : (ROLE_INFO[m.role as FarmRole]?.label ?? m.role)}`;
-  if (e.action === 'farm.member_role_changed' && typeof m.to === 'string') return `${ROLE_INFO[m.from as FarmRole]?.label ?? m.from} → ${ROLE_INFO[m.to as FarmRole]?.label ?? m.to}`;
-  if (e.action === 'farm.invitation_revoked' && typeof m.email === 'string') return m.email;
-  if (e.action === 'farm.updated' && Array.isArray(m.fields)) return `Changed ${m.fields.join(', ')}`;
-  if (e.action.startsWith('farm.role_permissions_') && Array.isArray(m.changed)) return `${ROLE_INFO[m.role as FarmRole]?.label ?? m.role} · ${m.changed.join(', ')}`;
-  if (e.action === 'farm.member_permissions_changed' && Array.isArray(m.changed)) return m.changed.join(', ');
-  if (e.action.startsWith('farm.role_') && typeof m.name === 'string') return typeof m.from === 'string' ? `${m.from} → ${m.name}` : m.name;
-  if (e.action === 'farm.subscription_changed' && typeof m.to === 'string' && typeof m.from === 'string') {
-    return m.from === m.to ? `${planName(plans, m.to)} · ${m.fromState} → ${m.toState}` : `${planName(plans, m.from)} → ${planName(plans, m.to)}`;
-  }
-  if (e.action.startsWith('farm.payment_') && typeof m.amount === 'string') return m.amount;
-  if (e.action === 'admin.farm.plan_changed' && typeof m.to === 'string') return `${m.from} → ${m.to}`;
-  if (e.action === 'admin.farm.suspended' && typeof m.reason === 'string') return m.reason;
-  if (isCatalogResource(m.resource) && e.action.startsWith(`${CATALOG[m.resource].module}.`)) {
-    const what = typeof m.name === 'string' ? m.name : `${m.count} ${m.count === 1 ? 'row' : 'rows'}`;
-    return `${CATALOG[m.resource].label} · ${what}`;
-  }
-  return null;
-}
 
 export default async function ActivityPage({ params, searchParams }: { params: Promise<{ farm: string }>; searchParams: Promise<{ page?: string }> }) {
   const { farm: slug } = await params;
@@ -57,7 +37,11 @@ export default async function ActivityPage({ params, searchParams }: { params: P
 
   return (
     <>
-      <PageHeader title="Activity" description={`A record of changes made on ${ctx.farm.name}, in the farm's local time.`} />
+      <PageHeader
+        title="Activity"
+        description={`A record of changes made on ${ctx.farm.name}, in the farm's local time.`}
+        actions={<ActivityExport farm={ctx.farm} plans={plans} disabled={entries.length === 0} />}
+      />
       {entries.length === 0 ? (
         <EmptyState icon={History} title="No activity yet" description="Changes to the farm, its team and its plan will show up here." />
       ) : (
@@ -67,7 +51,7 @@ export default async function ActivityPage({ params, searchParams }: { params: P
               <h2 className="mb-3 text-sm font-semibold text-muted-foreground">{day}</h2>
               <Card className="divide-y">
                 {items.map((e) => {
-                  const extra = detail(e, plans);
+                  const extra = activityDetail(e, plans);
                   return (
                     <div key={e.id} className="flex items-start gap-4 px-5 py-4">
                       {e.actor ? <Avatar user={{ name: e.actor.name, image: null }} size={32} /> : <span className="h-8 w-8 rounded-full bg-muted" />}
