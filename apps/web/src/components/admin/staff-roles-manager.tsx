@@ -2,12 +2,16 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, type ChangeEvent } from 'react';
-import { Download, FileDown, FileUp, Lock, Pencil, Plus, Search, ShieldCheck, Trash2, Upload } from 'lucide-react';
+import { FileDown, FileUp, Lock, Pencil, Plus, Search, ShieldCheck, Trash2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { PLATFORM_PERMISSION_LABELS, PLATFORM_PERMISSIONS, STAFF_ROLE_IMPORT_LIMIT, type PlatformPermission, type PlatformRole } from '@kit/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { ExportMenu } from '@/components/app/export-menu';
+import { FilterToggle } from '@/components/app/filter-toggle';
+import { PageSizeSelect, useLocalPages } from '@/components/app/page-size-select';
+import { Pagination } from '@/components/app/pagination';
+import { TableFrame } from '@/components/app/table-frame';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
@@ -66,6 +70,7 @@ export function StaffRolesManager({ roles, myPermissions, myRole }: { roles: Pla
       (kind === 'all' || (kind === 'system') === r.system) &&
       (!needle || [r.key, r.name, r.description ?? '', ...r.permissions].some((v) => v.toLowerCase().includes(needle))),
   );
+  const pager = useLocalPages(visible);
 
   const remove = async (role: PlatformRole) => {
     setBusy(true);
@@ -88,31 +93,36 @@ export function StaffRolesManager({ roles, myPermissions, myRole }: { roles: Pla
         assign it on a user&apos;s page.
       </p>
 
+      <TableFrame
+        toolbar={
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-60 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search key, name or permission…" className="pl-9" aria-label="Search roles" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search key, name or permission…" className="h-8 pl-9 text-xs" aria-label="Search roles" />
         </div>
-        <Select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} aria-label="Role type">
+        <FilterToggle active={kind === 'all' ? 0 : 1}>
+        <Select className="h-8 text-xs" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} aria-label="Role type">
           <option value="all">All roles</option>
           <option value="custom">Custom</option>
           <option value="system">Built-in</option>
         </Select>
-        <Button variant="outline" onClick={downloadTemplate}>
+        </FilterToggle>
+        <PageSizeSelect value={pager.pageSize} onChange={pager.setPageSize} />
+        <Button variant="outline" size="sm" onClick={downloadTemplate}>
           <FileDown className="h-4 w-4" /> Template
         </Button>
-        <Button variant="outline" onClick={() => setImporting(true)}>
+        <Button variant="outline" size="sm" onClick={() => setImporting(true)}>
           <Upload className="h-4 w-4" /> Import
         </Button>
-        <Button variant="outline" onClick={() => downloadFile(`staff-roles-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(CSV_HEADERS, toCsvRows(visible)))}>
-          <Download className="h-4 w-4" /> Export
-        </Button>
-        <Button onClick={() => setEditing({ mode: 'create' })}>
+        <ExportMenu
+          load={async () => ({ filename: 'staff-roles', title: 'Staff roles', subtitle: `${visible.length} roles`, headers: CSV_HEADERS, rows: toCsvRows(visible) })}
+        />
+        <Button size="sm" onClick={() => setEditing({ mode: 'create' })}>
           <Plus className="h-4 w-4" /> New staff role
         </Button>
       </div>
-
-      <Card className="overflow-x-auto">
+        }
+      >
         <table className="w-full text-sm">
           <thead className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
@@ -125,7 +135,7 @@ export function StaffRolesManager({ roles, myPermissions, myRole }: { roles: Pla
             </tr>
           </thead>
           <tbody className="divide-y">
-            {visible.map((r) => (
+            {pager.rows.map((r) => (
               <tr key={r.key} className="align-top hover:bg-muted/30">
                 <td className="px-5 py-3">
                   <p className="flex items-center gap-1.5 font-medium">
@@ -184,7 +194,8 @@ export function StaffRolesManager({ roles, myPermissions, myRole }: { roles: Pla
             )}
           </tbody>
         </table>
-      </Card>
+      </TableFrame>
+      <Pagination pagination={pager.pagination} onPage={pager.setPage} />
 
       {editing && (
         <RoleDialog

@@ -7,6 +7,10 @@ import { toast } from 'sonner';
 import { CAPABILITIES, CAPABILITY_LABELS, type AdminPlan, type Capability } from '@kit/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ExportMenu } from '@/components/app/export-menu';
+import { PageSizeSelect, useLocalPages } from '@/components/app/page-size-select';
+import { Pagination } from '@/components/app/pagination';
+import { TableFrame } from '@/components/app/table-frame';
 import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog } from '@/components/ui/dialog';
@@ -50,6 +54,9 @@ export function PlansManager({ plans, canManage }: { plans: AdminPlan[]; canMana
     }
   };
 
+  const pager = useLocalPages(plans);
+  const cents = (v?: number) => (v == null ? '' : (v / 100).toFixed(2));
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -57,14 +64,41 @@ export function PlansManager({ plans, canManage }: { plans: AdminPlan[]; canMana
           Plans decide each farm&apos;s limits and modules. Changes apply to every farm on the plan straight away. Archive a plan to stop offering it — its
           farms keep it. Per-tenant deals (Tenants → a farm) override a plan for one farm.
         </p>
-        {canManage && (
-          <Button onClick={() => setEditing({ mode: 'create' })}>
-            <Plus className="h-4 w-4" /> New plan
-          </Button>
-        )}
       </div>
 
-      <Card className="overflow-x-auto">
+      <TableFrame
+        toolbar={
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <PageSizeSelect value={pager.pageSize} onChange={pager.setPageSize} />
+            <ExportMenu
+              load={async () => ({
+                filename: 'plans',
+                title: 'Plans',
+                subtitle: `${plans.length} plans`,
+                headers: ['Code', 'Name', 'Monthly (USD)', 'Yearly (USD)', 'Animals', 'Members', 'Modules', 'Public', 'Self-serve', 'Archived', 'Farms'],
+                rows: plans.map((p) => [
+                  p.id,
+                  p.name,
+                  cents(p.prices.month),
+                  cents(p.prices.year),
+                  p.limits.animals ?? 'Unlimited',
+                  p.limits.members ?? 'Unlimited',
+                  p.capabilities.join(' '),
+                  p.isPublic ? 'yes' : 'no',
+                  p.selfServe ? 'yes' : 'no',
+                  p.archived ? 'yes' : 'no',
+                  p.subscriberCount,
+                ]),
+              })}
+            />
+            {canManage && (
+              <Button size="sm" onClick={() => setEditing({ mode: 'create' })}>
+                <Plus className="h-4 w-4" /> New plan
+              </Button>
+            )}
+          </div>
+        }
+      >
         <table className="w-full text-sm">
           <thead className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
@@ -77,7 +111,7 @@ export function PlansManager({ plans, canManage }: { plans: AdminPlan[]; canMana
             </tr>
           </thead>
           <tbody className="divide-y">
-            {plans.map((p) => (
+            {pager.rows.map((p) => (
               <tr key={p.id} className={p.archived ? 'align-top opacity-60' : 'align-top hover:bg-muted/30'}>
                 <td className="px-5 py-3">
                   <p className="flex flex-wrap items-center gap-1.5 font-medium">
@@ -136,7 +170,8 @@ export function PlansManager({ plans, canManage }: { plans: AdminPlan[]; canMana
             ))}
           </tbody>
         </table>
-      </Card>
+      </TableFrame>
+      <Pagination pagination={pager.pagination} onPage={pager.setPage} className="mt-0" />
 
       <ModuleMatrix plans={plans.filter((p) => !p.archived)} />
 

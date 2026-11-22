@@ -1,8 +1,11 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import type { AuditLogEntry, Pagination as PaginationInfo } from '@kit/shared';
+import { AuditLogExport } from '@/components/admin/list-exports';
 import { Pagination } from '@/components/app/pagination';
+import { PageSizeSelect } from '@/components/app/page-size-select';
 import { TableFrame } from '@/components/app/table-frame';
+import { resolvePageSize } from '@/lib/page-size';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { actionLabel, describeAgent } from '@/lib/audit';
@@ -10,14 +13,15 @@ import { requireAdmin, serverFetch } from '@/lib/session';
 
 export const metadata: Metadata = { title: 'Audit log' };
 
-type Search = { page?: string; action?: string; userId?: string };
+type Search = { page?: string; pageSize?: string; action?: string; userId?: string };
 
 export default async function AuditLogPage({ searchParams }: { searchParams: Promise<Search> }) {
   await requireAdmin('platform.audit.view');
-  const { page = '1', action = '', userId = '' } = await searchParams;
-  const filters = { action, userId };
+  const { page = '1', action = '', userId = '', pageSize = '' } = await searchParams;
+  const filters = { action, userId, pageSize };
   const qs = new URLSearchParams({ page });
   for (const [k, v] of Object.entries(filters)) if (v) qs.set(k, v);
+  qs.set('pageSize', String(await resolvePageSize(pageSize)));
   const data = await serverFetch<{ events: AuditLogEntry[]; pagination: PaginationInfo }>(`/admin/audit-logs?${qs}`);
   if (!data) throw new Error('Failed to load the audit log');
 
@@ -28,6 +32,7 @@ export default async function AuditLogPage({ searchParams }: { searchParams: Pro
       <form className="flex flex-wrap items-center gap-2">
         <Input name="action" defaultValue={action} placeholder="Action prefix, e.g. auth. or admin." className="h-8 max-w-xs text-xs" />
         {userId && <input type="hidden" name="userId" value={userId} />}
+        {pageSize && <input type="hidden" name="pageSize" value={pageSize} />}
         <Button type="submit" variant="outline" size="sm">
           Filter
         </Button>
@@ -36,6 +41,10 @@ export default async function AuditLogPage({ searchParams }: { searchParams: Pro
             Clear filters
           </Link>
         )}
+        <div className="ml-auto flex items-center gap-2">
+          <PageSizeSelect />
+          <AuditLogExport query={qs.toString()} />
+        </div>
       </form>
         }
       >

@@ -6,12 +6,14 @@ import { printTable } from './print';
  * Excel and PDF libraries are loaded only when used, so pages stay light.
  */
 
-export type ExportFormat = 'csv' | 'excel' | 'pdf' | 'print' | 'copy';
+export type ExportFormat = 'csv' | 'excel' | 'pdf' | 'tsv' | 'json' | 'print' | 'copy';
 
 export const EXPORT_FORMATS: { value: ExportFormat; label: string; hint: string }[] = [
   { value: 'excel', label: 'Excel', hint: '.xlsx spreadsheet' },
   { value: 'csv', label: 'CSV', hint: 'Plain text, opens anywhere' },
   { value: 'pdf', label: 'PDF', hint: 'Ready to share or archive' },
+  { value: 'tsv', label: 'TSV', hint: 'Tab-separated text' },
+  { value: 'json', label: 'JSON', hint: 'For developers and other apps' },
   { value: 'print', label: 'Print', hint: 'Send to a printer' },
   { value: 'copy', label: 'Copy', hint: 'Paste into a spreadsheet' },
 ];
@@ -64,10 +66,18 @@ async function savePdf({ filename, title, subtitle, headers, rows }: ExportTable
   doc.save(`${filename}-${stamp()}.pdf`);
 }
 
+/** One object per row, keyed by the column headings. */
+const toJson = ({ headers, rows }: ExportTable) =>
+  JSON.stringify(rows.map((r) => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? null]))), null, 2);
+
 /** Tab-separated, so pasting into Excel / Google Sheets fills the cells. */
-async function copyTable({ headers, rows }: ExportTable) {
+const toTsv = ({ headers, rows }: ExportTable) => {
   const clean = (v: unknown) => text(v).replace(/[\t\r\n]+/g, ' ');
-  await navigator.clipboard.writeText([headers, ...rows].map((r) => r.map(clean).join('\t')).join('\n'));
+  return [headers, ...rows].map((r) => r.map(clean).join('\t')).join('\n');
+};
+
+async function copyTable(table: ExportTable) {
+  await navigator.clipboard.writeText(toTsv(table));
 }
 
 export async function exportTable(format: ExportFormat, table: ExportTable) {
@@ -78,6 +88,10 @@ export async function exportTable(format: ExportFormat, table: ExportTable) {
       return saveExcel(table);
     case 'pdf':
       return savePdf(table);
+    case 'tsv':
+      return downloadFile(`${table.filename}-${stamp()}.tsv`, toTsv(table));
+    case 'json':
+      return downloadFile(`${table.filename}-${stamp()}.json`, toJson(table), 'application/json;charset=utf-8');
     case 'print':
       return printTable(table);
     case 'copy':

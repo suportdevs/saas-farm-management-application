@@ -3,7 +3,8 @@ import { staffRoleKeySchema } from '../../platform/schemas';
 
 export const adminUserListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  // Up to 1,000 so Download can fetch every matching row.
+  pageSize: z.coerce.number().int().min(1).max(1000).default(20),
   q: z.string().trim().max(100).optional(),
   role: z.enum(['user', 'admin']).optional(),
   status: z.enum(['active', 'banned', 'unverified']).optional(),
@@ -28,7 +29,7 @@ export type BanUserInput = z.infer<typeof banUserSchema>;
 
 export const auditLogQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(50),
+  pageSize: z.coerce.number().int().min(1).max(1000).default(50),
   userId: z.uuid().optional(),
   action: z.string().trim().max(100).optional(),
 });

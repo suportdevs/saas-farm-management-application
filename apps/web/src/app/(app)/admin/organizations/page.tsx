@@ -2,8 +2,11 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Building2, Search } from 'lucide-react';
 import type { Pagination as PaginationInfo, PlatformOrganization } from '@kit/shared';
+import { OrganizationsExport } from '@/components/admin/list-exports';
 import { Pagination } from '@/components/app/pagination';
+import { PageSizeSelect } from '@/components/app/page-size-select';
 import { TableFrame } from '@/components/app/table-frame';
+import { resolvePageSize } from '@/lib/page-size';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
@@ -13,10 +16,11 @@ import { requireAdmin, serverFetch } from '@/lib/session';
 export const metadata: Metadata = { title: 'Clients · Admin' };
 
 /** Client organizations: who they are, who owns them and how many farms they run. */
-export default async function AdminOrganizationsPage({ searchParams }: { searchParams: Promise<{ q?: string; page?: string }> }) {
+export default async function AdminOrganizationsPage({ searchParams }: { searchParams: Promise<{ q?: string; page?: string; pageSize?: string }> }) {
   await requireAdmin('platform.tenants.view');
   const params = await searchParams;
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]);
+  qs.set('pageSize', String(await resolvePageSize(params.pageSize)));
   const data = await serverFetch<{ organizations: PlatformOrganization[]; pagination: PaginationInfo }>(`/admin/organizations?${qs}`);
   const rows = data?.organizations ?? [];
 
@@ -24,7 +28,9 @@ export default async function AdminOrganizationsPage({ searchParams }: { searchP
     <div className="space-y-4">
       <TableFrame
         toolbar={
-      <form className="flex flex-wrap gap-2" action="/admin/organizations">
+      <div className="flex flex-wrap items-center gap-2">
+      <form className="flex flex-1 flex-wrap gap-2" action="/admin/organizations">
+          {params.pageSize && <input type="hidden" name="pageSize" value={params.pageSize} />}
         <div className="relative min-w-60 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input name="q" defaultValue={params.q} placeholder="Search organization or owner email…" className="h-8 pl-9 text-xs" />
@@ -33,6 +39,11 @@ export default async function AdminOrganizationsPage({ searchParams }: { searchP
           Search
         </Button>
       </form>
+      <div className="ml-auto flex items-center gap-2">
+        <PageSizeSelect />
+        <OrganizationsExport query={qs.toString()} />
+      </div>
+      </div>
         }
       >
       {rows.length === 0 ? (
@@ -75,7 +86,7 @@ export default async function AdminOrganizationsPage({ searchParams }: { searchP
           </table>
       )}
       </TableFrame>
-      {data && <Pagination pagination={data.pagination} basePath="/admin/organizations" params={{ q: params.q }} />}
+      {data && <Pagination pagination={data.pagination} basePath="/admin/organizations" params={{ q: params.q, pageSize: params.pageSize }} />}
     </div>
   );
 }

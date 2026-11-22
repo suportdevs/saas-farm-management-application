@@ -1,6 +1,15 @@
 'use client';
 
-import { planName, type Plan, type ManualInvoice, type PlatformFarm, type PlatformSubscription } from '@kit/shared';
+import {
+  planName,
+  type AdminUser,
+  type AuditLogEntry,
+  type ManualInvoice,
+  type Plan,
+  type PlatformFarm,
+  type PlatformOrganization,
+  type PlatformSubscription,
+} from '@kit/shared';
 import { ExportMenu } from '@/components/app/export-menu';
 import { api } from '@/lib/api';
 
@@ -131,6 +140,58 @@ export function InvoicesExport({ query, plans }: { query: string; plans: Pick<Pl
           i.payments.map((p) => `${money(p.amount)} ${p.method}${p.reference ? ` (${p.reference})` : ''} ${p.paidAt}`).join('; '),
         ])
       }
+    />
+  );
+}
+
+export function UsersExport({ query }: { query: string }) {
+  return (
+    <ExportButton<AdminUser>
+      filename="users"
+      headers={['name', 'email', 'role', 'status', 'last_sign_in', 'joined']}
+      load={async () => (await api.get<{ users: AdminUser[] }>(`/admin/users?${withAll(query)}`)).users}
+      toRows={(rows) =>
+        rows.map((u) => [
+          u.name,
+          u.email,
+          u.staffRoleName ?? u.role,
+          u.bannedAt ? 'suspended' : u.emailVerified ? 'active' : 'unverified',
+          day(u.lastLoginAt),
+          day(u.createdAt),
+        ])
+      }
+    />
+  );
+}
+
+export function AuditLogExport({ query }: { query: string }) {
+  return (
+    <ExportButton<AuditLogEntry>
+      filename="audit-log"
+      headers={['when', 'action', 'actor', 'target_type', 'target_id', 'ip', 'user_agent']}
+      load={async () => (await api.get<{ events: AuditLogEntry[] }>(`/admin/audit-logs?${withAll(query)}`)).events}
+      toRows={(rows) =>
+        rows.map((e) => [
+          e.createdAt.replace('T', ' ').slice(0, 19),
+          e.action,
+          e.actor?.email ?? (typeof e.metadata.email === 'string' ? e.metadata.email : ''),
+          e.targetType ?? '',
+          e.targetId ?? '',
+          e.ip ?? '',
+          e.userAgent ?? '',
+        ])
+      }
+    />
+  );
+}
+
+export function OrganizationsExport({ query }: { query: string }) {
+  return (
+    <ExportButton<PlatformOrganization>
+      filename="clients"
+      headers={['organization', 'owner_name', 'owner_email', 'farms', 'members', 'created_at']}
+      load={async () => (await api.get<{ organizations: PlatformOrganization[] }>(`/admin/organizations?${withAll(query)}`)).organizations}
+      toRows={(rows) => rows.map((o) => [o.name, o.owner?.name ?? '', o.owner?.email ?? '', o.farmCount, o.memberCount, day(o.createdAt)])}
     />
   );
 }

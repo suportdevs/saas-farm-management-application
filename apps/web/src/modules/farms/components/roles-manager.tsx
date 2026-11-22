@@ -6,10 +6,14 @@ import { useState } from 'react';
 import { KeyRound, Lock, Pencil, Plus, Search, ShieldCheck, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { FARM_ROLES, ROLE_INFO, type FarmCustomRole, type FarmPermissions, type FarmRole } from '@kit/shared';
+import { ExportMenu } from '@/components/app/export-menu';
+import { FilterToggle } from '@/components/app/filter-toggle';
+import { PageSizeSelect, useLocalPages } from '@/components/app/page-size-select';
+import { Pagination } from '@/components/app/pagination';
+import { TableFrame } from '@/components/app/table-frame';
 import { PageHeader } from '@/components/app/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonClasses } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -104,6 +108,8 @@ export function RolesManager({ initial }: { initial: FarmPermissions }) {
       (kind === 'all' || (kind === 'custom' ? r.kind === 'custom' : r.kind !== 'custom')) &&
       (!needle || r.name.toLowerCase().includes(needle) || r.description.toLowerCase().includes(needle)),
   );
+  const pager = useLocalPages(visible);
+  const KIND_LABEL = { owner: 'Owner', system: 'Built-in', custom: 'Custom' } as const;
 
   const reload = async () => {
     setData(await api.get<FarmPermissions>(`/farms/${farm.slug}/permissions`));
@@ -126,7 +132,7 @@ export function RolesManager({ initial }: { initial: FarmPermissions }) {
 
   return (
     <>
-      <PageHeader title="Roles" description={`The roles people can have on ${farm.name}. Use Give permission to choose what each one can do.`} />
+      <PageHeader compact title="Roles" description={`The roles people can have on ${farm.name}. Use Give permission to choose what each one can do.`} />
 
       {!canManage && (
         <p className="mb-4 rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
@@ -134,24 +140,38 @@ export function RolesManager({ initial }: { initial: FarmPermissions }) {
         </p>
       )}
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      <TableFrame
+        toolbar={
+      <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-60 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search roles…" className="pl-9" aria-label="Search roles" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search roles…" className="h-8 pl-9 text-xs" aria-label="Search roles" />
         </div>
-        <Select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} aria-label="Role type">
+        <FilterToggle active={kind === 'all' ? 0 : 1}>
+        <Select className="h-8 text-xs" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} aria-label="Role type">
           <option value="all">All roles</option>
           <option value="system">Built-in</option>
           <option value="custom">Custom</option>
         </Select>
+        </FilterToggle>
+        <PageSizeSelect value={pager.pageSize} onChange={pager.setPageSize} />
+        <ExportMenu
+          load={async () => ({
+            filename: 'roles',
+            title: 'Roles',
+            subtitle: `${farm.name} · ${visible.length} roles`,
+            headers: ['Role', 'Type', 'Description', 'Permissions', 'People', 'Updated'],
+            rows: visible.map((r) => [r.name, KIND_LABEL[r.kind], r.description, r.permissionCount, r.people, r.updatedAt ? r.updatedAt.slice(0, 10) : '']),
+          })}
+        />
         {canManage && (
-          <Button onClick={() => setEditing({ mode: 'create' })}>
+          <Button size="sm" onClick={() => setEditing({ mode: 'create' })}>
             <Plus className="h-4 w-4" /> New role
           </Button>
         )}
       </div>
-
-      <Card className="overflow-x-auto">
+        }
+      >
         <table className="w-full text-sm">
           <thead className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
@@ -164,7 +184,7 @@ export function RolesManager({ initial }: { initial: FarmPermissions }) {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {visible.map((r) => (
+            {pager.rows.map((r) => (
               <tr key={r.id} className="align-top hover:bg-muted/30">
                 <td className="px-5 py-3">
                   <p className="flex items-center gap-1.5 font-medium">
@@ -220,7 +240,8 @@ export function RolesManager({ initial }: { initial: FarmPermissions }) {
             )}
           </tbody>
         </table>
-      </Card>
+      </TableFrame>
+      <Pagination pagination={pager.pagination} onPage={pager.setPage} />
 
       {editing && (
         <RoleDialog

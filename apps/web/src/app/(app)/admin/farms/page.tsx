@@ -5,7 +5,10 @@ import { FARM_TYPE_INFO, type Pagination as PaginationInfo, type PlatformFarm } 
 import { TenantsExport } from '@/components/admin/list-exports';
 import { NewTenantButton } from '@/modules/platform/components/new-tenant-dialog';
 import { Pagination } from '@/components/app/pagination';
+import { FilterToggle } from '@/components/app/filter-toggle';
+import { PageSizeSelect } from '@/components/app/page-size-select';
 import { TableFrame } from '@/components/app/table-frame';
+import { resolvePageSize } from '@/lib/page-size';
 import { SubscriptionBadge } from '@/modules/platform/components/subscription-badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -17,12 +20,13 @@ import { getAdminPlans } from '@/modules/subscriptions/server';
 
 export const metadata: Metadata = { title: 'Tenants · Admin' };
 
-type Search = { q?: string; plan?: string; status?: string; country?: string; organizationId?: string; page?: string };
+type Search = { q?: string; plan?: string; status?: string; country?: string; organizationId?: string; page?: string; pageSize?: string };
 
 export default async function AdminFarmsPage({ searchParams }: { searchParams: Promise<Search> }) {
   const me = await requireAdmin('platform.tenants.view');
   const params = await searchParams;
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]);
+  qs.set('pageSize', String(await resolvePageSize(params.pageSize)));
   const [data, plans] = await Promise.all([
     serverFetch<{ farms: PlatformFarm[]; pagination: PaginationInfo }>(`/admin/farms?${qs}`),
     getAdminPlans(),
@@ -35,12 +39,14 @@ export default async function AdminFarmsPage({ searchParams }: { searchParams: P
         toolbar={
       <div className="flex flex-wrap items-center gap-2">
       <form className="flex flex-1 flex-wrap gap-2" action="/admin/farms">
+          {params.pageSize && <input type="hidden" name="pageSize" value={params.pageSize} />}
         {/* Keeps the client filter (from Admin → Clients) while searching. */}
         {params.organizationId && <input type="hidden" name="organizationId" value={params.organizationId} />}
         <div className="relative min-w-60 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input name="q" defaultValue={params.q} placeholder="Search farm, town or owner email…" className="h-8 pl-9 text-xs" />
         </div>
+        <FilterToggle active={[params.plan, params.status].filter(Boolean).length}>
         <Select className="h-8 text-xs" name="plan" defaultValue={params.plan ?? ''} aria-label="Plan">
           <option value="">All plans</option>
           {plans.map((p) => (
@@ -57,12 +63,14 @@ export default async function AdminFarmsPage({ searchParams }: { searchParams: P
           <option value="past_due">Past due</option>
           <option value="suspended">Suspended</option>
         </Select>
+        </FilterToggle>
         {params.country && <input type="hidden" name="country" value={params.country} />}
         <Button type="submit" variant="outline" size="sm">
           Filter
         </Button>
       </form>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <PageSizeSelect />
           <TenantsExport query={qs.toString()} />
           {me.platformPermissions?.includes('platform.tenants.create') && <NewTenantButton plans={plans.filter((p) => !p.archived)} />}
         </div>
@@ -117,7 +125,7 @@ export default async function AdminFarmsPage({ searchParams }: { searchParams: P
           </table>
       )}
       </TableFrame>
-      {data && <Pagination pagination={data.pagination} basePath="/admin/farms" params={{ q: params.q, plan: params.plan, status: params.status, country: params.country, organizationId: params.organizationId }} />}
+      {data && <Pagination pagination={data.pagination} basePath="/admin/farms" params={{ q: params.q, plan: params.plan, status: params.status, country: params.country, organizationId: params.organizationId, pageSize: params.pageSize }} />}
     </div>
   );
 }

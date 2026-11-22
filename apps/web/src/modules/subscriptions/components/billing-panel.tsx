@@ -8,6 +8,10 @@ import { type BillingInterval, type BillingOverview, type FarmInvoice, type Plan
 import { PageHeader } from '@/components/app/page-header';
 import { Badge, type BadgeVariant } from '@/components/ui/badge';
 import { Button, buttonClasses } from '@/components/ui/button';
+import { ExportMenu } from '@/components/app/export-menu';
+import { PageSizeSelect, useLocalPages } from '@/components/app/page-size-select';
+import { Pagination } from '@/components/app/pagination';
+import { TableFrame } from '@/components/app/table-frame';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Meter } from '@/components/ui/meter';
@@ -35,6 +39,7 @@ export function BillingPanel({ overview, invoices }: { overview: BillingOverview
   const canManage = membership.permissions.includes('billing.manage');
   const { subscription: sub, usage, limits, plans, enabled } = overview;
   const [interval, setInterval] = useState<BillingInterval>(sub.interval ?? 'year');
+  const pager = useLocalPages(invoices);
   const [pending, setPending] = useState<string | null>(null);
 
   useEffect(() => {
@@ -195,10 +200,26 @@ export function BillingPanel({ overview, invoices }: { overview: BillingOverview
 
       <section className="mt-10">
         <h2 className="mb-4 text-xl font-semibold tracking-tight">Invoices</h2>
+        <TableFrame
+          toolbar={
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <PageSizeSelect value={pager.pageSize} onChange={pager.setPageSize} />
+              <ExportMenu
+                disabled={invoices.length === 0}
+                load={async () => ({
+                  filename: 'invoices',
+                  title: 'Invoices',
+                  subtitle: `${farm.name} · ${invoices.length} invoices`,
+                  headers: ['Invoice', 'Date', 'Amount', 'Currency', 'Status'],
+                  rows: invoices.map((inv) => [inv.number ?? inv.id, inv.createdAt.slice(0, 10), (inv.total / 100).toFixed(2), inv.currency.toUpperCase(), inv.status ?? '']),
+                })}
+              />
+            </div>
+          }
+        >
         {invoices.length === 0 ? (
-          <EmptyState icon={Receipt} title="No invoices yet" description="Invoices appear here after your first payment." />
+          <EmptyState className="m-4" icon={Receipt} title="No invoices yet" description="Invoices appear here after your first payment." />
         ) : (
-          <Card className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
@@ -210,7 +231,7 @@ export function BillingPanel({ overview, invoices }: { overview: BillingOverview
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {invoices.map((inv) => (
+                {pager.rows.map((inv) => (
                   <tr key={inv.id}>
                     <td className="px-6 py-3 font-medium">{inv.number ?? inv.id}</td>
                     <td className="px-6 py-3 text-muted-foreground">{formatFarmDate(inv.createdAt, farm)}</td>
@@ -229,8 +250,9 @@ export function BillingPanel({ overview, invoices }: { overview: BillingOverview
                 ))}
               </tbody>
             </table>
-          </Card>
         )}
+        </TableFrame>
+        <Pagination pagination={pager.pagination} onPage={pager.setPage} />
       </section>
     </>
   );

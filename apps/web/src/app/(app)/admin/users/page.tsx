@@ -1,8 +1,12 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import type { AdminUser, Pagination as PaginationInfo } from '@kit/shared';
+import { UsersExport } from '@/components/admin/list-exports';
 import { Pagination } from '@/components/app/pagination';
+import { FilterToggle } from '@/components/app/filter-toggle';
+import { PageSizeSelect } from '@/components/app/page-size-select';
 import { TableFrame } from '@/components/app/table-frame';
+import { resolvePageSize } from '@/lib/page-size';
 import { UserStatus } from '@/components/admin/user-status';
 import { Avatar } from '@/components/app/user-menu';
 import { Badge } from '@/components/ui/badge';
@@ -19,14 +23,15 @@ interface UsersResponse {
   pagination: PaginationInfo;
 }
 
-type Search = { q?: string; page?: string; role?: string; status?: string };
+type Search = { q?: string; page?: string; pageSize?: string; role?: string; status?: string };
 
 export default async function AdminUsersPage({ searchParams }: { searchParams: Promise<Search> }) {
   const me = await requireAdmin('platform.users.view');
-  const { q = '', page = '1', role = '', status = '' } = await searchParams;
-  const filters = { q, role, status };
+  const { q = '', page = '1', role = '', status = '', pageSize = '' } = await searchParams;
+  const filters = { q, role, status, pageSize };
   const qs = new URLSearchParams({ page });
   for (const [k, v] of Object.entries(filters)) if (v) qs.set(k, v);
+  qs.set('pageSize', String(await resolvePageSize(pageSize)));
   const data = await serverFetch<UsersResponse>(`/admin/users?${qs}`);
   if (!data) throw new Error('Failed to load users');
   const { users, pagination } = data;
@@ -38,6 +43,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
       <>
       <form className="flex flex-wrap items-center gap-2">
         <Input name="q" defaultValue={q} placeholder="Search by name or email…" className="h-8 max-w-xs text-xs" />
+        <FilterToggle active={[role, status].filter(Boolean).length}>
         <Select className="h-8 text-xs" name="role" defaultValue={role} aria-label="Role">
           <option value="">All roles</option>
           <option value="user">Members</option>
@@ -49,9 +55,13 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
           <option value="unverified">Unverified</option>
           <option value="banned">Suspended</option>
         </Select>
+        </FilterToggle>
+        {pageSize && <input type="hidden" name="pageSize" value={pageSize} />}
         <Button type="submit" variant="outline" size="sm">
           Filter
         </Button>
+        <PageSizeSelect />
+        <UsersExport query={qs.toString()} />
         {me.platformPermissions?.includes('platform.tenants.create') && (
           <div className="ml-auto">
             <NewClientAccountButton />

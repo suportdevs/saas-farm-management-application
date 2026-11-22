@@ -4,7 +4,10 @@ import { Receipt, Search } from 'lucide-react';
 import { PAYMENT_METHOD_LABELS, planName, type ManualInvoice, type Pagination as PaginationInfo } from '@kit/shared';
 import { InvoicesExport } from '@/components/admin/list-exports';
 import { Pagination } from '@/components/app/pagination';
+import { FilterToggle } from '@/components/app/filter-toggle';
+import { PageSizeSelect } from '@/components/app/page-size-select';
 import { TableFrame } from '@/components/app/table-frame';
+import { resolvePageSize } from '@/lib/page-size';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
@@ -18,7 +21,7 @@ import { PayInvoiceButton } from '@/modules/platform/components/tenant-billing';
 
 export const metadata: Metadata = { title: 'Invoices · Admin' };
 
-type Search = { q?: string; status?: string; page?: string };
+type Search = { q?: string; status?: string; page?: string; pageSize?: string };
 
 /** Every manual invoice across tenants. Issue and settle them on the tenant's page. */
 export default async function AdminInvoicesPage({ searchParams }: { searchParams: Promise<Search> }) {
@@ -26,6 +29,7 @@ export default async function AdminInvoicesPage({ searchParams }: { searchParams
   const canBill = Boolean(me.platformPermissions?.includes('platform.billing.manage'));
   const params = await searchParams;
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]);
+  qs.set('pageSize', String(await resolvePageSize(params.pageSize)));
   const [data, plans] = await Promise.all([
     serverFetch<{ invoices: ManualInvoice[]; pagination: PaginationInfo }>(`/admin/farms/invoices?${qs}`),
     getAdminPlans(),
@@ -38,10 +42,12 @@ export default async function AdminInvoicesPage({ searchParams }: { searchParams
         toolbar={
       <div className="flex flex-wrap items-center gap-2">
         <form className="flex flex-1 flex-wrap gap-2" action="/admin/invoices">
+          {params.pageSize && <input type="hidden" name="pageSize" value={params.pageSize} />}
           <div className="relative min-w-60 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input name="q" defaultValue={params.q} placeholder="Invoice number, description or tenant…" className="h-8 pl-9 text-xs" />
           </div>
+          <FilterToggle active={params.status ? 1 : 0}>
           <Select className="h-8 text-xs" name="status" defaultValue={params.status ?? ''} aria-label="Status">
             <option value="">Any status</option>
             <option value="open">Open</option>
@@ -49,11 +55,13 @@ export default async function AdminInvoicesPage({ searchParams }: { searchParams
             <option value="paid">Paid</option>
             <option value="void">Void</option>
           </Select>
+          </FilterToggle>
           <Button type="submit" variant="outline" size="sm">
             Filter
           </Button>
         </form>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <PageSizeSelect />
           <InvoicesExport query={qs.toString()} plans={plans} />
           {canBill && <RecordPaymentButton plans={plans} />}
         </div>
@@ -120,7 +128,7 @@ export default async function AdminInvoicesPage({ searchParams }: { searchParams
           </table>
       )}
       </TableFrame>
-      {data && <Pagination pagination={data.pagination} basePath="/admin/invoices" params={{ q: params.q, status: params.status }} />}
+      {data && <Pagination pagination={data.pagination} basePath="/admin/invoices" params={{ q: params.q, status: params.status, pageSize: params.pageSize }} />}
     </div>
   );
 }

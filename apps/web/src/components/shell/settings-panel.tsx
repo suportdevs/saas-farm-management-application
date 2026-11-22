@@ -1,10 +1,11 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 import { Check, Monitor, Moon, RotateCcw, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet } from '@/components/ui/sheet';
-import { COLORS, FONTS, NAV_POSITIONS, SIZES, ZOOM_LEVELS, type NavPosition } from '@/lib/preferences';
+import { COLORS, FONTS, NAV_POSITIONS, PAGE_SIZES, SIZES, ZOOM_LEVELS, type NavPosition } from '@/lib/preferences';
 import { cn } from '@/lib/utils';
 import { usePreferences } from './preferences-provider';
 
@@ -12,6 +13,7 @@ import { usePreferences } from './preferences-provider';
 export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { prefs, setPref, reset, theme, setTheme } = usePreferences();
   const sideNav = prefs.nav === 'left' || prefs.nav === 'right';
+  const router = useRouter();
 
   return (
     <Sheet
@@ -122,6 +124,25 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
             {SIZES.map((s, i) => (
               <Choice key={s.key} selected={prefs.size === s.key} onClick={() => setPref('size', s.key)}>
                 <span className={['text-xs', 'text-sm', 'text-base'][i]}>Aa</span> {s.label}
+              </Choice>
+            ))}
+          </div>
+        </Group>
+
+        <Group title="Rows per page" hint="Default for every list. A list's own Rows selector changes just that list.">
+          <div className="grid grid-cols-4 gap-1.5">
+            {PAGE_SIZES.map((n) => (
+              <Choice
+                key={n}
+                selected={prefs.pageSize === n}
+                onClick={() => {
+                  setPref('pageSize', n);
+                  // Server-rendered lists read the default from the cookie: reload them.
+                  router.refresh();
+                }}
+                compact
+              >
+                {n}
               </Choice>
             ))}
           </div>

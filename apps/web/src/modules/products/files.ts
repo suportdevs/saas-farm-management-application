@@ -42,7 +42,7 @@ export const imageUrl = (farmSlug: string, resource: CatalogResource, row: Catal
  */
 export function catalogExportTable(resource: CatalogResource, rows: CatalogRow[], farmName: string, format: ExportFormat): ExportTable {
   const { plural, columns } = CATALOG[resource];
-  const shown = format === 'csv' || format === 'excel' ? columns : columns.filter((c) => c.list !== false);
+  const shown = ['csv', 'excel', 'tsv', 'json'].includes(format) ? columns : columns.filter((c) => c.list !== false);
   return {
     filename: resource,
     title: plural,

@@ -34,6 +34,7 @@ import {
 } from '@kit/shared';
 import { ExportMenu } from '@/components/app/export-menu';
 import { PageHeader } from '@/components/app/page-header';
+import { PageSizeSelect } from '@/components/app/page-size-select';
 import { Pagination } from '@/components/app/pagination';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -110,7 +111,8 @@ export function CatalogManager({
   const [busy, setBusy] = useState<Busy>(null);
   const [search, setSearch] = useState(q);
   // Search criteria are shown above the table; the Filters button hides them.
-  const [showFilters, setShowFilters] = useState(true);
+  // Filters start collapsed; the Filters button opens them.
+  const [showFilters, setShowFilters] = useState(false);
   const { prefs } = usePreferences();
   const [navigating, startNavigation] = useTransition();
 
@@ -210,7 +212,6 @@ export function CatalogManager({
                 <Upload className="h-4 w-4" /> Import
               </Button>
             )}
-            {canExport && <ExportMenu load={download} disabled={empty} />}
             {canCreate && (
               <Button onClick={() => setModal({ type: 'form', row: null })}>
                 <Plus className="h-4 w-4" /> Add {label.toLowerCase()}
@@ -220,35 +221,8 @@ export function CatalogManager({
         }
       />
 
-      {empty ? (
-        <EmptyState
-          icon={MODULE_ICONS[module]}
-          title={`No ${plural.toLowerCase()} yet`}
-          description={
-            canCreate || canImport
-              ? 'Add them one by one, or import a spreadsheet.'
-              : `Nobody has added any ${plural.toLowerCase()} yet.`
-          }
-          action={
-            (canCreate || canImport) && (
-              <>
-                {canImport && (
-                  <Button variant="outline" onClick={() => setModal({ type: 'import' })}>
-                    <Upload className="h-4 w-4" /> Import
-                  </Button>
-                )}
-                {canCreate && (
-                  <Button onClick={() => setModal({ type: 'form', row: null })}>
-                    <Plus className="h-4 w-4" /> Add {label.toLowerCase()}
-                  </Button>
-                )}
-              </>
-            )
-          }
-        />
-      ) : (
-        // The card fits the screen: search, filters and the table header stay in
-        // place and only the rows scroll.
+      {/* The card fits the screen: search, filters and the table header stay in
+          place and only the rows scroll. Shown even before the first row. */}
         <Card
           className={cn(
             'flex max-h-[calc(100dvh-6rem)] flex-col overflow-visible',
@@ -306,10 +280,14 @@ export function CatalogManager({
                 </Button>
               </div>
             )}
-            <span className="ml-auto text-sm text-muted-foreground">
+            <div className="ml-auto flex items-center gap-3">
+              <PageSizeSelect />
+              {canExport && <ExportMenu load={download} disabled={empty} />}
+            <span className="text-sm text-muted-foreground">
               {pagination.total}{' '}
               {pagination.total === 1 ? label.toLowerCase() : plural.toLowerCase()}
             </span>
+            </div>
           </div>
 
           {showFilters && (
@@ -323,6 +301,34 @@ export function CatalogManager({
             </div>
           )}
 
+          {empty ? (
+            <EmptyState
+              className="m-4"
+              icon={MODULE_ICONS[module]}
+              title={`No ${plural.toLowerCase()} yet`}
+              description={
+                canCreate || canImport
+                  ? 'Add them one by one, or import a spreadsheet.'
+                  : `Nobody has added any ${plural.toLowerCase()} yet.`
+              }
+              action={
+                (canCreate || canImport) && (
+                  <>
+                    {canImport && (
+                      <Button variant="outline" onClick={() => setModal({ type: 'import' })}>
+                        <Upload className="h-4 w-4" /> Import
+                      </Button>
+                    )}
+                    {canCreate && (
+                      <Button onClick={() => setModal({ type: 'form', row: null })}>
+                        <Plus className="h-4 w-4" /> Add {label.toLowerCase()}
+                      </Button>
+                    )}
+                  </>
+                )
+              }
+            />
+          ) : (
           <div className="min-h-0 flex-1 overflow-auto">
             <table className="w-full text-left text-sm">
               <thead className="sticky top-0 z-10 bg-muted text-xs uppercase tracking-wide text-muted-foreground shadow-[0_1px_0_var(--color-border)]">
@@ -435,8 +441,8 @@ export function CatalogManager({
               </tbody>
             </table>
           </div>
+          )}
         </Card>
-      )}
 
       <Pagination pagination={pagination} basePath={pathname} params={query} />
 

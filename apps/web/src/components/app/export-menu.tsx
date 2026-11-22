@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown, Copy, Download, FileSpreadsheet, FileText, Loader2, Printer, Sheet } from 'lucide-react';
+import { Braces, ChevronDown, Copy, Download, FileSpreadsheet, FileText, Loader2, Printer, Sheet, TableProperties } from 'lucide-react';
 import { toast } from 'sonner';
 import { buttonClasses } from '@/components/ui/button';
 import { Menu, menuItemClasses } from '@/components/ui/menu';
@@ -9,10 +9,10 @@ import { errorMessage } from '@/lib/api';
 import { EXPORT_FORMATS, exportTable, type ExportFormat, type ExportTable } from '@/lib/table-export';
 import { cn } from '@/lib/utils';
 
-const ICONS = { excel: FileSpreadsheet, csv: Sheet, pdf: FileText, print: Printer, copy: Copy };
+const ICONS = { excel: FileSpreadsheet, csv: Sheet, pdf: FileText, tsv: TableProperties, json: Braces, print: Printer, copy: Copy };
 
 /**
- * "Download" button with a menu of formats (Excel, CSV, PDF, Print, Copy).
+ * "Download" button with a menu of formats (Excel, CSV, PDF, TSV, JSON, Print, Copy).
  * `load` fetches the rows when a format is picked, e.g. every row matching
  * the current filters. Pass `formats` to offer only some of them.
  */
@@ -46,7 +46,7 @@ export function ExportMenu({
 
   if (disabled) {
     return (
-      <button type="button" disabled className={buttonClasses('outline')}>
+      <button type="button" disabled className={buttonClasses('outline', 'sm')}>
         <Download className="h-4 w-4" /> {label}
       </button>
     );
@@ -57,7 +57,7 @@ export function ExportMenu({
       label={label}
       align="end"
       className="min-w-72"
-      triggerClassName={cn(buttonClasses('outline'))}
+      triggerClassName={cn(buttonClasses('outline', 'sm'))}
       trigger={
         <>
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} {label}

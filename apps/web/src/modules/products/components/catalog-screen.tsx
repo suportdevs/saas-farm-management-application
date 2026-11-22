@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { catalogPermission, type CatalogResource } from '@kit/shared';
+import { resolvePageSize } from '@/lib/page-size';
 import { getFarmContext } from '@/modules/farms/server';
 import { getCatalogPage } from '../server';
 import { CatalogManager } from './catalog-manager';
@@ -21,7 +22,9 @@ export async function CatalogScreen({
   const query: Record<string, string> = {};
   for (const [k, v] of Object.entries(searchParams))
     if (typeof v === 'string' && v.trim()) query[k] = v.trim();
-  const page = await getCatalogPage(farm, resource, query);
+  // Rows per page: the list's own selector (?pageSize) or the Site settings default.
+  const pageSize = String(await resolvePageSize(query.pageSize));
+  const page = await getCatalogPage(farm, resource, { ...query, pageSize });
   const { page: _page, ...rest } = query;
   return <CatalogManager key={resource} resource={resource} page={page} query={rest} />;
 }

@@ -4,7 +4,10 @@ import { CreditCard, Search } from 'lucide-react';
 import { type Pagination as PaginationInfo, type PlatformSubscription } from '@kit/shared';
 import { SubscriptionsExport } from '@/components/admin/list-exports';
 import { Pagination } from '@/components/app/pagination';
+import { FilterToggle } from '@/components/app/filter-toggle';
+import { PageSizeSelect } from '@/components/app/page-size-select';
 import { TableFrame } from '@/components/app/table-frame';
+import { resolvePageSize } from '@/lib/page-size';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -17,7 +20,7 @@ import { RecordPaymentButton } from '@/modules/platform/components/manual-paymen
 
 export const metadata: Metadata = { title: 'Subscriptions · Admin' };
 
-type Search = { q?: string; plan?: string; state?: string; source?: string; billing?: string; page?: string };
+type Search = { q?: string; plan?: string; state?: string; source?: string; billing?: string; page?: string; pageSize?: string };
 
 const STATE_BADGE: Record<string, 'success' | 'info' | 'warning' | 'default' | 'destructive'> = {
   active: 'success',
@@ -32,6 +35,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: { searchP
   const me = await requireAdmin('platform.billing.view');
   const params = await searchParams;
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]);
+  qs.set('pageSize', String(await resolvePageSize(params.pageSize)));
   const [data, plans] = await Promise.all([
     serverFetch<{ subscriptions: PlatformSubscription[]; pagination: PaginationInfo }>(`/admin/farms/subscriptions?${qs}`),
     getAdminPlans(),
@@ -44,10 +48,12 @@ export default async function AdminSubscriptionsPage({ searchParams }: { searchP
         toolbar={
       <div className="flex flex-wrap items-center gap-2">
         <form className="flex flex-1 flex-wrap gap-2" action="/admin/subscriptions">
+          {params.pageSize && <input type="hidden" name="pageSize" value={params.pageSize} />}
           <div className="relative min-w-60 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input name="q" defaultValue={params.q} placeholder="Search tenant or owner email…" className="h-8 pl-9 text-xs" />
           </div>
+          <FilterToggle active={[params.plan, params.state, params.source, params.billing].filter(Boolean).length}>
           <Select className="h-8 text-xs" name="plan" defaultValue={params.plan ?? ''} aria-label="Plan">
             <option value="">All plans</option>
             {plans.map((p) => (
@@ -75,11 +81,13 @@ export default async function AdminSubscriptionsPage({ searchParams }: { searchP
             <option value="unpaid">Has unpaid invoices</option>
             <option value="overdue">Has overdue invoices</option>
           </Select>
+          </FilterToggle>
           <Button type="submit" variant="outline" size="sm">
             Filter
           </Button>
         </form>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <PageSizeSelect />
           <SubscriptionsExport query={qs.toString()} />
           {me.platformPermissions?.includes('platform.billing.manage') && <RecordPaymentButton plans={plans} />}
         </div>
@@ -163,7 +171,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: { searchP
         <Pagination
           pagination={data.pagination}
           basePath="/admin/subscriptions"
-          params={{ q: params.q, plan: params.plan, state: params.state, source: params.source, billing: params.billing }}
+          params={{ q: params.q, plan: params.plan, state: params.state, source: params.source, billing: params.billing, pageSize: params.pageSize }}
         />
       )}
     </div>
