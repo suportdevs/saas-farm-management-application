@@ -1,7 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
-import { Braces, ChevronDown, Copy, Download, FileSpreadsheet, FileText, Loader2, Printer, Sheet, TableProperties } from 'lucide-react';
+import { Braces, ChevronDown, Copy, Download, FileSpreadsheet, FileText, Loader2, Lock, Printer, Sheet, Sparkles, TableProperties } from 'lucide-react';
 import { toast } from 'sonner';
 import { buttonClasses } from '@/components/ui/button';
 import { Menu, menuItemClasses } from '@/components/ui/menu';
@@ -19,16 +20,21 @@ const ICONS = { excel: FileSpreadsheet, csv: Sheet, pdf: FileText, tsv: TablePro
  * the current filters, or an ExportDoc with several lists. Pass `formats` to
  * offer only some of them. PDF, Excel and Print get the farm's letterhead
  * (HerdSphere's on admin pages) unless `load` sets its own.
+ *
+ * `locked` (the plan has no data export) keeps the button visible with a lock;
+ * its menu explains why and links to the plans.
  */
 export function ExportMenu({
   load,
   formats,
   disabled,
+  locked,
   label = 'Download',
 }: {
   load: (format: ExportFormat) => Promise<ExportTable | ExportDoc>;
   formats?: ExportFormat[];
   disabled?: boolean;
+  locked?: { message: string; href?: string } | null;
   label?: string;
 }) {
   const [busy, setBusy] = useState<ExportFormat | null>(null);
@@ -50,6 +56,37 @@ export function ExportMenu({
       setBusy(null);
     }
   };
+
+  if (locked) {
+    return (
+      <Menu
+        label={`${label} (locked)`}
+        align="end"
+        className="w-72 p-3"
+        triggerClassName={cn(buttonClasses('outline', 'sm'), 'text-muted-foreground')}
+        trigger={
+          <>
+            <Lock className="h-3.5 w-3.5" /> {label}
+            <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+          </>
+        }
+      >
+        {(close) => (
+          <div className="space-y-3 text-sm">
+            <p className="flex items-center gap-2 font-medium">
+              <Sparkles className="h-4 w-4 text-primary" /> Upgrade to download
+            </p>
+            <p className="text-muted-foreground">{locked.message}</p>
+            {locked.href && (
+              <Link href={locked.href} onClick={close} className={cn(buttonClasses('primary', 'sm'), 'w-full')}>
+                Choose a plan
+              </Link>
+            )}
+          </div>
+        )}
+      </Menu>
+    );
+  }
 
   if (disabled) {
     return (

@@ -4,6 +4,7 @@ import { CATALOG, catalogPath, catalogPermission, PERMISSION_MODULES, type Catal
 import { ExportMenu } from '@/components/app/export-menu';
 import { api } from '@/lib/api';
 import { useFarm } from '@/modules/farms/context';
+import { useExportLock } from '@/modules/subscriptions/use-export-lock';
 import { catalogExportTable } from '../files';
 
 type CatalogModule = (typeof CATALOG)[CatalogResource]['module'];
@@ -15,11 +16,14 @@ type CatalogModule = (typeof CATALOG)[CatalogResource]['module'];
  */
 export function ModuleExport({ module }: { module: CatalogModule }) {
   const { farm, membership } = useFarm();
+  const exportLock = useExportLock();
   const resources = (Object.keys(CATALOG) as CatalogResource[]).filter(
     (r) => CATALOG[r].module === module && membership.permissions.includes(catalogPermission(r, 'export')),
   );
-  if (resources.length < 2) return null;
   const label = PERMISSION_MODULES[module]?.label ?? module;
+  // Plan without data export: show the button locked, with an upgrade link.
+  if (exportLock) return <ExportMenu label={`Download ${label}`} load={async () => ({ filename: module, title: label, sections: [] })} locked={exportLock} />;
+  if (resources.length < 2) return null;
 
   return (
     <ExportMenu

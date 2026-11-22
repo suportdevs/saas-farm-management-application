@@ -49,6 +49,7 @@ import { usePreferences } from '@/components/shell/preferences-provider';
 import { useCan, useFarm } from '@/modules/farms/context';
 import type { ExportFormat } from '@/lib/table-export';
 import { catalogExportTable, displayValue, imageUrl, rowValue } from '../files';
+import { useExportLock } from '@/modules/subscriptions/use-export-lock';
 import { ModuleExport } from './module-export';
 import { CatalogCriteria, CatalogFilters, filterParams, type FilterValues } from './catalog-filters';
 import { CatalogFormDialog } from './catalog-form-dialog';
@@ -99,6 +100,8 @@ export function CatalogManager({
   const canDelete = useCan(catalogPermission(resource, 'delete'));
   const canImport = useCan(catalogPermission(resource, 'import'));
   const canExport = useCan(catalogPermission(resource, 'export'));
+  // Plan without data export: the Download button stays, locked, with an upgrade link.
+  const exportLock = useExportLock();
   /** Selection only exists for bulk actions the member may run. */
   const canSelect = canDelete || (withStatus && canUpdate);
   const withImage = !!CATALOG[resource].image;
@@ -294,7 +297,7 @@ export function CatalogManager({
             )}
             <div className="ml-auto flex items-center gap-3">
               <PageSizeSelect />
-              {canExport && <ExportMenu load={download} disabled={empty} />}
+              {canExport ? <ExportMenu load={download} disabled={empty} /> : exportLock && <ExportMenu load={download} locked={exportLock} />}
             <span className="text-sm text-muted-foreground">
               {pagination.total}{' '}
               {pagination.total === 1 ? label.toLowerCase() : plural.toLowerCase()}
