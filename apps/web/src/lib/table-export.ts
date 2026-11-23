@@ -108,21 +108,25 @@ function excelSheet(section: ExportSection, letterhead: Letterhead | undefined, 
     for (const line of letterhead.lines) top.push(wide(width, { value: line, fontSize: 9, textColor: GREY }));
     top.push(rule(width, 'medium', BRAND));
   }
-  // Report title, date / records and filters, then a thin rule.
+  // Report title and date / records, then a thin rule.
   top.push(wide(width, { value: reportTitle(docTitle ? `${docTitle} — ${section.title}` : section.title), fontWeight: 'bold', fontSize: 13, textColor: INK, height: 26, alignVertical: 'bottom' }));
   top.push(wide(width, { value: `Generated ${generatedAt()}   ·   ${plural(section.rows.length, 'record')}`, fontSize: 9, textColor: GREY }));
-  if (section.criteria) top.push(wide(width, { value: `Filters applied: ${criteriaText(section.criteria)}`, fontSize: 9, fontStyle: 'italic', textColor: INK, wrap: true }));
   top.push(rule(width, 'thin', RULE));
   top.push(wide(width, { value: '', height: 6 }));
 
-  const head = section.headers.map((h) => ({ value: h, type: String, fontWeight: 'bold', textColor: '#ffffff', backgroundColor: GREEN, height: 20, alignVertical: 'center' }));
+  const headStyle = { type: String, fontWeight: 'bold', textColor: '#ffffff', backgroundColor: GREEN, height: 20, alignVertical: 'center' };
+  // "Filters applied" sits right above the column headings, styled like them.
+  const filterRow = section.criteria
+    ? [wide(width, { ...headStyle, value: `Filters applied:  ${criteriaText(section.criteria)}`, align: 'left', wrap: true, bottomBorderStyle: 'thin', bottomBorderColor: '#ffffff' })]
+    : [];
+  const head = section.headers.map((h) => ({ ...headStyle, value: h }));
   // Light stripes make long sheets easier to read.
   const body = section.rows.map((r, i) => r.map((v) => ({ ...excelCell(v), ...(i % 2 ? { backgroundColor: GREEN_TINT } : {}) })));
   const columns = section.headers.map((h, i) => ({
     width: Math.min(50, Math.max(h.length, 10, ...section.rows.slice(0, 200).map((r) => text(r[i]).length)) + 2),
   }));
   // Header block and column headings stay in view while scrolling.
-  return { data: [...top, head, ...body], columns, stickyRowsCount: top.length + 1 };
+  return { data: [...top, ...filterRow, head, ...body], columns, stickyRowsCount: top.length + filterRow.length + 1 };
 }
 
 async function saveExcel(doc: ExportDoc) {
@@ -181,22 +185,14 @@ async function savePdf(doc: ExportDoc) {
     return y + 26;
   };
 
-  /** Centred REPORT TITLE, "Generated · records", filters, then a thin rule. Returns the next y. */
-  const drawTitleBlock = (y: number, title: string, criteria: ExportCriterion[] | undefined, subtitle?: string) => {
+  /** Centred REPORT TITLE and "Generated · records", then a thin rule. Returns the next y. */
+  const drawTitleBlock = (y: number, title: string, subtitle?: string) => {
     pdf.setFont('helvetica', 'bold').setFontSize(14).setTextColor(...rgb(INK)).text(reportTitle(title), C, y, { align: 'center', charSpace: 1 });
     y += 15;
     pdf.setFont('helvetica', 'normal').setFontSize(9).setTextColor(...rgb(GREY)).text(`Generated ${when}   ·   ${plural(total, 'record')}`, C, y, { align: 'center' });
     if (subtitle) {
       y += 12;
       pdf.text(subtitle, C, y, { align: 'center', maxWidth: W - 2 * M });
-    }
-    if (criteria) {
-      const lines = pdf.setFont('helvetica', 'italic').setFontSize(9).splitTextToSize(`Filters applied: ${criteriaText(criteria)}`, W - 2 * M - 60) as string[];
-      pdf.setTextColor(...rgb(INK));
-      for (const line of lines) {
-        y += 12;
-        pdf.text(line, C, y, { align: 'center' });
-      }
     }
     y += 12;
     pdf.setDrawColor(...rgb(RULE)).setLineWidth(0.6).line(M, y, W - M, y);
@@ -220,8 +216,8 @@ async function savePdf(doc: ExportDoc) {
 
   const later = SLIM + 20;
   let y = drawLetterhead(28);
-  const head = many ? { title: doc.title, criteria: doc.criteria, subtitle: doc.subtitle } : doc.sections[0]!;
-  y = drawTitleBlock(y, head.title, head.criteria, head.subtitle);
+  const first = many ? { title: doc.title, subtitle: doc.subtitle } : doc.sections[0]!;
+  y = drawTitleBlock(y, first.title, first.subtitle);
 
   doc.sections.forEach((s, i) => {
     if (many) {
@@ -231,13 +227,12 @@ async function savePdf(doc: ExportDoc) {
         y = later;
       }
       y = drawSectionHeading(y + (i > 0 ? 8 : 12), s);
-      if (s.criteria) {
-        pdf.setFont('helvetica', 'italic').setFontSize(8.5).setTextColor(...rgb(GREY)).text(`Filters applied: ${criteriaText(s.criteria)}`, M, y + 2, { maxWidth: W - 2 * M });
-        y += 14;
-      }
     }
+    // "Filters applied" is the first heading row: right above the column names, same style.
+    const criteria = s.criteria ?? doc.criteria;
+    const filterRow = criteria ? [[{ content: `Filters applied:  ${criteriaText(criteria)}`, colSpan: Math.max(s.headers.length, 1), styles: { halign: 'left' as const } }]] : [];
     autoTable(pdf, {
-      head: [s.headers],
+      head: [...filterRow, s.headers],
       body: s.rows.length ? s.rows.map((r) => r.map(text)) : [[{ content: 'No records', colSpan: Math.max(s.headers.length, 1), styles: { halign: 'center', textColor: 120 } }]],
       startY: y,
       margin: { top: later, left: M, right: M, bottom: 46 },

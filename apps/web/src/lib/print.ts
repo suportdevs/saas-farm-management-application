@@ -21,7 +21,7 @@ const STYLES = `
   .doc{text-align:center;padding-bottom:10px;margin-bottom:14px;border-bottom:1px solid #d1d5db}
   .doc h2{margin:0;font-size:15px;letter-spacing:.06em}
   .doc .meta{margin:4px 0 0;color:#6b7280;font-size:10px}
-  .doc .criteria{margin:4px 0 0;font-style:italic;font-size:10px}
+  th.filters{border-bottom:1px solid #fff}
   table{width:100%;border-collapse:collapse}
   th,td{border:1px solid #e5e7eb;padding:5px 7px;text-align:left;vertical-align:top}
   th{background:#166534;color:#fff;font-weight:600}
@@ -58,8 +58,8 @@ export function printDoc(doc: ExportDoc, generatedAt: string) {
       return `<section class="sheet">${letterhead}
         <div class="doc"><h2>${escape(reportTitle(title))}</h2>
           <p class="meta">Generated ${escape(generatedAt)} &nbsp;·&nbsp; ${s.rows.length.toLocaleString()} record${s.rows.length === 1 ? '' : 's'}${s.subtitle ? ` &nbsp;·&nbsp; ${escape(s.subtitle)}` : ''}</p>
-          ${criteria ? `<p class="criteria">Filters applied: ${escape(criteriaText(criteria))}</p>` : ''}</div>
-        <table><thead><tr>${s.headers.map((h) => `<th>${escape(h)}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>
+</div>
+        <table><thead>${criteria ? `<tr><th class="filters" colspan="${Math.max(s.headers.length, 1)}">Filters applied: &nbsp;${escape(criteriaText(criteria))}</th></tr>` : ''}<tr>${s.headers.map((h) => `<th>${escape(h)}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>
         <footer><span>${escape([lh?.name, doc.title].filter(Boolean).join('  ·  '))}</span><span>Generated ${escape(generatedAt)}</span></footer></section>`;
     })
     .join('');
