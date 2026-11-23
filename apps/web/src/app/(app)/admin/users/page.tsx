@@ -5,6 +5,7 @@ import { UsersExport } from '@/components/admin/list-exports';
 import { Pagination } from '@/components/app/pagination';
 import { FilterToggle } from '@/components/app/filter-toggle';
 import { PageSizeSelect } from '@/components/app/page-size-select';
+import { CriteriaBar, exportCriteria, urlCriteria } from '@/components/app/criteria-bar';
 import { TableFrame } from '@/components/app/table-frame';
 import { resolvePageSize } from '@/lib/page-size';
 import { UserStatus } from '@/components/admin/user-status';
@@ -25,6 +26,10 @@ interface UsersResponse {
 
 type Search = { q?: string; page?: string; pageSize?: string; role?: string; status?: string };
 
+/** Labels for the criteria bar. */
+const ROLE_LABEL: Record<string, string> = { user: 'Members', admin: 'Admins' };
+const STATUS_LABEL: Record<string, string> = { active: 'Active', unverified: 'Unverified', banned: 'Suspended' };
+
 export default async function AdminUsersPage({ searchParams }: { searchParams: Promise<Search> }) {
   const me = await requireAdmin('platform.users.view');
   const { q = '', page = '1', role = '', status = '', pageSize = '' } = await searchParams;
@@ -36,9 +41,22 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
   if (!data) throw new Error('Failed to load users');
   const { users, pagination } = data;
 
+  // Search / filters in use: chips above the table and on the download header.
+  const criteria = urlCriteria('/admin/users', filters, [
+    ['Search', `“${q}”`, 'q'],
+    ['Role', ROLE_LABEL[role] ?? role, 'role'],
+    ['Status', STATUS_LABEL[status] ?? status, 'status'],
+  ]);
+
   return (
     <>
       <TableFrame
+        criteria={
+          <CriteriaBar
+            total={pagination.total}
+            {...criteria}
+          />
+        }
         toolbar={
       <>
       <form className="flex flex-wrap items-center gap-2">
@@ -61,7 +79,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
           Filter
         </Button>
         <PageSizeSelect />
-        <UsersExport query={qs.toString()} />
+        <UsersExport query={qs.toString()} criteria={exportCriteria(criteria.items)} />
         {me.platformPermissions?.includes('platform.tenants.create') && (
           <div className="ml-auto">
             <NewClientAccountButton />

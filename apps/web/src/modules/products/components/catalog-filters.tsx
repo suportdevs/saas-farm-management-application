@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { X } from 'lucide-react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { catalogPath, filterColumns, STATUS_OPTIONS, type CatalogOption, type CatalogResource } from '@kit/shared';
+import { CriteriaBar, type Criterion } from '@/components/app/criteria-bar';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { SearchSelect } from '@/components/ui/search-select';
 import { api } from '@/lib/api';
+import type { ExportCriterion } from '@/lib/table-export';
 import { cn } from '@/lib/utils';
 import { useFarm } from '@/modules/farms/context';
 import { CatalogSelect } from './catalog-select';
@@ -219,6 +220,42 @@ function RefName({ resource, value }: { resource: CatalogResource; value: string
 /** "2026-01-01 – 2026-02-01", "from 5", "up to 9". */
 const range = (from?: string, to?: string) => (from && to ? `${from} – ${to}` : from ? `from ${from}` : `up to ${to}`);
 
+/** One applied search or filter. `ref` = the value is a key of that catalog (its name is looked up). */
+type AppliedCriterion = { keys: string[]; label: string; value: string; ref?: CatalogResource };
+
+/** The search and filters in a catalog list's URL query, in filter-panel order. */
+export function catalogCriteria(resource: CatalogResource, query: FilterValues): AppliedCriterion[] {
+  const out: AppliedCriterion[] = [];
+  if (query.q) out.push({ keys: ['q'], label: 'Search', value: `“${query.q}”` });
+  for (const c of filterColumns(resource)) {
+    if (c.input === 'date' || c.input === 'number') {
+      const [a, b] = c.input === 'date' ? [`${c.csv}From`, `${c.csv}To`] : [`${c.csv}Min`, `${c.csv}Max`];
+      if (query[a] || query[b]) out.push({ keys: [a, b], label: c.label, value: range(query[a], query[b]) });
+      continue;
+    }
+    const v = query[c.csv];
+    if (!v) continue;
+    if (c.ref) out.push({ keys: [c.csv], label: c.label, value: v, ref: c.ref });
+    else if (c.input === 'status') out.push({ keys: [c.csv], label: c.label, value: STATUS_OPTIONS.find((o) => o.value === v)?.label ?? v });
+    else out.push({ keys: [c.csv], label: c.label, value: c.options?.find((o) => o.value === v)?.label ?? v });
+  }
+  if (query.from || query.to) out.push({ keys: ['from', 'to'], label: 'Created', value: range(query.from, query.to) });
+  return out;
+}
+
+/** The same criteria as plain text for a download (reference names looked up). */
+export async function catalogCriteriaText(farmSlug: string, resource: CatalogResource, query: FilterValues): Promise<ExportCriterion[]> {
+  return Promise.all(
+    catalogCriteria(resource, query).map(async (c) => {
+      if (!c.ref) return { label: c.label, value: c.value };
+      const { options } = await api
+        .get<{ options: CatalogOption[] }>(`/farms/${farmSlug}/${catalogPath(c.ref)}/options?keys=${c.value}`)
+        .catch(() => ({ options: [] as CatalogOption[] }));
+      return { label: c.label, value: options[0]?.name ?? c.value };
+    }),
+  );
+}
+
 /**
  * The search and filters in use, always shown above the table (also while
  * the filter panel is closed). Each chip has × to remove it.
@@ -237,54 +274,15 @@ export function CatalogCriteria({
   onRemove: (keys: string[]) => void;
   onClear: () => void;
 }) {
-  const chips: { keys: string[]; label: string; value: ReactNode }[] = [];
-  if (query.q) chips.push({ keys: ['q'], label: 'Search', value: `“${query.q}”` });
-  for (const c of filterColumns(resource)) {
-    if (c.input === 'date' || c.input === 'number') {
-      const [a, b] = c.input === 'date' ? [`${c.csv}From`, `${c.csv}To`] : [`${c.csv}Min`, `${c.csv}Max`];
-      if (query[a] || query[b]) chips.push({ keys: [a, b], label: c.label, value: range(query[a], query[b]) });
-      continue;
-    }
-    const v = query[c.csv];
-    if (!v) continue;
-    const value = c.ref ? (
-      <RefName resource={c.ref} value={v} />
-    ) : c.input === 'status' ? (
-      (STATUS_OPTIONS.find((o) => o.value === v)?.label ?? v)
-    ) : (
-      (c.options?.find((o) => o.value === v)?.label ?? v)
-    );
-    chips.push({ keys: [c.csv], label: c.label, value });
-  }
-  if (query.from || query.to) chips.push({ keys: ['from', 'to'], label: 'Created', value: range(query.from, query.to) });
-
+  const items: Criterion[] = catalogCriteria(resource, query).map((c) => ({
+    key: c.keys[0]!,
+    label: c.label,
+    value: c.ref ? <RefName resource={c.ref} value={c.value} /> : c.value,
+    onRemove: () => onRemove(c.keys),
+  }));
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b bg-muted/20 px-4 py-1.5 text-xs">
-      <span className="font-medium text-muted-foreground">Criteria:</span>
-      {chips.length === 0 ? (
-        <span className="text-muted-foreground">None — showing all {total} rows</span>
-      ) : (
-        <>
-          {chips.map((chip) => (
-            <span key={chip.keys[0]} className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 py-0.5 pl-2.5 pr-1 text-foreground">
-              <span className="text-muted-foreground">{chip.label}:</span>
-              <span className="font-medium">{chip.value}</span>
-              <button
-                type="button"
-                onClick={() => onRemove(chip.keys)}
-                className="rounded-full p-0.5 text-muted-foreground hover:bg-primary/20 hover:text-foreground"
-                aria-label={`Remove ${chip.label} filter`}
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </span>
-          ))}
-          <button type="button" onClick={onClear} className="ml-1 text-primary hover:underline">
-            Clear all
-          </button>
-          <span className="ml-auto text-muted-foreground">{total} matching</span>
-        </>
-      )}
+    <div className="shrink-0 border-b bg-muted/20 px-4 py-1.5">
+      <CriteriaBar items={items} total={total} onClear={onClear} />
     </div>
   );
 }

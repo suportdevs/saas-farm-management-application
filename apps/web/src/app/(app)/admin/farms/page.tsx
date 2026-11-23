@@ -7,6 +7,7 @@ import { NewTenantButton } from '@/modules/platform/components/new-tenant-dialog
 import { Pagination } from '@/components/app/pagination';
 import { FilterToggle } from '@/components/app/filter-toggle';
 import { PageSizeSelect } from '@/components/app/page-size-select';
+import { CriteriaBar, exportCriteria, urlCriteria } from '@/components/app/criteria-bar';
 import { TableFrame } from '@/components/app/table-frame';
 import { resolvePageSize } from '@/lib/page-size';
 import { SubscriptionBadge } from '@/modules/platform/components/subscription-badge';
@@ -22,6 +23,9 @@ export const metadata: Metadata = { title: 'Tenants · Admin' };
 
 type Search = { q?: string; plan?: string; status?: string; country?: string; organizationId?: string; page?: string; pageSize?: string };
 
+/** Labels for the criteria bar. */
+const STATUS_LABEL: Record<string, string> = { paying: 'Paying', trialing: 'On trial', free: 'Free', past_due: 'Past due', suspended: 'Suspended' };
+
 export default async function AdminFarmsPage({ searchParams }: { searchParams: Promise<Search> }) {
   const me = await requireAdmin('platform.tenants.view');
   const params = await searchParams;
@@ -33,9 +37,24 @@ export default async function AdminFarmsPage({ searchParams }: { searchParams: P
   ]);
   const farms = data?.farms ?? [];
 
+  // Search / filters in use: chips above the table and on the download header.
+  const criteria = urlCriteria('/admin/farms', params, [
+    ['Search', `“${params.q}”`, 'q'],
+    ['Plan', plans.find((p) => p.id === params.plan)?.name ?? params.plan, 'plan'],
+    ['Status', STATUS_LABEL[params.status ?? ''] ?? params.status, 'status'],
+    ['Country', params.country && `${flag(params.country)} ${countryName(params.country)}`, 'country'],
+    ['Client', data?.farms.find((f) => f.organization.id === params.organizationId)?.organization.name ?? 'Selected client', 'organizationId'],
+  ]);
+
   return (
     <div className="space-y-4">
       <TableFrame
+        criteria={
+          <CriteriaBar
+            total={data?.pagination.total ?? 0}
+            {...criteria}
+          />
+        }
         toolbar={
       <div className="flex flex-wrap items-center gap-2">
       <form className="flex flex-1 flex-wrap gap-2" action="/admin/farms">
@@ -71,7 +90,7 @@ export default async function AdminFarmsPage({ searchParams }: { searchParams: P
       </form>
         <div className="flex items-center gap-2">
           <PageSizeSelect />
-          <TenantsExport query={qs.toString()} />
+          <TenantsExport query={qs.toString()} criteria={exportCriteria(criteria.items)} />
           {me.platformPermissions?.includes('platform.tenants.create') && <NewTenantButton plans={plans.filter((p) => !p.archived)} />}
         </div>
       </div>

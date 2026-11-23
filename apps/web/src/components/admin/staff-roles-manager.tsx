@@ -11,6 +11,7 @@ import { ExportMenu } from '@/components/app/export-menu';
 import { FilterToggle } from '@/components/app/filter-toggle';
 import { PageSizeSelect, useLocalPages } from '@/components/app/page-size-select';
 import { Pagination } from '@/components/app/pagination';
+import { CriteriaBar } from '@/components/app/criteria-bar';
 import { TableFrame } from '@/components/app/table-frame';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog } from '@/components/ui/dialog';
@@ -71,6 +72,11 @@ export function StaffRolesManager({ roles, myPermissions, myRole }: { roles: Pla
       (!needle || [r.key, r.name, r.description ?? '', ...r.permissions].some((v) => v.toLowerCase().includes(needle))),
   );
   const pager = useLocalPages(visible);
+  // Search / type in use, for the download header.
+  const criteria = [
+    ...(q.trim() ? [{ label: 'Search', value: `“${q.trim()}”` }] : []),
+    ...(kind !== 'all' ? [{ label: 'Type', value: kind === 'system' ? 'Built-in' : 'Custom' }] : []),
+  ];
 
   const remove = async (role: PlatformRole) => {
     setBusy(true);
@@ -94,6 +100,19 @@ export function StaffRolesManager({ roles, myPermissions, myRole }: { roles: Pla
       </p>
 
       <TableFrame
+        criteria={
+          <CriteriaBar
+            total={visible.length}
+            items={[
+              ...(q.trim() ? [{ key: 'q', label: 'Search', value: `“${q.trim()}”`, onRemove: () => setQ('') }] : []),
+              ...(kind !== 'all' ? [{ key: 'kind', label: 'Type', value: kind === 'system' ? 'Built-in' : 'Custom', onRemove: () => setKind('all') }] : []),
+            ]}
+            onClear={() => {
+              setQ('');
+              setKind('all');
+            }}
+          />
+        }
         toolbar={
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-60 flex-1">
@@ -115,7 +134,7 @@ export function StaffRolesManager({ roles, myPermissions, myRole }: { roles: Pla
           <Upload className="h-4 w-4" /> Import
         </Button>
         <ExportMenu
-          load={async () => ({ filename: 'staff-roles', title: 'Staff roles', subtitle: `${visible.length} roles`, headers: CSV_HEADERS, rows: toCsvRows(visible) })}
+          load={async () => ({ filename: 'staff-roles', title: 'Staff roles', headers: CSV_HEADERS, rows: toCsvRows(visible), criteria })}
         />
         <Button size="sm" onClick={() => setEditing({ mode: 'create' })}>
           <Plus className="h-4 w-4" /> New staff role

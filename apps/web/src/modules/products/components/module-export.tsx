@@ -35,7 +35,7 @@ export function ModuleExport({ module }: { module: CatalogModule }) {
           resources.map(async (r) => {
             const { rows } = await api.get<{ rows: CatalogRow[] }>(`/farms/${farm.slug}/${catalogPath(r)}/export`);
             const table = catalogExportTable(r, rows, farm.name, format);
-            return { title: table.title, subtitle: `${rows.length} ${rows.length === 1 ? 'row' : 'rows'}`, headers: table.headers, rows: table.rows };
+            return { title: table.title, headers: table.headers, rows: table.rows };
           }),
         );
         return {
@@ -43,6 +43,8 @@ export function ModuleExport({ module }: { module: CatalogModule }) {
           title: `${label} — all lists`,
           subtitle: lists.map((l) => `${l.title} ${l.rows.length}`).join(', '),
           sections: lists,
+          // Every row of every list: no filters.
+          criteria: [],
         };
       }}
     />

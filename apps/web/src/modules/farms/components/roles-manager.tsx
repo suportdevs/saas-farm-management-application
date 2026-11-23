@@ -10,6 +10,7 @@ import { ExportMenu } from '@/components/app/export-menu';
 import { FilterToggle } from '@/components/app/filter-toggle';
 import { PageSizeSelect, useLocalPages } from '@/components/app/page-size-select';
 import { Pagination } from '@/components/app/pagination';
+import { CriteriaBar } from '@/components/app/criteria-bar';
 import { TableFrame } from '@/components/app/table-frame';
 import { PageHeader } from '@/components/app/page-header';
 import { Badge } from '@/components/ui/badge';
@@ -109,6 +110,11 @@ export function RolesManager({ initial }: { initial: FarmPermissions }) {
       (!needle || r.name.toLowerCase().includes(needle) || r.description.toLowerCase().includes(needle)),
   );
   const pager = useLocalPages(visible);
+  // Search / type in use, for the download header.
+  const criteria = [
+    ...(q.trim() ? [{ label: 'Search', value: `“${q.trim()}”` }] : []),
+    ...(kind !== 'all' ? [{ label: 'Type', value: kind === 'system' ? 'Built-in' : 'Custom' }] : []),
+  ];
   const KIND_LABEL = { owner: 'Owner', system: 'Built-in', custom: 'Custom' } as const;
 
   const reload = async () => {
@@ -141,6 +147,19 @@ export function RolesManager({ initial }: { initial: FarmPermissions }) {
       )}
 
       <TableFrame
+        criteria={
+          <CriteriaBar
+            total={visible.length}
+            items={[
+              ...(q.trim() ? [{ key: 'q', label: 'Search', value: `“${q.trim()}”`, onRemove: () => setQ('') }] : []),
+              ...(kind !== 'all' ? [{ key: 'kind', label: 'Type', value: kind === 'system' ? 'Built-in' : 'Custom', onRemove: () => setKind('all') }] : []),
+            ]}
+            onClear={() => {
+              setQ('');
+              setKind('all');
+            }}
+          />
+        }
         toolbar={
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-60 flex-1">
@@ -159,7 +178,7 @@ export function RolesManager({ initial }: { initial: FarmPermissions }) {
           load={async () => ({
             filename: 'roles',
             title: 'Roles',
-            subtitle: `${farm.name} · ${visible.length} roles`,
+            criteria,
             headers: ['Role', 'Type', 'Description', 'Permissions', 'People', 'Updated'],
             rows: visible.map((r) => [r.name, KIND_LABEL[r.kind], r.description, r.permissionCount, r.people, r.updatedAt ? r.updatedAt.slice(0, 10) : '']),
           })}

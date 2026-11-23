@@ -4,6 +4,7 @@ import type { AuditLogEntry, Pagination as PaginationInfo } from '@kit/shared';
 import { AuditLogExport } from '@/components/admin/list-exports';
 import { Pagination } from '@/components/app/pagination';
 import { PageSizeSelect } from '@/components/app/page-size-select';
+import { CriteriaBar, exportCriteria, urlCriteria } from '@/components/app/criteria-bar';
 import { TableFrame } from '@/components/app/table-frame';
 import { resolvePageSize } from '@/lib/page-size';
 import { Button } from '@/components/ui/button';
@@ -25,9 +26,21 @@ export default async function AuditLogPage({ searchParams }: { searchParams: Pro
   const data = await serverFetch<{ events: AuditLogEntry[]; pagination: PaginationInfo }>(`/admin/audit-logs?${qs}`);
   if (!data) throw new Error('Failed to load the audit log');
 
+  // Search / filters in use: chips above the table and on the download header.
+  const criteria = urlCriteria('/admin/audit-logs', filters, [
+    ['Action', `${action}…`, 'action'],
+    ['User', data.events.find((e) => e.actorId === userId)?.actor?.email ?? 'Selected user', 'userId'],
+  ]);
+
   return (
     <>
       <TableFrame
+        criteria={
+          <CriteriaBar
+            total={data.pagination.total}
+            {...criteria}
+          />
+        }
         toolbar={
       <form className="flex flex-wrap items-center gap-2">
         <Input name="action" defaultValue={action} placeholder="Action prefix, e.g. auth. or admin." className="h-8 max-w-xs text-xs" />
@@ -43,7 +56,7 @@ export default async function AuditLogPage({ searchParams }: { searchParams: Pro
         )}
         <div className="ml-auto flex items-center gap-2">
           <PageSizeSelect />
-          <AuditLogExport query={qs.toString()} />
+          <AuditLogExport query={qs.toString()} criteria={exportCriteria(criteria.items)} />
         </div>
       </form>
         }

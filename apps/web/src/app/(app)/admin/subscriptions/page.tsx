@@ -6,6 +6,7 @@ import { SubscriptionsExport } from '@/components/admin/list-exports';
 import { Pagination } from '@/components/app/pagination';
 import { FilterToggle } from '@/components/app/filter-toggle';
 import { PageSizeSelect } from '@/components/app/page-size-select';
+import { CriteriaBar, exportCriteria, urlCriteria } from '@/components/app/criteria-bar';
 import { TableFrame } from '@/components/app/table-frame';
 import { resolvePageSize } from '@/lib/page-size';
 import { Badge } from '@/components/ui/badge';
@@ -21,6 +22,11 @@ import { RecordPaymentButton } from '@/modules/platform/components/manual-paymen
 export const metadata: Metadata = { title: 'Subscriptions · Admin' };
 
 type Search = { q?: string; plan?: string; state?: string; source?: string; billing?: string; page?: string; pageSize?: string };
+
+/** Labels for the criteria bar. */
+const STATE_LABEL: Record<string, string> = { active: 'Active', trialing: 'Trialing', past_due: 'Past due', free: 'Free', canceled: 'Canceled' };
+const SOURCE_LABEL: Record<string, string> = { manual: 'Manual (invoice)', stripe: 'Stripe (card)', none: 'Not paying' };
+const BILLING_LABEL: Record<string, string> = { unpaid: 'Has unpaid invoices', overdue: 'Has overdue invoices' };
 
 const STATE_BADGE: Record<string, 'success' | 'info' | 'warning' | 'default' | 'destructive'> = {
   active: 'success',
@@ -42,9 +48,24 @@ export default async function AdminSubscriptionsPage({ searchParams }: { searchP
   ]);
   const rows = data?.subscriptions ?? [];
 
+  // Search / filters in use: chips above the table and on the download header.
+  const criteria = urlCriteria('/admin/subscriptions', params, [
+    ['Search', `“${params.q}”`, 'q'],
+    ['Plan', plans.find((p) => p.id === params.plan)?.name ?? params.plan, 'plan'],
+    ['State', STATE_LABEL[params.state ?? ''] ?? params.state, 'state'],
+    ['Billing', SOURCE_LABEL[params.source ?? ''] ?? params.source, 'source'],
+    ['Invoices', BILLING_LABEL[params.billing ?? ''] ?? params.billing, 'billing'],
+  ]);
+
   return (
     <div className="space-y-4">
       <TableFrame
+        criteria={
+          <CriteriaBar
+            total={data?.pagination.total ?? 0}
+            {...criteria}
+          />
+        }
         toolbar={
       <div className="flex flex-wrap items-center gap-2">
         <form className="flex flex-1 flex-wrap gap-2" action="/admin/subscriptions">
@@ -88,7 +109,7 @@ export default async function AdminSubscriptionsPage({ searchParams }: { searchP
         </form>
         <div className="flex items-center gap-2">
           <PageSizeSelect />
-          <SubscriptionsExport query={qs.toString()} />
+          <SubscriptionsExport query={qs.toString()} criteria={exportCriteria(criteria.items)} />
           {me.platformPermissions?.includes('platform.billing.manage') && <RecordPaymentButton plans={plans} />}
         </div>
       </div>

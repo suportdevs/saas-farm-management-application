@@ -6,6 +6,7 @@ import { InvoicesExport } from '@/components/admin/list-exports';
 import { Pagination } from '@/components/app/pagination';
 import { FilterToggle } from '@/components/app/filter-toggle';
 import { PageSizeSelect } from '@/components/app/page-size-select';
+import { CriteriaBar, exportCriteria, urlCriteria } from '@/components/app/criteria-bar';
 import { TableFrame } from '@/components/app/table-frame';
 import { resolvePageSize } from '@/lib/page-size';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,9 @@ export const metadata: Metadata = { title: 'Invoices · Admin' };
 
 type Search = { q?: string; status?: string; page?: string; pageSize?: string };
 
+/** Labels for the criteria bar. */
+const STATUS_LABEL: Record<string, string> = { open: 'Open', overdue: 'Overdue', paid: 'Paid', void: 'Void' };
+
 /** Every manual invoice across tenants. Issue and settle them on the tenant's page. */
 export default async function AdminInvoicesPage({ searchParams }: { searchParams: Promise<Search> }) {
   const me = await requireAdmin('platform.billing.view');
@@ -36,9 +40,21 @@ export default async function AdminInvoicesPage({ searchParams }: { searchParams
   ]);
   const invoices = data?.invoices ?? [];
 
+  // Search / filters in use: chips above the table and on the download header.
+  const criteria = urlCriteria('/admin/invoices', params, [
+    ['Search', `“${params.q}”`, 'q'],
+    ['Status', STATUS_LABEL[params.status ?? ''] ?? params.status, 'status'],
+  ]);
+
   return (
     <div className="space-y-4">
       <TableFrame
+        criteria={
+          <CriteriaBar
+            total={data?.pagination.total ?? 0}
+            {...criteria}
+          />
+        }
         toolbar={
       <div className="flex flex-wrap items-center gap-2">
         <form className="flex flex-1 flex-wrap gap-2" action="/admin/invoices">
@@ -62,7 +78,7 @@ export default async function AdminInvoicesPage({ searchParams }: { searchParams
         </form>
         <div className="flex items-center gap-2">
           <PageSizeSelect />
-          <InvoicesExport query={qs.toString()} plans={plans} />
+          <InvoicesExport query={qs.toString()} criteria={exportCriteria(criteria.items)} plans={plans} />
           {canBill && <RecordPaymentButton plans={plans} />}
         </div>
       </div>

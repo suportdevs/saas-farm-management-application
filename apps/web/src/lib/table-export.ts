@@ -6,8 +6,9 @@ import { printDoc } from './print';
  * Saves or prints a table in the format the user picks from a Download menu.
  * Excel and PDF libraries are loaded only when used, so pages stay light.
  *
- * PDF, Excel and Print start with the letterhead (farm name, address,
- * contacts). CSV, TSV, JSON and Copy stay plain data, so a CSV can still be
+ * PDF, Excel and Print are "documents": letterhead (farm name, address,
+ * contacts), title, when it was made, how many records and the filters that
+ * were applied. CSV, TSV, JSON and Copy stay plain data, so a CSV can still be
  * imported again.
  */
 
@@ -23,12 +24,17 @@ export const EXPORT_FORMATS: { value: ExportFormat; label: string; hint: string 
   { value: 'copy', label: 'Copy', hint: 'Paste into a spreadsheet' },
 ];
 
+/** One applied search or filter, e.g. { label: 'Status', value: 'Active' }. */
+export type ExportCriterion = { label: string; value: string };
+
 /** One list: a heading and its rows. */
 export type ExportSection = {
   title: string;
   subtitle?: string;
   headers: string[];
   rows: unknown[][];
+  /** The search and filters behind these rows; [] = none (all records). Left out = not shown. */
+  criteria?: ExportCriterion[];
 };
 
 /** One table, e.g. the Batches list. */
@@ -46,6 +52,8 @@ export type ExportDoc = {
   subtitle?: string;
   letterhead?: Letterhead;
   sections: ExportSection[];
+  /** Filters for the whole document, shown once under its title (a section's own criteria win). */
+  criteria?: ExportCriterion[];
 };
 
 /** A single table is a document with one section. */
@@ -54,16 +62,26 @@ export const toDoc = (t: ExportTable | ExportDoc): ExportDoc =>
 
 export const rowCount = (t: ExportTable | ExportDoc) => toDoc(t).sections.reduce((n, s) => n + s.rows.length, 0);
 
+/** "Search: “B-1”   •   Status: Active", or "None — all records". */
+export const criteriaText = (criteria: ExportCriterion[]) =>
+  criteria.length ? criteria.map((c) => `${c.label}: ${c.value}`).join('   •   ') : 'None — all records';
+
 const stamp = () => new Date().toISOString().slice(0, 10);
 const generatedAt = () => new Date().toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 const text = (value: unknown) => (value == null ? '' : String(value));
+const plural = (n: number, word: string) => `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;
 
-// Brand colours (HerdSphere green).
-const GREEN = '#166534';
-const GREEN_DARK = '#14532d';
-const GREEN_TINT = '#f0fdf4';
+// Brand colours (HerdSphere green) for a formal, centred letterhead.
+const BRAND = '#14532d'; // name, rules, monogram
+const GREEN = '#166534'; // table heading
+const GREEN_TINT = '#f0fdf4'; // striped rows
+const INK = '#111827';
 const GREY = '#6b7280';
+const RULE = '#d1d5db';
 const rgb = (hex: string): [number, number, number] => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
+
+/** "Batches" → "BATCHES REPORT"; a module document ("Herd — all lists") keeps its own title. */
+const reportTitle = (title: string) => title.toUpperCase() + (/report|lists/i.test(title) ? '' : ' REPORT');
 
 // ─── Excel ───────────────────────────────────────────────────────
 
@@ -74,21 +92,28 @@ const excelCell = (value: unknown) => {
   return /^-?\d+(\.\d+)?$/.test(s) && s.length < 16 && !/^0\d/.test(s) ? { value: Number(s), type: Number } : { value: s, type: String };
 };
 
-/** A cell stretched over the whole table width (the rest of the row is null). */
-const wide = (width: number, cell: Record<string, unknown>) => [{ type: String, columnSpan: width, ...cell }, ...Array(width - 1).fill(null)];
+/** A centred cell stretched over the whole table width (the rest of the row is null). */
+const wide = (width: number, cell: Record<string, unknown>) => [{ type: String, columnSpan: width, align: 'center', ...cell }, ...Array(width - 1).fill(null)];
+/** A row of empty cells with a line under it. */
+const rule = (width: number, style: string, color: string) =>
+  Array.from({ length: width }, () => ({ value: '', type: String, height: 6, bottomBorderStyle: style, bottomBorderColor: color }));
 
-function excelSheet(section: ExportSection, letterhead: Letterhead | undefined) {
+function excelSheet(section: ExportSection, letterhead: Letterhead | undefined, docTitle: string | undefined) {
   const width = Math.max(section.headers.length, 1);
   const top: unknown[][] = [];
   if (letterhead) {
-    top.push(wide(width, { value: letterhead.name, fontWeight: 'bold', fontSize: 18, textColor: GREEN_DARK, height: 28, alignVertical: 'center' }));
-    if (letterhead.tagline) top.push(wide(width, { value: letterhead.tagline, fontStyle: 'italic', textColor: GREY }));
+    // Centred letterhead: NAME, tagline, address / contacts / legal lines, rule.
+    top.push(wide(width, { value: letterhead.name.toUpperCase(), fontWeight: 'bold', fontSize: 16, textColor: BRAND, height: 28, alignVertical: 'center' }));
+    if (letterhead.tagline) top.push(wide(width, { value: letterhead.tagline, fontStyle: 'italic', fontSize: 9, textColor: GREY }));
     for (const line of letterhead.lines) top.push(wide(width, { value: line, fontSize: 9, textColor: GREY }));
-    // Green rule under the letterhead.
-    top.push(Array.from({ length: width }, () => ({ value: '', type: String, height: 6, bottomBorderStyle: 'medium', bottomBorderColor: GREEN })));
+    top.push(rule(width, 'medium', BRAND));
   }
-  top.push(wide(width, { value: section.title, fontWeight: 'bold', fontSize: 13, height: 24, alignVertical: 'bottom' }));
-  top.push(wide(width, { value: [section.subtitle, `Generated ${generatedAt()}`].filter(Boolean).join('  ·  '), fontSize: 9, textColor: GREY }));
+  // Report title, date / records and filters, then a thin rule.
+  top.push(wide(width, { value: reportTitle(docTitle ? `${docTitle} — ${section.title}` : section.title), fontWeight: 'bold', fontSize: 13, textColor: INK, height: 26, alignVertical: 'bottom' }));
+  top.push(wide(width, { value: `Generated ${generatedAt()}   ·   ${plural(section.rows.length, 'record')}`, fontSize: 9, textColor: GREY }));
+  if (section.criteria) top.push(wide(width, { value: `Filters applied: ${criteriaText(section.criteria)}`, fontSize: 9, fontStyle: 'italic', textColor: INK, wrap: true }));
+  top.push(rule(width, 'thin', RULE));
+  top.push(wide(width, { value: '', height: 6 }));
 
   const head = section.headers.map((h) => ({ value: h, type: String, fontWeight: 'bold', textColor: '#ffffff', backgroundColor: GREEN, height: 20, alignVertical: 'center' }));
   // Light stripes make long sheets easier to read.
@@ -96,7 +121,7 @@ function excelSheet(section: ExportSection, letterhead: Letterhead | undefined) 
   const columns = section.headers.map((h, i) => ({
     width: Math.min(50, Math.max(h.length, 10, ...section.rows.slice(0, 200).map((r) => text(r[i]).length)) + 2),
   }));
-  // Letterhead, title and the column headings stay in view while scrolling.
+  // Header block and column headings stay in view while scrolling.
   return { data: [...top, head, ...body], columns, stickyRowsCount: top.length + 1 };
 }
 
@@ -110,15 +135,16 @@ async function saveExcel(doc: ExportDoc) {
     used.add(name);
     return name;
   };
-  const sheets = doc.sections.map((s) => ({ ...excelSheet(s, doc.letterhead), sheet: sheetName(s.title) }));
+  const many = doc.sections.length > 1;
+  const sheets = doc.sections.map((s) => ({ ...excelSheet({ ...s, criteria: s.criteria ?? doc.criteria }, doc.letterhead, many ? doc.title : undefined), sheet: sheetName(s.title) }));
   // Library types don't describe every style option; the shapes follow its README.
   await (writeXlsxFile as unknown as (s: unknown) => { toFile: (n: string) => Promise<void> })(sheets).toFile(`${doc.filename}-${stamp()}.xlsx`);
 }
 
 // ─── PDF ─────────────────────────────────────────────────────────
 
-/** Height of the letterhead block; tables start below it on every page. */
-const PDF_HEAD = 104;
+/** Height of the small header on the pages after the first. */
+const SLIM = 40;
 
 async function savePdf(doc: ExportDoc) {
   const [{ jsPDF }, { autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
@@ -127,70 +153,110 @@ async function savePdf(doc: ExportDoc) {
   const W = pdf.internal.pageSize.getWidth();
   const H = pdf.internal.pageSize.getHeight();
   const M = 40;
+  const C = W / 2; // everything in the header is centred
   const lh = doc.letterhead;
-  const top = lh ? PDF_HEAD : 40;
-
-  /** The letterhead, drawn on every page like printed company paper. */
-  const drawLetterhead = () => {
-    if (!lh) return;
-    pdf.setFillColor(...rgb(GREEN)).rect(0, 0, W, 6, 'F');
-    // Monogram badge.
-    pdf.setFillColor(...rgb(GREEN)).roundedRect(M, 24, 42, 42, 8, 8, 'F');
-    pdf.setFont('helvetica', 'bold').setFontSize(15).setTextColor(255);
-    pdf.text(initials(lh.name), M + 21, 50, { align: 'center' });
-    // Name and tagline.
-    pdf.setFontSize(17).setTextColor(...rgb(GREEN_DARK)).text(lh.name, M + 56, 42);
-    if (lh.tagline) pdf.setFont('helvetica', 'normal').setFontSize(9).setTextColor(...rgb(GREY)).text(lh.tagline, M + 56, 57);
-    // Address and contacts, right aligned.
-    pdf.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(...rgb(GREY));
-    lh.lines.forEach((line, i) => pdf.text(line, W - M, 34 + i * 12, { align: 'right', maxWidth: W / 2 - M }));
-    pdf.setDrawColor(...rgb(GREEN)).setLineWidth(1.2).line(M, 80, W - M, 80);
-    pdf.setDrawColor(220).setLineWidth(0.4).line(M, 83, W - M, 83);
-  };
-
-  /** A list heading: title in bold, subtitle in grey. Returns where the table starts. */
-  const drawHeading = (y: number, title: string, subtitle: string | undefined, size: number) => {
-    pdf.setFont('helvetica', 'bold').setFontSize(size).setTextColor(20).text(title, M, y);
-    if (!subtitle) return y + 10;
-    pdf.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(...rgb(GREY)).text(subtitle, M, y + 13);
-    return y + 22;
-  };
-
-  let y = top;
+  const when = generatedAt();
   const many = doc.sections.length > 1;
-  if (many) {
-    y = drawHeading(y, doc.title, [doc.subtitle, `Generated ${generatedAt()}`].filter(Boolean).join('  ·  '), 15) + 10;
-  }
+  const total = rowCount(doc);
+
+  /** Page 1: monogram, NAME, tagline, address / contacts / legal lines, double rule. Returns the next y. */
+  const drawLetterhead = (y: number) => {
+    if (!lh) return y;
+    pdf.setFillColor(...rgb(BRAND)).roundedRect(C - 20, y, 40, 40, 7, 7, 'F');
+    pdf.setFont('helvetica', 'bold').setFontSize(15).setTextColor(255).text(initials(lh.name), C, y + 25.5, { align: 'center' });
+    y += 62;
+    pdf.setFontSize(18).setTextColor(...rgb(BRAND)).text(lh.name.toUpperCase(), C, y, { align: 'center', charSpace: 1.2 });
+    if (lh.tagline) {
+      y += 14;
+      pdf.setFont('helvetica', 'italic').setFontSize(9).setTextColor(...rgb(GREY)).text(lh.tagline, C, y, { align: 'center' });
+    }
+    pdf.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(...rgb(GREY));
+    for (const line of lh.lines) {
+      y += 12;
+      pdf.text(line, C, y, { align: 'center', maxWidth: W - 2 * M });
+    }
+    y += 12;
+    pdf.setDrawColor(...rgb(BRAND)).setLineWidth(1.4).line(M, y, W - M, y);
+    pdf.setLineWidth(0.4).line(M, y + 3, W - M, y + 3);
+    return y + 26;
+  };
+
+  /** Centred REPORT TITLE, "Generated · records", filters, then a thin rule. Returns the next y. */
+  const drawTitleBlock = (y: number, title: string, criteria: ExportCriterion[] | undefined, subtitle?: string) => {
+    pdf.setFont('helvetica', 'bold').setFontSize(14).setTextColor(...rgb(INK)).text(reportTitle(title), C, y, { align: 'center', charSpace: 1 });
+    y += 15;
+    pdf.setFont('helvetica', 'normal').setFontSize(9).setTextColor(...rgb(GREY)).text(`Generated ${when}   ·   ${plural(total, 'record')}`, C, y, { align: 'center' });
+    if (subtitle) {
+      y += 12;
+      pdf.text(subtitle, C, y, { align: 'center', maxWidth: W - 2 * M });
+    }
+    if (criteria) {
+      const lines = pdf.setFont('helvetica', 'italic').setFontSize(9).splitTextToSize(`Filters applied: ${criteriaText(criteria)}`, W - 2 * M - 60) as string[];
+      pdf.setTextColor(...rgb(INK));
+      for (const line of lines) {
+        y += 12;
+        pdf.text(line, C, y, { align: 'center' });
+      }
+    }
+    y += 12;
+    pdf.setDrawColor(...rgb(RULE)).setLineWidth(0.6).line(M, y, W - M, y);
+    return y + 18;
+  };
+
+  /** Later pages: farm name and document title, centred, over a thin rule. */
+  const drawSlim = () => {
+    pdf.setFont('helvetica', 'bold').setFontSize(9).setTextColor(...rgb(BRAND)).text((lh?.name ?? doc.title).toUpperCase(), C, 22, { align: 'center', charSpace: 0.8 });
+    if (lh) pdf.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...rgb(GREY)).text(doc.title, C, 32, { align: 'center' });
+    pdf.setDrawColor(...rgb(BRAND)).setLineWidth(0.8).line(M, SLIM - 2, W - M, SLIM - 2);
+  };
+
+  /** A list heading inside a multi-list document. */
+  const drawSectionHeading = (y: number, s: ExportSection) => {
+    pdf.setFont('helvetica', 'bold').setFontSize(12).setTextColor(...rgb(INK)).text(s.title, M, y);
+    pdf.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(...rgb(GREY)).text(plural(s.rows.length, 'record'), W - M, y, { align: 'right' });
+    pdf.setDrawColor(...rgb(RULE)).setLineWidth(0.6).line(M, y + 5, W - M, y + 5);
+    return y + 14;
+  };
+
+  const later = SLIM + 20;
+  let y = drawLetterhead(28);
+  const head = many ? { title: doc.title, criteria: doc.criteria, subtitle: doc.subtitle } : doc.sections[0]!;
+  y = drawTitleBlock(y, head.title, head.criteria, head.subtitle);
 
   doc.sections.forEach((s, i) => {
-    // Start a list on a new page when little room is left.
-    if (i > 0 && y > H - 140) {
-      pdf.addPage();
-      y = top;
+    if (many) {
+      // Start a list on a new page when little room is left.
+      if (i > 0 && y > H - 150) {
+        pdf.addPage();
+        y = later;
+      }
+      y = drawSectionHeading(y + (i > 0 ? 8 : 12), s);
+      if (s.criteria) {
+        pdf.setFont('helvetica', 'italic').setFontSize(8.5).setTextColor(...rgb(GREY)).text(`Filters applied: ${criteriaText(s.criteria)}`, M, y + 2, { maxWidth: W - 2 * M });
+        y += 14;
+      }
     }
-    const subtitle = many ? s.subtitle : [s.subtitle, `Generated ${generatedAt()}`].filter(Boolean).join('  ·  ');
-    y = drawHeading(y, s.title, subtitle, many ? 12 : 15);
     autoTable(pdf, {
       head: [s.headers],
-      body: s.rows.length ? s.rows.map((r) => r.map(text)) : [[{ content: 'No rows', colSpan: Math.max(s.headers.length, 1), styles: { halign: 'center', textColor: 120 } }]],
+      body: s.rows.length ? s.rows.map((r) => r.map(text)) : [[{ content: 'No records', colSpan: Math.max(s.headers.length, 1), styles: { halign: 'center', textColor: 120 } }]],
       startY: y,
-      margin: { top: top, left: M, right: M, bottom: 44 },
-      styles: { fontSize: 8, cellPadding: 4, lineColor: 230, lineWidth: 0.4 },
+      margin: { top: later, left: M, right: M, bottom: 46 },
+      styles: { fontSize: 8, cellPadding: 4.5, lineColor: 230, lineWidth: 0.4, textColor: rgb(INK) },
       headStyles: { fillColor: rgb(GREEN), textColor: 255, fontStyle: 'bold' },
       alternateRowStyles: { fillColor: rgb(GREEN_TINT) },
     });
-    y = (pdf as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 28;
+    y = (pdf as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 26;
   });
 
-  // Letterhead and footer on every page (drawn once each, after the tables).
+  // Small header on later pages and the footer on every page (drawn after the tables).
   const pages = pdf.getNumberOfPages();
   for (let p = 1; p <= pages; p++) {
     pdf.setPage(p);
-    drawLetterhead();
-    pdf.setDrawColor(220).setLineWidth(0.4).line(M, H - 32, W - M, H - 32);
+    if (p > 1) drawSlim();
+    pdf.setDrawColor(...rgb(RULE)).setLineWidth(0.6).line(M, H - 34, W - M, H - 34);
     pdf.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...rgb(GREY));
-    pdf.text([lh?.name, doc.title, `Generated ${generatedAt()}`].filter(Boolean).join('  ·  '), M, H - 20);
-    pdf.text(`Page ${p} of ${pages}`, W - M, H - 20, { align: 'right' });
+    pdf.text([lh?.name, doc.title, `Generated ${when}`].filter(Boolean).join('   •   '), M, H - 21);
+    pdf.text(`Page ${p} of ${pages}`, W - M, H - 21, { align: 'right' });
   }
   pdf.save(`${doc.filename}-${stamp()}.pdf`);
 }

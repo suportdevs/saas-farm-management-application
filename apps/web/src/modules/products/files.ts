@@ -46,8 +46,7 @@ export function catalogExportTable(resource: CatalogResource, rows: CatalogRow[]
   return {
     filename: resource,
     title: plural,
-    // The farm name is on the letterhead and the date in the "Generated" line.
-    subtitle: `${rows.length} ${rows.length === 1 ? 'row' : 'rows'}`,
+    // Farm name, date and record count are on the document header.
     headers: shown.map((c) => (format === 'csv' ? c.csv : c.label)),
     rows: rows.map((row) => shown.map((c) => displayValue(row, c))),
   };

@@ -51,7 +51,7 @@ import type { ExportFormat } from '@/lib/table-export';
 import { catalogExportTable, displayValue, imageUrl, rowValue } from '../files';
 import { useExportLock } from '@/modules/subscriptions/use-export-lock';
 import { ModuleExport } from './module-export';
-import { CatalogCriteria, CatalogFilters, filterParams, type FilterValues } from './catalog-filters';
+import { catalogCriteriaText, CatalogCriteria, CatalogFilters, filterParams, type FilterValues } from './catalog-filters';
 import { CatalogFormDialog } from './catalog-form-dialog';
 import { CatalogImportDialog } from './catalog-import-dialog';
 
@@ -170,8 +170,12 @@ export function CatalogManager({
 
   /** Every download format uses every row matching the current search and filters. */
   const download = async (format: ExportFormat) => {
-    const { rows: all } = await api.get<{ rows: CatalogRow[] }>(`${apiPath}/export${toQueryString(query)}`);
-    return catalogExportTable(resource, all, farm.name, format);
+    const [{ rows: all }, criteria] = await Promise.all([
+      api.get<{ rows: CatalogRow[] }>(`${apiPath}/export${toQueryString(query)}`),
+      catalogCriteriaText(farm.slug, resource, query),
+    ]);
+    // The filters go on the PDF / Excel / print header.
+    return { ...catalogExportTable(resource, all, farm.name, format), criteria };
   };
 
   const remove = (keys: string[]) =>

@@ -12,6 +12,7 @@ import {
 } from '@kit/shared';
 import { ExportMenu } from '@/components/app/export-menu';
 import { api } from '@/lib/api';
+import type { ExportCriterion } from '@/lib/table-export';
 
 const money = (minor: number) => (minor / 100).toFixed(2);
 const day = (iso: string | null) => (iso ? iso.slice(0, 10) : '');
@@ -20,13 +21,27 @@ const day = (iso: string | null) => (iso ? iso.slice(0, 10) : '');
  * Download menu (Excel, CSV, PDF, Print, Copy) over every row matching the
  * page's filters (up to 1,000).
  */
-function ExportButton<T>({ load, toRows, headers, filename }: { load: () => Promise<T[]>; toRows: (rows: T[]) => unknown[][]; headers: string[]; filename: string }) {
+function ExportButton<T>({
+  load,
+  toRows,
+  headers,
+  filename,
+  criteria,
+}: {
+  load: () => Promise<T[]>;
+  toRows: (rows: T[]) => unknown[][];
+  headers: string[];
+  filename: string;
+  /** The page's search and filters, printed on the PDF / Excel / print header. */
+  criteria?: ExportCriterion[];
+}) {
   const title = filename.charAt(0).toUpperCase() + filename.slice(1);
   return (
     <ExportMenu
       load={async () => {
         const rows = await load();
-        return { filename, title, subtitle: `${rows.length} ${rows.length === 1 ? 'row' : 'rows'} · ${new Date().toLocaleDateString()}`, headers, rows: toRows(rows) };
+        // Record count and date are on the document header.
+        return { filename, title, headers, rows: toRows(rows), criteria: criteria ?? [] };
       }}
     />
   );
@@ -39,9 +54,10 @@ const withAll = (query: string) => {
   return qs.toString();
 };
 
-export function TenantsExport({ query }: { query: string }) {
+export function TenantsExport({ query, criteria }: { query: string; criteria?: ExportCriterion[] }) {
   return (
     <ExportButton<PlatformFarm>
+      criteria={criteria}
       filename="tenants"
       headers={['id', 'name', 'slug', 'type', 'country', 'city', 'owner_name', 'owner_email', 'plan', 'state', 'source', 'members', 'suspended', 'created_at']}
       load={async () => (await api.get<{ farms: PlatformFarm[] }>(`/admin/farms?${withAll(query)}`)).farms}
@@ -67,9 +83,10 @@ export function TenantsExport({ query }: { query: string }) {
   );
 }
 
-export function SubscriptionsExport({ query }: { query: string }) {
+export function SubscriptionsExport({ query, criteria }: { query: string; criteria?: ExportCriterion[] }) {
   return (
     <ExportButton<PlatformSubscription>
+      criteria={criteria}
       filename="subscriptions"
       headers={[
         'tenant',
@@ -116,9 +133,10 @@ export function SubscriptionsExport({ query }: { query: string }) {
   );
 }
 
-export function InvoicesExport({ query, plans }: { query: string; plans: Pick<Plan, 'id' | 'name'>[] }) {
+export function InvoicesExport({ query, plans, criteria }: { query: string; plans: Pick<Plan, 'id' | 'name'>[]; criteria?: ExportCriterion[] }) {
   return (
     <ExportButton<ManualInvoice>
+      criteria={criteria}
       filename="invoices"
       headers={['number', 'tenant', 'description', 'status', 'currency', 'amount', 'paid', 'balance', 'issued', 'due', 'plan', 'paid_through', 'paid_at', 'payments']}
       load={async () => (await api.get<{ invoices: ManualInvoice[] }>(`/admin/farms/invoices?${withAll(query)}`)).invoices}
@@ -144,9 +162,10 @@ export function InvoicesExport({ query, plans }: { query: string; plans: Pick<Pl
   );
 }
 
-export function UsersExport({ query }: { query: string }) {
+export function UsersExport({ query, criteria }: { query: string; criteria?: ExportCriterion[] }) {
   return (
     <ExportButton<AdminUser>
+      criteria={criteria}
       filename="users"
       headers={['name', 'email', 'role', 'status', 'last_sign_in', 'joined']}
       load={async () => (await api.get<{ users: AdminUser[] }>(`/admin/users?${withAll(query)}`)).users}
@@ -164,9 +183,10 @@ export function UsersExport({ query }: { query: string }) {
   );
 }
 
-export function AuditLogExport({ query }: { query: string }) {
+export function AuditLogExport({ query, criteria }: { query: string; criteria?: ExportCriterion[] }) {
   return (
     <ExportButton<AuditLogEntry>
+      criteria={criteria}
       filename="audit-log"
       headers={['when', 'action', 'actor', 'target_type', 'target_id', 'ip', 'user_agent']}
       load={async () => (await api.get<{ events: AuditLogEntry[] }>(`/admin/audit-logs?${withAll(query)}`)).events}
@@ -185,9 +205,10 @@ export function AuditLogExport({ query }: { query: string }) {
   );
 }
 
-export function OrganizationsExport({ query }: { query: string }) {
+export function OrganizationsExport({ query, criteria }: { query: string; criteria?: ExportCriterion[] }) {
   return (
     <ExportButton<PlatformOrganization>
+      criteria={criteria}
       filename="clients"
       headers={['organization', 'owner_name', 'owner_email', 'farms', 'members', 'created_at']}
       load={async () => (await api.get<{ organizations: PlatformOrganization[] }>(`/admin/organizations?${withAll(query)}`)).organizations}

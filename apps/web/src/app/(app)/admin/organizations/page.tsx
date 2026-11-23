@@ -5,6 +5,7 @@ import type { Pagination as PaginationInfo, PlatformOrganization } from '@kit/sh
 import { OrganizationsExport } from '@/components/admin/list-exports';
 import { Pagination } from '@/components/app/pagination';
 import { PageSizeSelect } from '@/components/app/page-size-select';
+import { CriteriaBar, exportCriteria, urlCriteria } from '@/components/app/criteria-bar';
 import { TableFrame } from '@/components/app/table-frame';
 import { resolvePageSize } from '@/lib/page-size';
 import { Button } from '@/components/ui/button';
@@ -24,9 +25,13 @@ export default async function AdminOrganizationsPage({ searchParams }: { searchP
   const data = await serverFetch<{ organizations: PlatformOrganization[]; pagination: PaginationInfo }>(`/admin/organizations?${qs}`);
   const rows = data?.organizations ?? [];
 
+  // Search / filters in use: chips above the table and on the download header.
+  const criteria = urlCriteria('/admin/organizations', params, [['Search', `“${params.q}”`, 'q']]);
+
   return (
     <div className="space-y-4">
       <TableFrame
+        criteria={<CriteriaBar total={data?.pagination.total ?? 0} {...criteria} />}
         toolbar={
       <div className="flex flex-wrap items-center gap-2">
       <form className="flex flex-1 flex-wrap gap-2" action="/admin/organizations">
@@ -41,7 +46,7 @@ export default async function AdminOrganizationsPage({ searchParams }: { searchP
       </form>
       <div className="ml-auto flex items-center gap-2">
         <PageSizeSelect />
-        <OrganizationsExport query={qs.toString()} />
+        <OrganizationsExport query={qs.toString()} criteria={exportCriteria(criteria.items)} />
       </div>
       </div>
         }
