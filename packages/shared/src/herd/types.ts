@@ -1,5 +1,5 @@
 import type { Status } from '../products/catalog';
-import type { AnimalOrigin, AnimalSex, AnimalType, BatchPurpose, BatchStatus, BreedType, HerdStatus, TargetWeightUnit, WeighMethod } from './catalog';
+import type { AnimalOrigin, AnimalSex, AnimalType, BatchPurpose, BatchStatus, BreedType, HerdStatus, TargetWeightUnit, WeighMethod, WeighType, WeightTargetStatus } from './catalog';
 
 /** Rows as listed by the API — only the columns the herd screens use. */
 export interface PenRow {
@@ -77,10 +77,40 @@ export interface WeightRow {
   /** The animal's ear tag. */
   animalName: string;
   /** YYYY-MM-DD */
-  weighedOn: string;
+  weighDate: string;
   weight: number;
-  method: WeighMethod | null;
+  weightUnit: TargetWeightUnit;
+  /** Worked out from the animal's previous weighing (null for the first one). */
+  previousWeight: number | null;
+  weightGain: number | null;
+  daysSinceLast: number | null;
+  /** Average daily gain since the previous weighing. */
+  adg: number | null;
+  weighType: WeighType;
+  bodyConditionScore: number | null;
+  hipHeight: number | null;
+  scaleId: string | null;
+  weighMethod: WeighMethod | null;
+  batchKey: string | null;
+  batchName: string | null;
+  /** Who recorded it (created_by). */
+  recordedByName: string | null;
   notes: string | null;
+}
+
+export interface WeightTargetRow {
+  key: string;
+  animalKey: string | null;
+  animalName: string | null;
+  batchKey: string | null;
+  batchName: string | null;
+  targetWeight: number;
+  /** YYYY-MM-DD */
+  targetDate: string;
+  targetAdg: number | null;
+  /** Latest weight ÷ target, in %. */
+  currentProgress: number | null;
+  status: WeightTargetStatus;
 }
 
 export interface BreedRow {

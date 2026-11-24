@@ -106,6 +106,8 @@ export interface CatalogConfig {
   beforeCreate?: (tenantId: string, adding: number) => Promise<void>;
   /** Runs after rows are created, updated, imported or deleted — e.g. to refresh totals elsewhere. */
   afterWrite?: (tenantId: string) => Promise<void>;
+  /** Runs before a list or export is read — e.g. to refresh values that depend on today's date. */
+  beforeRead?: (tenantId: string) => Promise<void>;
   /**
    * The table also holds built-in rows (`tenant_id` null) that every farm sees
    * in lists and selects but can't change — e.g. the system breeds.
@@ -168,6 +170,7 @@ export class Catalog {
   // ─── Reads ─────────────────────────────────────────────────────
 
   async list(tenant: Tenant, { page, pageSize, ...filters }: CatalogListQuery) {
+    await this.config.beforeRead?.(tenant.id);
     const where = this.filtered(tenant, filters);
     const [rows, [total]] = await Promise.all([
       this.rows(where)
@@ -179,7 +182,8 @@ export class Catalog {
   }
 
   /** Every matching row, for export and print. */
-  export(tenant: Tenant, filters: CatalogFilters) {
+  async export(tenant: Tenant, filters: CatalogFilters) {
+    await this.config.beforeRead?.(tenant.id);
     return this.rows(this.filtered(tenant, filters)).limit(CATALOG_EXPORT_LIMIT);
   }
 

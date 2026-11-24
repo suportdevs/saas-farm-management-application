@@ -162,6 +162,20 @@
       "when": 1795512700089,
       "tag": "0022_animal_movements_status_history",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1795515190976,
+      "tag": "0023_weight_records_targets",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1795515289432,
+      "tag": "0024_weights_drop_old_table",
+      "breakpoints": true
     }
   ]
 }

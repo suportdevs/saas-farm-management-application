@@ -1,11 +1,11 @@
 import { and, count, desc, eq, isNull, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
-import { db } from '../../../core';
+import { db, validationError } from '../../../core';
 import { users } from '../../../db/schema';
 import { supplierCatalog, suppliers } from '../../distribution';
 import { Catalog } from '../../products';
 import { assertWithinLimit } from '../../subscriptions';
-import { animalMovements, animals, animalStatusHistory, batches, breeds, colorMarkings, pens, penTypes, weights } from '../models';
+import { animalMovements, animals, animalStatusHistory, batches, breeds, colorMarkings, pens, penTypes, weightRecords, weightTargets } from '../models';
 
 /** Animals still on the farm — what the plan's animal limit counts. */
 export async function countAnimals(farmId: string) {
@@ -134,7 +134,11 @@ export const batchCatalog = new Catalog({
     supplierKey: { column: batches.supplierId, catalog: supplierCatalog, matchBy: suppliers.code },
     penKey: { column: batches.penId, catalog: penCatalog, matchBy: pens.code },
   },
-  usedBy: [{ table: animals, column: animals.batchId, label: 'animal' }],
+  usedBy: [
+    { table: animals, column: animals.batchId, label: 'animal' },
+    { table: weightRecords, column: weightRecords.batchId, label: 'weight record' },
+    { table: weightTargets, column: weightTargets.batchId, label: 'weight target' },
+  ],
 });
 
 // Distribution can't import the herd module, so the herd tells it: a supplier with batches can't be deleted.
@@ -195,9 +199,10 @@ export const animalCatalog: Catalog = new Catalog({
     { table: animals, column: animals.motherId, label: 'offspring record' },
     { table: animals, column: animals.fatherId, label: 'offspring record' },
   ],
-  // An animal's weight records, movements and status changes go with it.
+  // An animal's weight records, targets, movements and status changes go with it.
   cascade: [
-    { table: weights, column: weights.animalId },
+    { table: weightRecords, column: weightRecords.animalId },
+    { table: weightTargets, column: weightTargets.animalId },
     { table: animalMovements, column: animalMovements.animalId },
     { table: animalStatusHistory, column: animalStatusHistory.animalId },
   ],
@@ -205,7 +210,44 @@ export const animalCatalog: Catalog = new Catalog({
   async beforeCreate(tenantId, adding) {
     await assertWithinLimit(tenantId, 'animals', await countAnimals(tenantId), adding);
   },
+  // An animal's weight, batch or status changes the progress of weight targets.
+  afterWrite: syncWeightTargets,
 });
+
+// ─── Weight records ──────────────────────────────────────────────
+
+/**
+ * After weighings change:
+ * 1. a weighing saved without a batch gets the animal's batch;
+ * 2. previous weight, gain, days since last and ADG are worked out per animal
+ *    (by weigh date, then entry order);
+ * 3. each animal's latest weighing becomes `animals.weight`;
+ * 4. weight targets are refreshed.
+ */
+export async function syncWeights(tenantId: string) {
+  await db.execute(sql`
+    update ${weightRecords} as r set batch_id = a.batch_id
+    from ${animals} as a
+    where r.tenant_id = ${tenantId} and r.batch_id is null and r.deleted_at is null and a.id = r.animal_id and a.batch_id is not null
+  `);
+  await db.execute(sql`
+    update ${weightRecords} as r set
+      previous_weight = c.prev,
+      weight_gain = r.weight - c.prev,
+      days_since_last = r.weigh_date - c.prev_date,
+      adg = case when r.weigh_date - c.prev_date > 0 then round((r.weight - c.prev) / (r.weigh_date - c.prev_date), 3) end
+    from (
+      select id, lag(weight) over w as prev, lag(weigh_date) over w as prev_date
+      from ${weightRecords}
+      where tenant_id = ${tenantId} and deleted_at is null
+      window w as (partition by animal_id order by weigh_date, id)
+    ) as c
+    where r.id = c.id
+      and (r.previous_weight is distinct from c.prev or r.days_since_last is distinct from r.weigh_date - c.prev_date or r.weight_gain is distinct from r.weight - c.prev)
+  `);
+  await syncLatestWeights(tenantId);
+  await syncWeightTargets(tenantId);
+}
 
 /**
  * Copies each animal's latest weighing (by date, then entry order) to
@@ -216,39 +258,129 @@ export async function syncLatestWeights(tenantId: string) {
     update ${animals} as a set weight = w.weight
     from (
       select distinct on (animal_id) animal_id, weight
-      from ${weights}
+      from ${weightRecords}
       where tenant_id = ${tenantId} and deleted_at is null
-      order by animal_id, weighed_on desc, id desc
+      order by animal_id, weigh_date desc, id desc
     ) as w
     where a.id = w.animal_id and a.weight is distinct from w.weight
   `);
 }
 
 const weighed = alias(animals, 'weighed');
+const weighedBatch = alias(batches, 'weighed_batch');
+const recorder = alias(users, 'recorder');
 
 export const weightCatalog = new Catalog({
   resource: 'weights',
-  table: weights,
+  table: weightRecords,
   fields: {
-    key: weights.key,
+    key: weightRecords.key,
     animalKey: weighed.key,
     animalName: weighed.tag,
-    weighedOn: weights.weighedOn,
-    weight: weights.weight,
-    method: weights.method,
-    notes: weights.notes,
+    weighDate: weightRecords.weighDate,
+    weight: weightRecords.weight,
+    weightUnit: weightRecords.weightUnit,
+    previousWeight: weightRecords.previousWeight,
+    weightGain: weightRecords.weightGain,
+    daysSinceLast: weightRecords.daysSinceLast,
+    adg: weightRecords.adg,
+    weighType: weightRecords.weighType,
+    bodyConditionScore: weightRecords.bodyConditionScore,
+    hipHeight: weightRecords.hipHeight,
+    weighMethod: weightRecords.weighMethod,
+    scaleId: weightRecords.scaleId,
+    batchKey: weighedBatch.key,
+    batchName: weighedBatch.number,
+    recordedByName: recorder.name,
+    notes: weightRecords.notes,
   },
-  joins: [{ table: weighed, on: eq(weighed.id, weights.animalId) }],
-  search: [weights.notes],
+  joins: [
+    { table: weighed, on: eq(weighed.id, weightRecords.animalId) },
+    { table: weighedBatch, on: eq(weighedBatch.id, weightRecords.batchId), left: true },
+    { table: recorder, on: eq(recorder.id, weightRecords.createdBy), left: true },
+  ],
+  search: [weightRecords.notes, weightRecords.scaleId],
   // Weight records have no name: newest first.
-  title: sql<string>`${weights.weighedOn}::text`,
-  orderBy: desc(weights.weighedOn),
+  title: sql<string>`${weightRecords.weighDate}::text`,
+  orderBy: desc(weightRecords.weighDate),
   unique: [],
   references: {
-    // Imports match the animal by ear tag.
-    animalKey: { column: weights.animalId, catalog: animalCatalog, matchBy: animals.tag },
+    // Imports match the animal by ear tag and the batch by number.
+    animalKey: { column: weightRecords.animalId, catalog: animalCatalog, matchBy: animals.tag },
+    batchKey: { column: weightRecords.batchId, catalog: batchCatalog, matchBy: batches.number },
   },
-  afterWrite: syncLatestWeights,
+  afterWrite: syncWeights,
+});
+
+// ─── Weight targets ──────────────────────────────────────────────
+
+/**
+ * Progress = current weight ÷ target weight (in %, capped at 999.99). The
+ * current weight is the animal's latest weight, or for a batch the average of
+ * its animals still in the herd. Status: achieved at 100 %, missed when the
+ * target date has passed first, otherwise active.
+ */
+export async function syncWeightTargets(tenantId: string) {
+  await db.execute(sql`
+    update ${weightTargets} as t set current_progress = c.progress, status = c.status
+    from (
+      select p.id, p.progress,
+        case when p.progress >= 100 then 'achieved' when p.target_date < current_date then 'missed' else 'active' end as status
+      from (
+        select t2.id, t2.target_date,
+          least(round(coalesce(a.weight, b.avg_weight) / nullif(t2.target_weight, 0) * 100, 2), 999.99) as progress
+        from ${weightTargets} as t2
+        left join ${animals} as a on a.id = t2.animal_id and a.deleted_at is null
+        left join lateral (
+          select avg(x.weight) as avg_weight from ${animals} as x
+          where t2.animal_id is null and x.batch_id = t2.batch_id and x.deleted_at is null and x.herd_status = 'in_herd' and x.weight is not null
+        ) as b on true
+        where t2.tenant_id = ${tenantId} and t2.deleted_at is null
+      ) as p
+    ) as c
+    where t.id = c.id and (t.current_progress is distinct from c.progress or t.status is distinct from c.status)
+  `);
+}
+
+const targetAnimal = alias(animals, 'target_animal');
+const targetBatch = alias(batches, 'target_batch');
+
+export const weightTargetCatalog = new Catalog({
+  resource: 'weight-targets',
+  table: weightTargets,
+  fields: {
+    key: weightTargets.key,
+    animalKey: targetAnimal.key,
+    animalName: targetAnimal.tag,
+    batchKey: targetBatch.key,
+    batchName: targetBatch.number,
+    targetWeight: weightTargets.targetWeight,
+    targetDate: weightTargets.targetDate,
+    targetAdg: weightTargets.targetAdg,
+    currentProgress: weightTargets.currentProgress,
+    status: weightTargets.status,
+  },
+  joins: [
+    { table: targetAnimal, on: eq(targetAnimal.id, weightTargets.animalId), left: true },
+    { table: targetBatch, on: eq(targetBatch.id, weightTargets.batchId), left: true },
+  ],
+  search: [],
+  title: sql<string>`${weightTargets.targetDate}::text`,
+  // Soonest target first.
+  orderBy: weightTargets.targetDate,
+  unique: [],
+  references: {
+    animalKey: { column: weightTargets.animalId, catalog: animalCatalog, matchBy: animals.tag },
+    batchKey: { column: weightTargets.batchId, catalog: batchCatalog, matchBy: batches.number },
+  },
+  // A target is for an animal or a batch.
+  encode(values) {
+    if (values.animalId == null && values.batchId == null) throw validationError({ animalKey: ['Choose an animal or a batch'] });
+    return values;
+  },
+  afterWrite: syncWeightTargets,
+  // "Missed" depends on today's date, so lists refresh it first.
+  beforeRead: syncWeightTargets,
 });
 
 // ─── Movements ───────────────────────────────────────────────────

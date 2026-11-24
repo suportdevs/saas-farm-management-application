@@ -57,9 +57,25 @@ export const TARGET_WEIGHT_UNITS = [
 ] as const satisfies readonly CatalogChoice[];
 
 export const WEIGH_METHODS = [
-  { value: 'scale', label: 'Scale' },
-  { value: 'tape', label: 'Weigh tape' },
-  { value: 'estimate', label: 'Visual estimate' },
+  { value: 'digital_scale', label: 'Digital scale' },
+  { value: 'tape_measure', label: 'Tape measure' },
+  { value: 'visual_estimate', label: 'Visual estimate' },
+] as const satisfies readonly CatalogChoice[];
+
+/** Why the animal was weighed. */
+export const WEIGH_TYPES = [
+  { value: 'arrival', label: 'Arrival' },
+  { value: 'routine', label: 'Routine' },
+  { value: 'pre_sale', label: 'Pre-sale' },
+  { value: 'post_treatment', label: 'Post-treatment' },
+  { value: 'program_check', label: 'Program check' },
+] as const satisfies readonly CatalogChoice[];
+
+/** Worked out from the latest weights: achieved at 100 %, missed when the date passes first. */
+export const WEIGHT_TARGET_STATUSES = [
+  { value: 'active', label: 'Active' },
+  { value: 'achieved', label: 'Achieved' },
+  { value: 'missed', label: 'Missed' },
 ] as const satisfies readonly CatalogChoice[];
 
 /** Why an animal was moved to another pen. */
@@ -83,6 +99,8 @@ export type BatchPurpose = Values<typeof BATCH_PURPOSES>;
 export type BatchStatus = Values<typeof BATCH_STATUSES>;
 export type TargetWeightUnit = Values<typeof TARGET_WEIGHT_UNITS>;
 export type WeighMethod = Values<typeof WEIGH_METHODS>;
+export type WeighType = Values<typeof WEIGH_TYPES>;
+export type WeightTargetStatus = Values<typeof WEIGHT_TARGET_STATUSES>;
 export type MovementReason = Values<typeof MOVEMENT_REASONS>;
 export type AnimalSex = Values<typeof ANIMAL_SEXES>;
 export type AnimalType = Values<typeof ANIMAL_TYPES>;
@@ -210,16 +228,49 @@ export const HERD_CATALOG = {
     eyebrow: 'Herd',
     titleKey: 'animalName',
     label: 'Weight record',
-    plural: 'Weights',
-    description: 'Weighings of each animal. The latest one becomes the animal’s current weight.',
+    plural: 'Weight records',
+    description: 'Weighings of each animal. Gain, days since the last weighing and ADG are worked out; the latest weighing becomes the animal’s current weight.',
     columns: [
       ref('animal', 'Animal', 'animals', 'BD-1024', { required: true }),
-      { key: 'weighedOn', label: 'Date', csv: 'date', input: 'date', required: true, defaultValue: 'today', example: '2025-06-01' },
-      { key: 'weight', label: 'Weight (kg)', csv: 'weight', input: 'number', required: true, example: '312.5' },
-      select('method', 'method', 'Method', WEIGH_METHODS, 'Scale', { defaultValue: 'scale' }),
-      { key: 'notes', label: 'Notes', csv: 'notes', input: 'textarea', example: 'Before weaning' },
+      { key: 'weighDate', label: 'Weigh date', csv: 'weigh_date', input: 'date', required: true, defaultValue: 'today', example: '2025-06-01' },
+      { key: 'weight', label: 'Weight', csv: 'weight', input: 'number', required: true, example: '312.5' },
+      select('weightUnit', 'weight_unit', 'Unit', TARGET_WEIGHT_UNITS, 'kg', { defaultValue: 'kg' }),
+      // Worked out from the animal's previous weighing, never typed in.
+      { key: 'previousWeight', label: 'Previous weight', csv: 'previous_weight', input: 'number', readOnly: true, example: '', list: false },
+      { key: 'weightGain', label: 'Gain', csv: 'weight_gain', input: 'number', readOnly: true, example: '' },
+      { key: 'daysSinceLast', label: 'Days since last', csv: 'days_since_last', input: 'number', readOnly: true, example: '' },
+      { key: 'adg', label: 'ADG', csv: 'adg', input: 'number', readOnly: true, example: '' },
+      select('weighType', 'weigh_type', 'Weigh type', WEIGH_TYPES, 'Routine', { required: true, defaultValue: 'routine' }),
+      { key: 'bodyConditionScore', label: 'Body condition score', csv: 'body_condition_score', input: 'number', example: '3.5', list: false },
+      { key: 'hipHeight', label: 'Hip height', csv: 'hip_height', input: 'number', example: '128', list: false },
+      select('weighMethod', 'weigh_method', 'Weigh method', WEIGH_METHODS, 'Digital scale', { defaultValue: 'digital_scale' }),
+      { key: 'scaleId', label: 'Scale ID', csv: 'scale_id', example: 'SC-01', list: false },
+      ref('batch', 'Batch', 'batches', 'B-2025-01', { list: false, hint: 'Leave empty to use the animal’s batch.' }),
+      // Who recorded it (the created_by audit column).
+      { key: 'recordedByName', label: 'Recorded by', csv: 'recorded_by', readOnly: true, example: '', list: false },
+      { key: 'notes', label: 'Notes', csv: 'notes', input: 'textarea', example: 'Before weaning', list: false },
     ],
-    filters: ['animal', 'date', 'weight', 'method'],
+    filters: ['animal', 'weigh_date', 'weight', 'weigh_type', 'weigh_method', 'batch'],
+  },
+  'weight-targets': {
+    module: 'herd',
+    path: 'herd/weight-targets',
+    eyebrow: 'Herd',
+    titleKey: 'targetDate',
+    label: 'Weight target',
+    plural: 'Weight targets',
+    description: 'Target weights for an animal or a whole batch. Progress and status update from the latest weighings.',
+    columns: [
+      ref('animal', 'Animal', 'animals', 'BD-1024', { hint: 'Choose an animal or a batch.' }),
+      ref('batch', 'Batch', 'batches', 'B-2025-01'),
+      { key: 'targetWeight', label: 'Target weight', csv: 'target_weight', input: 'number', required: true, example: '450' },
+      { key: 'targetDate', label: 'Target date', csv: 'target_date', input: 'date', required: true, example: '2025-09-01' },
+      { key: 'targetAdg', label: 'Target ADG', csv: 'target_adg', input: 'number', example: '1.2' },
+      // Worked out from the latest weights (a batch: the average of its animals in the herd).
+      { key: 'currentProgress', label: 'Progress (%)', csv: 'current_progress', input: 'number', readOnly: true, example: '' },
+      select('status', 'status', 'Status', WEIGHT_TARGET_STATUSES, 'Active', { readOnly: true }),
+    ],
+    filters: ['animal', 'batch', 'target_date', 'status'],
   },
   movements: {
     module: 'herd',
@@ -290,4 +341,4 @@ export const HERD_CATALOG = {
     ],
     filters: [],
   },
-} satisfies Record<'animals' | 'pens' | 'pen-types' | 'batches' | 'weights' | 'movements' | 'status-history' | 'breeds' | 'color-markings', CatalogDefinition>;
+} satisfies Record<'animals' | 'pens' | 'pen-types' | 'batches' | 'weights' | 'weight-targets' | 'movements' | 'status-history' | 'breeds' | 'color-markings', CatalogDefinition>;

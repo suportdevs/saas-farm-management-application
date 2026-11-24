@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { choice, decimal, optional, optionalDate, optionalRef, ref, required, requiredDate, status } from '../products/fields';
-import { ANIMAL_ORIGINS, ANIMAL_SEXES, ANIMAL_TYPES, BATCH_PURPOSES, BATCH_STATUSES, BREED_TYPES, HERD_STATUSES, MOVEMENT_REASONS, TARGET_WEIGHT_UNITS, WEIGH_METHODS } from './catalog';
+import { ANIMAL_ORIGINS, ANIMAL_SEXES, ANIMAL_TYPES, BATCH_PURPOSES, BATCH_STATUSES, BREED_TYPES, HERD_STATUSES, MOVEMENT_REASONS, TARGET_WEIGHT_UNITS, WEIGH_METHODS, WEIGH_TYPES } from './catalog';
 
 // Create / update bodies of the herd catalogs (the modal form and each import row).
 
@@ -58,10 +58,25 @@ export const animalSchema = z.object({
 
 export const weightSchema = z.object({
   animalKey: ref('Choose an animal'),
-  weighedOn: requiredDate('Date'),
+  weighDate: requiredDate('Weigh date'),
   weight: decimal(5_000, 'Weight'),
-  method: choice(WEIGH_METHODS, 'Method'),
+  weightUnit: choice(TARGET_WEIGHT_UNITS, 'Unit', { fallback: 'kg' }),
+  weighType: choice(WEIGH_TYPES, 'Weigh type', { fallback: 'routine' }),
+  bodyConditionScore: decimal(99),
+  hipHeight: decimal(9_999),
+  weighMethod: choice(WEIGH_METHODS, 'Weigh method'),
+  scaleId: optional(50),
+  batchKey: optionalRef,
   notes: optional(500),
+});
+
+/** An animal or a batch is required — checked by the API (the form shows the error on Animal). */
+export const weightTargetSchema = z.object({
+  animalKey: optionalRef,
+  batchKey: optionalRef,
+  targetWeight: decimal(5_000, 'Target weight'),
+  targetDate: requiredDate('Target date'),
+  targetAdg: decimal(999),
 });
 
 export const movementSchema = z.object({

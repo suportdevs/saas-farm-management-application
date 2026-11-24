@@ -24,6 +24,7 @@ export const CATALOG_RESOURCES = [
   'pen-types',
   'batches',
   'weights',
+  'weight-targets',
   'movements',
   'status-history',
   'breeds',
