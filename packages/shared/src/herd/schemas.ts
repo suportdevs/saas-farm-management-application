@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { choice, decimal, optional, optionalDate, optionalRef, ref, required, requiredDate, status } from '../products/fields';
-import { ANIMAL_ORIGINS, ANIMAL_SEXES, ANIMAL_TYPES, BATCH_PURPOSES, BATCH_STATUSES, BREED_TYPES, HERD_STATUSES, TARGET_WEIGHT_UNITS, WEIGH_METHODS } from './catalog';
+import { ANIMAL_ORIGINS, ANIMAL_SEXES, ANIMAL_TYPES, BATCH_PURPOSES, BATCH_STATUSES, BREED_TYPES, HERD_STATUSES, MOVEMENT_REASONS, TARGET_WEIGHT_UNITS, WEIGH_METHODS } from './catalog';
 
 // Create / update bodies of the herd catalogs (the modal form and each import row).
 
@@ -62,6 +62,23 @@ export const weightSchema = z.object({
   weight: decimal(5_000, 'Weight'),
   method: choice(WEIGH_METHODS, 'Method'),
   notes: optional(500),
+});
+
+export const movementSchema = z.object({
+  animalKey: ref('Choose an animal'),
+  movementDate: requiredDate('Date'),
+  fromPenKey: optionalRef,
+  toPenKey: ref('Choose the pen it moved to'),
+  reason: choice(MOVEMENT_REASONS, 'Reason'),
+  notes: optional(2000),
+});
+
+export const statusChangeSchema = z.object({
+  animalKey: ref('Choose an animal'),
+  changeDate: requiredDate('Date'),
+  previousStatus: choice(HERD_STATUSES, 'Previous status'),
+  newStatus: choice(HERD_STATUSES, 'New status', { required: true }),
+  reason: optional(2000),
 });
 
 export const breedSchema = z.object({

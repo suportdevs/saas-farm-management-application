@@ -356,6 +356,92 @@ describe('herd: weights', () => {
   });
 });
 
+describe('herd: movements', () => {
+  it('moves animals between pens, keeps each animal in its latest pen and fills the from-pen', async () => {
+    const { owner, base, post } = await setup();
+    const barnA = await post('/pens', { name: 'Barn A', code: 'BA' });
+    const barnB = await post('/pens', { name: 'Barn B', code: 'BB' });
+    const sick = await post('/pens', { name: 'Hospital', code: 'HO' });
+    const bella = await post('', { tag: 'MV-1', sex: 'female', penKey: barnA });
+    const penOf = async (key: string) => (await owner.c.get(base)).body.rows.find((r: { key: string }) => r.key === key).penName;
+
+    // "From pen" left empty = the pen the animal was in.
+    const first = await post('/movements', { animalKey: bella, movementDate: '2025-03-01', toPenKey: barnB, reason: 'Sorting' });
+    expect(await penOf(bella)).toBe('Barn B');
+    const list = await owner.c.get(`${base}/movements`);
+    expect(list.body.rows[0]).toMatchObject({ key: first, animalName: 'MV-1', fromPenName: 'Barn A', toPenName: 'Barn B', reason: 'sorting' });
+    // "Moved by" is whoever recorded it (created_by).
+    expect(list.body.rows[0].movedByName).toBeTruthy();
+
+    const second = await post('/movements', { animalKey: bella, movementDate: '2025-04-01', toPenKey: sick, reason: 'treatment' });
+    // An older movement entered later doesn't change the current pen.
+    await post('/movements', { animalKey: bella, movementDate: '2025-01-01', fromPenKey: barnB, toPenKey: barnA });
+    expect(await penOf(bella)).toBe('Hospital');
+    expect((await owner.c.get(`${base}/movements`)).body.rows.find((r: { key: string }) => r.key === second).fromPenName).toBe('Barn B');
+
+    // Filters by pen and date.
+    expect((await owner.c.get(`${base}/movements?to_pen=${sick}`)).body.rows).toHaveLength(1);
+    expect((await owner.c.get(`${base}/movements?movement_dateFrom=2025-02-01`)).body.rows).toHaveLength(2);
+
+    // Deleting the latest movement moves the animal back.
+    expect((await owner.c.delete(`${base}/movements/${second}`)).status).toBe(204);
+    expect(await penOf(bella)).toBe('Barn B');
+
+    // Validation: animal, date and destination pen are required.
+    const bad = await owner.c.post(`${base}/movements`, {});
+    expect(Object.keys(bad.body.error.details).sort()).toEqual(['animalKey', 'movementDate', 'toPenKey']);
+
+    // Imports match the animal by ear tag and pens by code.
+    const imported = await owner.c.post(`${base}/movements/import`, { rows: [{ animal: 'mv-1', movement_date: '2025-06-01', to_pen: 'HO', reason: 'Sale prep' }] });
+    expect(imported.status).toBe(201);
+    expect(await penOf(bella)).toBe('Hospital');
+
+    // A pen with movement history can't be deleted; deleting the animal takes its movements with it.
+    expect((await owner.c.delete(`${base}/pens/${barnA}`)).status).toBe(409);
+    expect((await owner.c.delete(`${base}/${bella}`)).status).toBe(204);
+    expect((await owner.c.get(`${base}/movements`)).body.rows).toHaveLength(0);
+  });
+
+  it('lets workers record movements but not delete them', async () => {
+    const { owner, farm, base, post } = await setup();
+    const pen = await post('/pens', { name: 'Barn' });
+    const cow = await post('', { tag: 'MW-1', sex: 'female' });
+    const worker = await inviteAndJoin(app, owner, farm.slug, 'worker');
+    const rec = await worker.c.post(`${base}/movements`, { animalKey: cow, movementDate: '2025-02-02', toPenKey: pen });
+    expect(rec.status).toBe(201);
+    expect((await worker.c.delete(`${base}/movements/${rec.body.key}`)).status).toBe(403);
+    expect((await worker.c.post(`${base}/status-history`, { animalKey: cow, changeDate: '2025-02-02', newStatus: 'sold' })).status).toBe(403);
+  });
+});
+
+describe('herd: status history', () => {
+  it('records status changes, keeps the animal on its latest status and fills the previous status', async () => {
+    const { owner, base, post } = await setup();
+    const cow = await post('', { tag: 'ST-1', sex: 'female' });
+    const statusOf = async (key: string) => (await owner.c.get(base)).body.rows.find((r: { key: string }) => r.key === key).herdStatus;
+
+    const sold = await post('/status-history', { animalKey: cow, changeDate: '2025-05-01', newStatus: 'Sold', reason: 'Market day' });
+    expect(await statusOf(cow)).toBe('sold');
+    const row = (await owner.c.get(`${base}/status-history`)).body.rows[0];
+    expect(row).toMatchObject({ key: sold, animalName: 'ST-1', previousStatus: 'in_herd', newStatus: 'sold', reason: 'Market day' });
+    expect(row.changedByName).toBeTruthy();
+
+    // Back in the herd, then deleting that change restores "sold".
+    const back = await post('/status-history', { animalKey: cow, changeDate: '2025-06-01', newStatus: 'in_herd' });
+    expect(await statusOf(cow)).toBe('in_herd');
+    expect((await owner.c.get(`${base}/status-history?new_status=in_herd`)).body.rows[0].previousStatus).toBe('sold');
+    expect((await owner.c.delete(`${base}/status-history/${back}`)).status).toBe(204);
+    expect(await statusOf(cow)).toBe('sold');
+
+    const bad = await owner.c.post(`${base}/status-history`, { newStatus: 'lost' });
+    expect(Object.keys(bad.body.error.details).sort()).toEqual(['animalKey', 'changeDate', 'newStatus']);
+
+    const imported = await owner.c.post(`${base}/status-history/import`, { rows: [{ animal: 'ST-1', change_date: '2025-07-01', new_status: 'Dead', reason: 'Illness' }] });
+    expect(imported.status).toBe(201);
+    expect(await statusOf(cow)).toBe('dead');
+  });
+});
+
 describe('herd: breeds', () => {
   it('lists built-in breeds next to the farm’s own; built-in ones are read-only', async () => {
     const { owner, farm, base, post } = await setup();

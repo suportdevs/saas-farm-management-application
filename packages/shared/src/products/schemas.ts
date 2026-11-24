@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { customerSchema, customerTypeSchema, supplierSchema, supplierTypeSchema } from '../distribution/schemas';
-import { animalSchema, batchSchema, breedSchema, colorMarkingSchema, penSchema, penTypeSchema, weightSchema } from '../herd/schemas';
+import { animalSchema, batchSchema, breedSchema, colorMarkingSchema, movementSchema, penSchema, penTypeSchema, statusChangeSchema, weightSchema } from '../herd/schemas';
 import {
   CATALOG_IMPORT_LIMIT,
   CATALOG_OPTIONS_LIMIT,
@@ -64,6 +64,8 @@ export const catalogSchemas = {
   'pen-types': penTypeSchema,
   batches: batchSchema,
   weights: weightSchema,
+  movements: movementSchema,
+  'status-history': statusChangeSchema,
   breeds: breedSchema,
   'color-markings': colorMarkingSchema,
   suppliers: supplierSchema,

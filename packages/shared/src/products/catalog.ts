@@ -24,6 +24,8 @@ export const CATALOG_RESOURCES = [
   'pen-types',
   'batches',
   'weights',
+  'movements',
+  'status-history',
   'breeds',
   'color-markings',
   // Distribution module

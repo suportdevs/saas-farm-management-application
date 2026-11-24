@@ -62,6 +62,15 @@ export const WEIGH_METHODS = [
   { value: 'estimate', label: 'Visual estimate' },
 ] as const satisfies readonly CatalogChoice[];
 
+/** Why an animal was moved to another pen. */
+export const MOVEMENT_REASONS = [
+  { value: 'routine', label: 'Routine' },
+  { value: 'treatment', label: 'Treatment' },
+  { value: 'sorting', label: 'Sorting' },
+  { value: 'sale_prep', label: 'Sale prep' },
+  { value: 'other', label: 'Other' },
+] as const satisfies readonly CatalogChoice[];
+
 export const BREED_TYPES = [
   { value: 'beef', label: 'Beef' },
   { value: 'dairy', label: 'Dairy' },
@@ -74,6 +83,7 @@ export type BatchPurpose = Values<typeof BATCH_PURPOSES>;
 export type BatchStatus = Values<typeof BATCH_STATUSES>;
 export type TargetWeightUnit = Values<typeof TARGET_WEIGHT_UNITS>;
 export type WeighMethod = Values<typeof WEIGH_METHODS>;
+export type MovementReason = Values<typeof MOVEMENT_REASONS>;
 export type AnimalSex = Values<typeof ANIMAL_SEXES>;
 export type AnimalType = Values<typeof ANIMAL_TYPES>;
 export type AnimalOrigin = Values<typeof ANIMAL_ORIGINS>;
@@ -211,6 +221,45 @@ export const HERD_CATALOG = {
     ],
     filters: ['animal', 'date', 'weight', 'method'],
   },
+  movements: {
+    module: 'herd',
+    path: 'herd/movements',
+    eyebrow: 'Herd',
+    titleKey: 'animalName',
+    label: 'Movement',
+    plural: 'Movements',
+    description: 'Animals moved between pens. The latest movement sets the animal’s current pen.',
+    columns: [
+      ref('animal', 'Animal', 'animals', 'BD-1024', { required: true }),
+      { key: 'movementDate', label: 'Date', csv: 'movement_date', input: 'date', required: true, defaultValue: 'today', example: '2025-06-01' },
+      { key: 'fromPenName', field: 'fromPenKey', label: 'From pen', csv: 'from_pen', ref: 'pens', example: 'Barn A', hint: 'Leave empty to use the animal’s current pen.' },
+      { key: 'toPenName', field: 'toPenKey', label: 'To pen', csv: 'to_pen', ref: 'pens', required: true, example: 'Barn B' },
+      select('reason', 'reason', 'Reason', MOVEMENT_REASONS, 'Routine'),
+      // Who recorded it (the created_by audit column), never typed in.
+      { key: 'movedByName', label: 'Moved by', csv: 'moved_by', readOnly: true, example: '' },
+      { key: 'notes', label: 'Notes', csv: 'notes', input: 'textarea', example: 'Moved for hoof treatment', list: false },
+    ],
+    filters: ['animal', 'movement_date', 'from_pen', 'to_pen', 'reason'],
+  },
+  'status-history': {
+    module: 'herd',
+    path: 'herd/status-history',
+    eyebrow: 'Herd',
+    titleKey: 'animalName',
+    label: 'Status change',
+    plural: 'Status history',
+    description: 'Changes of an animal’s herd status (in herd, sold, dead). The latest one sets the animal’s current status.',
+    columns: [
+      ref('animal', 'Animal', 'animals', 'BD-1024', { required: true }),
+      { key: 'changeDate', label: 'Date', csv: 'change_date', input: 'date', required: true, defaultValue: 'today', example: '2025-06-01' },
+      select('previousStatus', 'previous_status', 'Previous status', HERD_STATUSES, 'In herd', { hint: 'Leave empty to use the animal’s current status.' }),
+      select('newStatus', 'new_status', 'New status', HERD_STATUSES, 'Sold', { required: true }),
+      { key: 'reason', label: 'Reason', csv: 'reason', input: 'textarea', example: 'Sold at the Hat market' },
+      // Who recorded it (the created_by audit column), never typed in.
+      { key: 'changedByName', label: 'Changed by', csv: 'changed_by', readOnly: true, example: '' },
+    ],
+    filters: ['animal', 'change_date', 'previous_status', 'new_status'],
+  },
   breeds: {
     module: 'herd',
     path: 'herd/breeds',
@@ -241,4 +290,4 @@ export const HERD_CATALOG = {
     ],
     filters: [],
   },
-} satisfies Record<'animals' | 'pens' | 'pen-types' | 'batches' | 'weights' | 'breeds' | 'color-markings', CatalogDefinition>;
+} satisfies Record<'animals' | 'pens' | 'pen-types' | 'batches' | 'weights' | 'movements' | 'status-history' | 'breeds' | 'color-markings', CatalogDefinition>;

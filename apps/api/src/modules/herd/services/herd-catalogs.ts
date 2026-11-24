@@ -1,10 +1,11 @@
 import { and, count, desc, eq, isNull, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { db } from '../../../core';
+import { users } from '../../../db/schema';
 import { supplierCatalog, suppliers } from '../../distribution';
 import { Catalog } from '../../products';
 import { assertWithinLimit } from '../../subscriptions';
-import { animals, batches, breeds, colorMarkings, pens, penTypes, weights } from '../models';
+import { animalMovements, animals, animalStatusHistory, batches, breeds, colorMarkings, pens, penTypes, weights } from '../models';
 
 /** Animals still on the farm — what the plan's animal limit counts. */
 export async function countAnimals(farmId: string) {
@@ -85,6 +86,8 @@ export const penCatalog = new Catalog({
   usedBy: [
     { table: animals, column: animals.penId, label: 'animal' },
     { table: batches, column: batches.penId, label: 'batch', plural: 'batches' },
+    { table: animalMovements, column: animalMovements.toPenId, label: 'movement' },
+    { table: animalMovements, column: animalMovements.fromPenId, label: 'movement' },
   ],
 });
 
@@ -192,8 +195,12 @@ export const animalCatalog: Catalog = new Catalog({
     { table: animals, column: animals.motherId, label: 'offspring record' },
     { table: animals, column: animals.fatherId, label: 'offspring record' },
   ],
-  // An animal's weight records go with it.
-  cascade: [{ table: weights, column: weights.animalId }],
+  // An animal's weight records, movements and status changes go with it.
+  cascade: [
+    { table: weights, column: weights.animalId },
+    { table: animalMovements, column: animalMovements.animalId },
+    { table: animalStatusHistory, column: animalStatusHistory.animalId },
+  ],
   // The plan's animal limit (402 PLAN_LIMIT_REACHED).
   async beforeCreate(tenantId, adding) {
     await assertWithinLimit(tenantId, 'animals', await countAnimals(tenantId), adding);
@@ -242,4 +249,127 @@ export const weightCatalog = new Catalog({
     animalKey: { column: weights.animalId, catalog: animalCatalog, matchBy: animals.tag },
   },
   afterWrite: syncLatestWeights,
+});
+
+// ─── Movements ───────────────────────────────────────────────────
+
+/**
+ * After movements change:
+ * 1. an animal's latest movement saved without "From pen" gets the pen the
+ *    animal was in (its pen hasn't been updated yet at that point);
+ * 2. each animal's latest movement (by date, then entry order) becomes its pen.
+ */
+export async function syncAnimalPens(tenantId: string) {
+  const latest = sql`
+    select distinct on (animal_id) id, animal_id, to_pen_id
+    from ${animalMovements}
+    where tenant_id = ${tenantId} and deleted_at is null
+    order by animal_id, movement_date desc, id desc`;
+  await db.execute(sql`
+    update ${animalMovements} as m set from_pen_id = a.pen_id
+    from (${latest}) as l, ${animals} as a
+    where m.id = l.id and a.id = l.animal_id and m.from_pen_id is null and a.pen_id is distinct from l.to_pen_id
+  `);
+  await db.execute(sql`
+    update ${animals} as a set pen_id = l.to_pen_id
+    from (${latest}) as l
+    where a.id = l.animal_id and a.pen_id is distinct from l.to_pen_id
+  `);
+}
+
+const moved = alias(animals, 'moved');
+const fromPen = alias(pens, 'from_pen');
+const toPen = alias(pens, 'to_pen');
+const mover = alias(users, 'mover');
+
+export const movementCatalog = new Catalog({
+  resource: 'movements',
+  table: animalMovements,
+  fields: {
+    key: animalMovements.key,
+    animalKey: moved.key,
+    animalName: moved.tag,
+    movementDate: animalMovements.movementDate,
+    fromPenKey: fromPen.key,
+    fromPenName: fromPen.name,
+    toPenKey: toPen.key,
+    toPenName: toPen.name,
+    reason: animalMovements.reason,
+    movedByName: mover.name,
+    notes: animalMovements.notes,
+  },
+  joins: [
+    { table: moved, on: eq(moved.id, animalMovements.animalId) },
+    { table: fromPen, on: eq(fromPen.id, animalMovements.fromPenId), left: true },
+    { table: toPen, on: eq(toPen.id, animalMovements.toPenId) },
+    { table: mover, on: eq(mover.id, animalMovements.createdBy), left: true },
+  ],
+  search: [animalMovements.notes],
+  // Movements have no name: newest first.
+  title: sql<string>`${animalMovements.movementDate}::text`,
+  orderBy: desc(animalMovements.movementDate),
+  unique: [],
+  references: {
+    // Imports match the animal by ear tag and the pens by code.
+    animalKey: { column: animalMovements.animalId, catalog: animalCatalog, matchBy: animals.tag },
+    fromPenKey: { column: animalMovements.fromPenId, catalog: penCatalog, matchBy: pens.code },
+    toPenKey: { column: animalMovements.toPenId, catalog: penCatalog, matchBy: pens.code },
+  },
+  afterWrite: syncAnimalPens,
+});
+
+// ─── Status history ──────────────────────────────────────────────
+
+/**
+ * After status changes change:
+ * 1. an animal's latest change saved without "Previous status" gets the
+ *    animal's status at that point;
+ * 2. each animal's latest change (by date, then entry order) becomes its herd status.
+ */
+export async function syncAnimalStatuses(tenantId: string) {
+  const latest = sql`
+    select distinct on (animal_id) id, animal_id, new_status
+    from ${animalStatusHistory}
+    where tenant_id = ${tenantId} and deleted_at is null
+    order by animal_id, change_date desc, id desc`;
+  await db.execute(sql`
+    update ${animalStatusHistory} as h set previous_status = a.herd_status
+    from (${latest}) as l, ${animals} as a
+    where h.id = l.id and a.id = l.animal_id and h.previous_status is null and a.herd_status is distinct from l.new_status
+  `);
+  await db.execute(sql`
+    update ${animals} as a set herd_status = l.new_status
+    from (${latest}) as l
+    where a.id = l.animal_id and a.herd_status is distinct from l.new_status
+  `);
+}
+
+const changedAnimal = alias(animals, 'changed_animal');
+const changer = alias(users, 'changer');
+
+export const statusHistoryCatalog = new Catalog({
+  resource: 'status-history',
+  table: animalStatusHistory,
+  fields: {
+    key: animalStatusHistory.key,
+    animalKey: changedAnimal.key,
+    animalName: changedAnimal.tag,
+    changeDate: animalStatusHistory.changeDate,
+    previousStatus: animalStatusHistory.previousStatus,
+    newStatus: animalStatusHistory.newStatus,
+    reason: animalStatusHistory.reason,
+    changedByName: changer.name,
+  },
+  joins: [
+    { table: changedAnimal, on: eq(changedAnimal.id, animalStatusHistory.animalId) },
+    { table: changer, on: eq(changer.id, animalStatusHistory.createdBy), left: true },
+  ],
+  search: [animalStatusHistory.reason],
+  title: sql<string>`${animalStatusHistory.changeDate}::text`,
+  orderBy: desc(animalStatusHistory.changeDate),
+  unique: [],
+  references: {
+    animalKey: { column: animalStatusHistory.animalId, catalog: animalCatalog, matchBy: animals.tag },
+  },
+  afterWrite: syncAnimalStatuses,
 });
