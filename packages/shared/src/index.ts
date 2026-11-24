@@ -12,3 +12,4 @@ export * from './platform';
 export * from './products';
 export * from './herd';
 export * from './distribution';
+export * from './purchases';

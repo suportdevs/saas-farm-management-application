@@ -7,10 +7,12 @@ import {
   catalogImportSchema,
   catalogListSchema,
   catalogOptionsSchema,
+  CATALOG_OPTION_READERS,
   catalogPath,
   catalogPermission,
   permissionsWithAction,
   type CatalogAction,
+  type Permission,
   type CatalogResource,
   catalogSchemas,
   hasStatus,
@@ -48,6 +50,8 @@ function permissionsFor(resource: CatalogResource) {
       ...permissionsWithAction(CATALOG[resource].module, 'create'),
       ...permissionsWithAction(CATALOG[resource].module, 'edit'),
       ...referrersOf(resource).flatMap((r) => [catalogPermission(r, 'create'), catalogPermission(r, 'edit')]),
+      // …or a screen outside the engine that picks from it (a purchase's supplier).
+      ...((CATALOG_OPTION_READERS[resource] ?? []) as Permission[]),
     ]),
   };
 }

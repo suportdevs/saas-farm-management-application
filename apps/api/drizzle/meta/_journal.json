@@ -176,6 +176,13 @@
       "when": 1795515289432,
       "tag": "0024_weights_drop_old_table",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1795517502298,
+      "tag": "0025_purchases",
+      "breakpoints": true
     }
   ]
 }

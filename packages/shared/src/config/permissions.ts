@@ -102,6 +102,18 @@ export const PERMISSION_CONFIG = {
     },
   },
 
+  purchase: {
+    label: 'Purchase',
+    operations: { purchase: 'Purchase' },
+    permissions: {
+      purchase_list: 'Purchase List',
+      purchase_create: 'Purchase Create',
+      purchase_edit: 'Purchase Edit',
+      purchase_delete: 'Purchase Delete',
+      purchase_export: 'Purchase Export',
+    },
+  },
+
   finance: { label: 'Finance', permissions: { ...CRUD, export: 'Export' } },
   reports: { label: 'Reports', permissions: { view: 'View', export: 'Export' } },
 
@@ -116,6 +128,15 @@ export const PERMISSION_CONFIG = {
   //   },
   // },
 } as const satisfies Record<string, PermissionModuleConfig>;
+
+/**
+ * Screens outside the catalog engine that pick from a catalog: these keys may
+ * also load its select choices (a purchase's supplier, broker and batch).
+ */
+export const CATALOG_OPTION_READERS: Partial<Record<CatalogResource, readonly string[]>> = {
+  suppliers: ['purchase.purchase_create', 'purchase.purchase_edit'],
+  batches: ['purchase.purchase_create', 'purchase.purchase_edit'],
+};
 
 /** The catalog screens and the `<module>.<operation>` prefix of their permission keys. */
 export const CATALOG_OPERATIONS: Record<CatalogResource, string> = {

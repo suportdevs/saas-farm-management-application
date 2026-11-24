@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   Milk,
   Package,
+  ShoppingCart,
   Settings,
   ShieldCheck,
   Stethoscope,
@@ -45,6 +46,8 @@ export interface FarmModule {
   highlights: string[];
   /** Sub-pages shown nested under the module in the sidebar (slugs under /farms/[farm]/). */
   children?: { slug: string; label: string; permission?: Permission }[];
+  /** The permission module behind it when its slug differs (slug "purchases" → module "purchase"). */
+  permissionModule?: PermissionModule;
 }
 
 /** Sidebar sub-pages of a module: its catalogs (products → Products, Categories…; herd → Animals, Pens). */
@@ -136,6 +139,15 @@ export const BUSINESS_MODULES: FarmModule[] = [
     highlights: ['Suppliers and customers with contacts', 'Bank details and tax IDs', 'Supplier and customer types', 'Customer breed and weight preferences', 'CSV import, export and print'],
   },
   {
+    slug: 'purchases',
+    label: 'Purchases',
+    icon: ShoppingCart,
+    status: 'live',
+    permissionModule: 'purchase',
+    summary: 'Animals bought at a haat, from farmers or suppliers, or imported — with transport, broker and toll costs split per animal.',
+    highlights: ['One purchase per trip or invoice', 'Each animal added to the herd', 'Shared costs split by price', 'Landed cost per animal', 'Download and print'],
+  },
+  {
     slug: 'finance',
     label: 'Finance',
     icon: Wallet,
@@ -184,13 +196,15 @@ const viewKeys = (m: PermissionModule) => [...permissionsWithAction(m, 'view'), 
 
 export function farmNav(slug: string): NavSection[] {
   const base = `/farms/${slug}`;
+  /** The module whose keys guard a link: its own slug, or the one it names. */
+  const moduleOf = (m: FarmModule) => m.permissionModule ?? (m.slug in PERMISSION_MODULES ? (m.slug as PermissionModule) : undefined);
   const toLink = (m: FarmModule): NavLink => ({
     href: `${base}/${m.slug}`,
     label: m.label,
     icon: m.icon,
     // Modules with permission keys need a view or list key, e.g. herd.view or any products.*_list.
-    permission: m.slug in PERMISSION_MODULES ? viewKeys(m.slug as PermissionModule) : undefined,
-    module: m.slug in PERMISSION_MODULES ? (m.slug as PermissionModule) : undefined,
+    permission: moduleOf(m) ? viewKeys(moduleOf(m)!) : undefined,
+    module: moduleOf(m),
     soon: m.status === 'soon',
     children: m.children?.map((c) => ({ href: `${base}/${c.slug}`, label: c.label, permission: c.permission })),
   });
@@ -249,6 +263,9 @@ export const ACTIVITY_LABELS: Record<string, string> = {
   'distribution.deleted': 'deleted from distribution',
   'distribution.imported': 'imported into distribution',
   'distribution.status_changed': 'changed status in distribution',
+  'purchase.created': 'recorded a purchase',
+  'purchase.updated': 'updated a purchase',
+  'purchase.deleted': 'deleted a purchase',
   'admin.farm.plan_changed': 'changed the plan (support)',
   'admin.farm.trial_extended': 'extended the trial (support)',
   'admin.farm.suspended': 'suspended the farm (support)',
