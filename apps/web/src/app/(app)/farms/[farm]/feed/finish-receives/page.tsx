@@ -5,6 +5,7 @@ import { PackageCheck, Plus, Search } from 'lucide-react';
 import { FINISH_RECEIVE_STATUS, finishReceiveStatusLabel } from '@kit/shared';
 import { CriteriaBar, exportCriteria, urlCriteria } from '@/components/app/criteria-bar';
 import { FilterToggle } from '@/components/app/filter-toggle';
+import { ModuleLocked } from '@/components/app/module-locked';
 import { PageHeader } from '@/components/app/page-header';
 import { PageSizeSelect } from '@/components/app/page-size-select';
 import { Pagination } from '@/components/app/pagination';
@@ -28,6 +29,8 @@ type Search = { q?: string; status?: string; from?: string; to?: string; page?: 
 export default async function FinishReceivesPage({ params, searchParams }: { params: Promise<{ farm: string }>; searchParams: Promise<Search> }) {
   const [{ farm: slug }, query] = await Promise.all([params, searchParams]);
   const ctx = await getFarmContext(slug);
+  // Not in the plan or switched off: explain instead of a 404.
+  if (ctx.modules.feed !== 'enabled') return <ModuleLocked ctx={ctx} module="feed" />;
   const can = (p: string) => ctx.membership.permissions.includes(p as never);
   if (!can('feed.finish_receive_list')) notFound();
 

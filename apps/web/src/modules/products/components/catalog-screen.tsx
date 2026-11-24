@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
-import { catalogPermission, type CatalogResource } from '@kit/shared';
+import { ModuleLocked } from '@/components/app/module-locked';
+import { CATALOG, catalogPermission, type CatalogResource } from '@kit/shared';
 import { resolvePageSize } from '@/lib/page-size';
 import { getFarmContext } from '@/modules/farms/server';
 import { getCatalogPage } from '../server';
@@ -18,6 +19,8 @@ export async function CatalogScreen({
   searchParams: CatalogSearchParams;
 }) {
   const ctx = await getFarmContext(farm);
+  // The module isn't in the plan or is switched off: explain instead of a 404.
+  if (ctx.modules[CATALOG[resource].module] !== 'enabled') return <ModuleLocked ctx={ctx} module={CATALOG[resource].module} />;
   if (!ctx.membership.permissions.includes(catalogPermission(resource, 'list'))) notFound();
   const query: Record<string, string> = {};
   for (const [k, v] of Object.entries(searchParams))
