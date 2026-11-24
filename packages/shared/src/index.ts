@@ -13,3 +13,5 @@ export * from './products';
 export * from './herd';
 export * from './distribution';
 export * from './purchases';
+export * from './hr';
+export * from './feed';

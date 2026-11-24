@@ -190,6 +190,13 @@
       "when": 1795520839488,
       "tag": "0026_warehouses",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1795522682778,
+      "tag": "0027_hr_feed_finish_receive",
+      "breakpoints": true
     }
   ]
 }

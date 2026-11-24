@@ -347,7 +347,7 @@ describe('farm custom roles', () => {
     // …nor create one, even with roles.manage.
     await owner.c.put(`${base}/members/${manager.id}/permissions`, { overrides: { 'roles.manage': true } });
     expect((await manager.c.post(`${base}/roles`, { name: 'Sneaky', permissions: ['billing.manage'] })).status).toBe(403);
-    const ok = await manager.c.post(`${base}/roles`, { name: 'Feeder', permissions: ['feed.view', 'feed.create'] });
+    const ok = await manager.c.post(`${base}/roles`, { name: 'Feeder', permissions: ['feed.finish_receive_list', 'feed.finish_receive_create'] });
     expect(ok.status).toBe(201);
     expect((await manager.c.patch(`${base}/members/${worker.id}`, { customRoleId: ok.body.role.id })).status).toBe(204);
     expect((await manager.c.patch(`${base}/members/${worker.id}`, { role: 'worker', customRoleId: ok.body.role.id })).body.error.code).toBe('ROLE_CONFLICT');

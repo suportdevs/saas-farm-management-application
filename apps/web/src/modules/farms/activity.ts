@@ -20,6 +20,7 @@ export function activityDetail(e: FarmActivityEntry, plans: PublicPlan[]): strin
     const what = typeof m.name === 'string' ? m.name : `${m.count} ${m.count === 1 ? 'row' : 'rows'}`;
     return `${CATALOG[m.resource].label} · ${what}`;
   }
+  if (e.action.startsWith('feed.') && typeof m.name === 'string') return typeof m.count === 'number' ? `${m.name} · ${m.count} ${m.count === 1 ? 'line' : 'lines'}` : m.name;
   if (e.action.startsWith('purchase.') && typeof m.name === 'string') return typeof m.count === 'number' ? `${m.name} · ${m.count} ${m.count === 1 ? 'animal' : 'animals'}` : m.name;
   return null;
 }

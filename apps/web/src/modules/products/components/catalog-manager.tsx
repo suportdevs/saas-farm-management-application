@@ -10,6 +10,7 @@ import {
   Package,
   Truck,
   PawPrint,
+  IdCard,
   Pencil,
   Plus,
   RefreshCw,
@@ -64,7 +65,7 @@ type Modal =
 type Busy = 'delete' | 'status' | null;
 
 /** Empty-state icon per module. */
-const MODULE_ICONS = { products: Package, herd: PawPrint, distribution: Truck };
+const MODULE_ICONS = { products: Package, herd: PawPrint, distribution: Truck, hr: IdCard };
 
 const toQueryString = (params: Record<string, string>) => {
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v));

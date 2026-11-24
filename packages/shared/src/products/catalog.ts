@@ -8,6 +8,7 @@
  */
 
 import { DISTRIBUTION_CATALOG } from '../distribution/catalog';
+import { HR_CATALOG } from '../hr/catalog';
 import { HERD_CATALOG } from '../herd/catalog';
 
 export const CATALOG_RESOURCES = [
@@ -35,6 +36,9 @@ export const CATALOG_RESOURCES = [
   'supplier-types',
   'customers',
   'customer-types',
+  // HR module
+  'designations',
+  'employees',
 ] as const;
 export type CatalogResource = (typeof CATALOG_RESOURCES)[number];
 
@@ -81,7 +85,7 @@ export interface CatalogColumn {
 
 export interface CatalogDefinition {
   /** The permission module it belongs to: its keys are `<module>.<operation>_<action>`. */
-  module: 'products' | 'herd' | 'distribution';
+  module: 'products' | 'herd' | 'distribution' | 'hr';
   /** URL path under /farms/:farm — the same for the API and the web app. */
   path: string;
   /** Small heading above the page title, e.g. "Product catalog". */
@@ -265,7 +269,7 @@ const PRODUCT_CATALOG = {
 } satisfies Record<string, CatalogDefinition>;
 
 /** Every catalog, by resource: products here, the herd's in herd/catalog.ts. */
-export const CATALOG: Record<CatalogResource, CatalogDefinition> = { ...PRODUCT_CATALOG, ...HERD_CATALOG, ...DISTRIBUTION_CATALOG };
+export const CATALOG: Record<CatalogResource, CatalogDefinition> = { ...PRODUCT_CATALOG, ...HERD_CATALOG, ...DISTRIBUTION_CATALOG, ...HR_CATALOG };
 
 
 export const isCatalogResource = (v: unknown): v is CatalogResource =>

@@ -103,7 +103,8 @@ export const isOwnerOnly = (p: Permission) => OWNER_ONLY_PERMISSIONS.includes(p)
 /** What every role sees: the team and the operational records. */
 const BASE: Permission[] = [
   'members.view',
-  ...(['milk', 'health', 'breeding', 'feed'] as const).map((m) => `${m}.view` as Permission),
+  ...(['milk', 'health', 'breeding'] as const).map((m) => `${m}.view` as Permission),
+  ...permissionsWithAction('feed', 'list'),
   ...permissionsWithAction('herd', 'list'),
   ...permissionsWithAction('products', 'list'),
   ...permissionsWithAction('products', 'export'),
@@ -118,7 +119,7 @@ export const ROLE_PERMISSIONS: Record<FarmRole, readonly Permission[]> = {
   veterinarian: ordered([...BASE, 'herd.animal_create', 'herd.animal_edit', 'herd.weight_create', 'herd.weight_edit', 'herd.movement_create', 'herd.movement_edit', 'herd.status_change_create', 'herd.status_change_edit', ...modulePermissions('health'), ...modulePermissions('breeding'), 'reports.view']),
   // Accountants handle buying and selling, so they manage suppliers and customers too.
   accountant: ordered([...BASE, 'billing.view', ...modulePermissions('distribution'), ...modulePermissions('purchase'), ...modulePermissions('finance'), ...modulePermissions('reports')]),
-  worker: ordered([...BASE, 'herd.animal_create', 'herd.animal_edit', 'herd.weight_create', 'herd.weight_edit', 'herd.movement_create', 'herd.movement_edit', 'milk.create', 'milk.update', 'feed.create', 'feed.update']),
+  worker: ordered([...BASE, 'herd.animal_create', 'herd.animal_edit', 'herd.weight_create', 'herd.weight_edit', 'herd.movement_create', 'herd.movement_edit', 'milk.create', 'milk.update', 'feed.finish_receive_create', 'feed.finish_receive_edit']),
   viewer: ordered(BASE),
 };
 

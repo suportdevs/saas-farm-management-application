@@ -68,7 +68,18 @@ export const PERMISSION_CONFIG = {
   milk: { label: 'Milk', permissions: CRUD },
   health: { label: 'Health', permissions: CRUD },
   breeding: { label: 'Breeding', permissions: CRUD },
-  feed: { label: 'Feed', permissions: CRUD },
+  feed: {
+    label: 'Feed',
+    operations: { finish_receive: 'Finish receive' },
+    permissions: {
+      finish_receive_list: 'Finish Receive List',
+      finish_receive_create: 'Finish Receive Create',
+      finish_receive_edit: 'Finish Receive Edit',
+      finish_receive_delete: 'Finish Receive Delete',
+      finish_receive_process: 'Finish Receive Process',
+      finish_receive_export: 'Finish Receive Export',
+    },
+  },
 
   products: {
     label: 'Products',
@@ -115,6 +126,15 @@ export const PERMISSION_CONFIG = {
     },
   },
 
+  hr: {
+    label: 'HR',
+    operations: { designation: 'Designation', employee: 'Employee' },
+    permissions: {
+      ...catalogActions('designation', 'Designation'),
+      ...catalogActions('employee', 'Employee'),
+    },
+  },
+
   finance: { label: 'Finance', permissions: { ...CRUD, export: 'Export' } },
   reports: { label: 'Reports', permissions: { view: 'View', export: 'Export' } },
 
@@ -137,6 +157,9 @@ export const PERMISSION_CONFIG = {
 export const CATALOG_OPTION_READERS: Partial<Record<CatalogResource, readonly string[]>> = {
   suppliers: ['purchase.purchase_create', 'purchase.purchase_edit'],
   batches: ['purchase.purchase_create', 'purchase.purchase_edit'],
+  warehouses: ['feed.finish_receive_create', 'feed.finish_receive_edit'],
+  employees: ['feed.finish_receive_create', 'feed.finish_receive_edit'],
+  'product-sizes': ['feed.finish_receive_create', 'feed.finish_receive_edit'],
 };
 
 /** The catalog screens and the `<module>.<operation>` prefix of their permission keys. */
@@ -163,4 +186,6 @@ export const CATALOG_OPERATIONS: Record<CatalogResource, string> = {
   'supplier-types': 'distribution.supplier_type',
   customers: 'distribution.customer',
   'customer-types': 'distribution.customer_type',
+  designations: 'hr.designation',
+  employees: 'hr.employee',
 };
