@@ -48,7 +48,7 @@ export const PERMISSION_CONFIG = {
 
   herd: {
     label: 'Herd',
-    operations: { animal: 'Animal', pen: 'Pen', pen_type: 'Pen type', batch: 'Batch', weight: 'Weight', weight_target: 'Weight target', movement: 'Movement', status_change: 'Status change', breed: 'Breed', color_marking: 'Color marking' },
+    operations: { animal: 'Animal', pen: 'Pen', pen_type: 'Pen type', batch: 'Batch', weight: 'Weight', weight_target: 'Weight target', movement: 'Movement', status_change: 'Status change', breed: 'Breed', color_marking: 'Color marking', warehouse: 'Warehouse' },
     permissions: {
       ...catalogActions('animal', 'Animal'),
       ...catalogActions('pen', 'Pen'),
@@ -60,6 +60,7 @@ export const PERMISSION_CONFIG = {
       ...catalogActions('status_change', 'Status Change'),
       ...catalogActions('breed', 'Breed'),
       ...catalogActions('color_marking', 'Color Marking'),
+      ...catalogActions('warehouse', 'Warehouse'),
     },
   },
 
@@ -157,6 +158,7 @@ export const CATALOG_OPERATIONS: Record<CatalogResource, string> = {
   'status-history': 'herd.status_change',
   breeds: 'herd.breed',
   'color-markings': 'herd.color_marking',
+  warehouses: 'herd.warehouse',
   suppliers: 'distribution.supplier',
   'supplier-types': 'distribution.supplier_type',
   customers: 'distribution.customer',

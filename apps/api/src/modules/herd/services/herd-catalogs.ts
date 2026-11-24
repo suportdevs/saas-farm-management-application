@@ -5,7 +5,7 @@ import { users } from '../../../db/schema';
 import { supplierCatalog, suppliers } from '../../distribution';
 import { Catalog } from '../../products';
 import { assertWithinLimit } from '../../subscriptions';
-import { animalMovements, animals, animalStatusHistory, batches, breeds, colorMarkings, pens, penTypes, weightRecords, weightTargets } from '../models';
+import { animalMovements, animals, animalStatusHistory, batches, breeds, colorMarkings, pens, penTypes, warehouses, weightRecords, weightTargets } from '../models';
 
 /** Animals still on the farm — what the plan's animal limit counts. */
 export async function countAnimals(farmId: string) {
@@ -45,6 +45,18 @@ export const colorMarkingCatalog = new Catalog({
   },
   search: [colorMarkings.name],
   unique: [{ index: 'color_markings_color_name_uq', column: colorMarkings.name, field: 'name' }],
+});
+
+export const warehouseCatalog = new Catalog({
+  resource: 'warehouses',
+  table: warehouses,
+  fields: {
+    key: warehouses.key,
+    name: warehouses.name,
+    description: warehouses.description,
+  },
+  search: [warehouses.name, warehouses.description],
+  unique: [{ index: 'warehouses_name_uq', column: warehouses.name, field: 'name' }],
 });
 
 export const penTypeCatalog = new Catalog({

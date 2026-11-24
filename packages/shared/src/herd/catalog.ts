@@ -341,4 +341,17 @@ export const HERD_CATALOG = {
     ],
     filters: [],
   },
-} satisfies Record<'animals' | 'pens' | 'pen-types' | 'batches' | 'weights' | 'weight-targets' | 'movements' | 'status-history' | 'breeds' | 'color-markings', CatalogDefinition>;
+  warehouses: {
+    module: 'herd',
+    path: 'herd/warehouses',
+    eyebrow: 'Herd',
+    label: 'Warehouse',
+    plural: 'Warehouses',
+    description: 'Stores and warehouses of the farm, e.g. Feed store, Medicine store, Equipment shed.',
+    columns: [
+      { key: 'name', label: 'Name', csv: 'name', required: true, example: 'Feed store' },
+      { key: 'description', label: 'Description', csv: 'description', input: 'textarea', example: 'Concentrates and silage, north yard' },
+    ],
+    filters: [],
+  },
+} satisfies Record<'animals' | 'pens' | 'pen-types' | 'batches' | 'weights' | 'weight-targets' | 'movements' | 'status-history' | 'breeds' | 'color-markings' | 'warehouses', CatalogDefinition>;

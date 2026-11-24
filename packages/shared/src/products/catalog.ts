@@ -29,6 +29,7 @@ export const CATALOG_RESOURCES = [
   'status-history',
   'breeds',
   'color-markings',
+  'warehouses',
   // Distribution module
   'suppliers',
   'supplier-types',

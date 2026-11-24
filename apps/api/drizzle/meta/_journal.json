@@ -183,6 +183,13 @@
       "when": 1795517502298,
       "tag": "0025_purchases",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1795520839488,
+      "tag": "0026_warehouses",
+      "breakpoints": true
     }
   ]
 }

@@ -105,6 +105,11 @@ export const breedSchema = z.object({
   description: optional(500),
 });
 
+export const warehouseSchema = z.object({
+  name: required('Name', 100),
+  description: optional(1000),
+});
+
 export const colorMarkingSchema = z.object({
   name: required('Color name', 50),
   description: optional(500),

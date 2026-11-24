@@ -9,3 +9,4 @@ export * from './animal-movement.model';
 export * from './animal-status-history.model';
 export * from './breed.model';
 export * from './color-marking.model';
+export * from './warehouse.model';

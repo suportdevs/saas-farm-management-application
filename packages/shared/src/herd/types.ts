@@ -125,6 +125,12 @@ export interface BreedRow {
   isSystem: boolean;
 }
 
+export interface WarehouseRow {
+  key: string;
+  name: string;
+  description: string | null;
+}
+
 export interface ColorMarkingRow {
   key: string;
   name: string;

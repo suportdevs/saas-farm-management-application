@@ -533,6 +533,25 @@ describe('herd: breeds', () => {
   });
 });
 
+describe('herd: warehouses', () => {
+  it('creates, lists, searches, updates, imports and deletes warehouses', async () => {
+    const { owner, base, post } = await setup();
+    const feed = await post('/warehouses', { name: 'Feed store', description: 'North yard' });
+    await post('/warehouses', { name: 'Medicine store' });
+    const names = async (q = '') => (await owner.c.get(`${base}/warehouses${q}`)).body.rows.map((r: { name: string }) => r.name);
+    expect(await names()).toEqual(['Feed store', 'Medicine store']);
+    // Names are unique per farm (any case) and required.
+    expect((await owner.c.post(`${base}/warehouses`, { name: 'feed STORE' })).body.error.details.name).toBeDefined();
+    expect((await owner.c.post(`${base}/warehouses`, { description: 'x' })).body.error.details.name).toEqual(['Name is required']);
+    expect((await owner.c.put(`${base}/warehouses/${feed}`, { name: 'Feed & silage store', description: '' })).status).toBe(200);
+    const imported = await owner.c.post(`${base}/warehouses/import`, { rows: [{ name: 'Equipment shed', description: 'Tractors' }] });
+    expect(imported.body.imported).toBe(1);
+    expect(await names('?q=store')).toEqual(['Feed & silage store', 'Medicine store']);
+    expect((await owner.c.delete(`${base}/warehouses/${feed}`)).status).toBe(204);
+    expect(await names()).toEqual(['Equipment shed', 'Medicine store']);
+  });
+});
+
 describe('herd: color markings', () => {
   it('creates, lists, updates, imports and deletes color markings', async () => {
     const { owner, base, post } = await setup();

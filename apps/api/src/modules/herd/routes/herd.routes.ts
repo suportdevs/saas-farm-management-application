@@ -9,6 +9,7 @@ import {
   penCatalog,
   penTypeCatalog,
   statusHistoryCatalog,
+  warehouseCatalog,
   weightCatalog,
   weightTargetCatalog,
 } from '../services/herd-catalogs';
@@ -26,6 +27,7 @@ import {
  *   /api/farms/:farm/herd/status-history  herd status changes
  *   /api/farms/:farm/herd/breeds    breeds (built-in ones read-only)
  *   /api/farms/:farm/herd/color-markings  color markings
+ *   /api/farms/:farm/herd/warehouses  warehouses
  *   /api/farms/:farm/herd           animals (with photo upload)
  *
  * Sub-paths first, so /herd/pens isn't taken for an animal key.
@@ -41,4 +43,5 @@ router.use('/:farm/herd/movements', catalogRouter(movementCatalog));
 router.use('/:farm/herd/status-history', catalogRouter(statusHistoryCatalog));
 router.use('/:farm/herd/breeds', catalogRouter(breedCatalog));
 router.use('/:farm/herd/color-markings', catalogRouter(colorMarkingCatalog));
+router.use('/:farm/herd/warehouses', catalogRouter(warehouseCatalog));
 router.use('/:farm/herd', catalogRouter(animalCatalog));
