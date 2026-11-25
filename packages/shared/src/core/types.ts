@@ -17,6 +17,8 @@ export interface PublicUser {
   staffRole?: string | null;
   staffRoleName?: string | null;
   platformPermissions?: PlatformPermission[];
+  /** The developer / software-owner account: full access everywhere. */
+  isDeveloper?: boolean;
   emailVerified: boolean;
   hasPassword: boolean;
   createdAt: string;

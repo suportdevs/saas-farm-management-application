@@ -9,7 +9,7 @@ import {
   type PlanLimits,
   type SubscriptionSnapshot,
 } from '@kit/shared';
-import { AppError, db, notDeleted } from '../../../core';
+import { AppError, currentRequest, db, isDeveloper, notDeleted } from '../../../core';
 import { farmSubscriptions, type FarmSubscriptionRow } from '../models';
 import { getPlan, planExists, trialPlan } from './plan.service';
 
@@ -118,6 +118,8 @@ const LIMIT_LABELS: Record<keyof PlanLimits, string> = { animals: 'animals', mem
  *   await assertWithinLimit(farm.id, 'animals', currentCount);
  */
 export async function assertWithinLimit(farmId: string, resource: keyof PlanLimits, current: number, adding = 1) {
+  // The developer account isn't held to plan limits.
+  if (isDeveloper(currentRequest()?.auth?.user)) return;
   const { plan, limits } = entitlementsOf(await findSubscription(farmId));
   const max = limits[resource];
   if (max !== null && current + adding > max) {

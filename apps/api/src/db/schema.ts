@@ -72,6 +72,12 @@ export const users = pgTable(
     emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
     // Suspended accounts cannot sign in and all their sessions are revoked.
     bannedAt: timestamp('banned_at', { withTimezone: true }),
+    /**
+     * Developer / software owner: owner of every farm with every permission, no plan
+     * limits, full platform access, and other admins can't change the account.
+     * Set only in the database (see README → Developer account), never from the app.
+     */
+    isDeveloper: boolean('is_developer').notNull().default(false),
     bannedReason: varchar('banned_reason', { length: 500 }),
     lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
     ...auditColumns(),

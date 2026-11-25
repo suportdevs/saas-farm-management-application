@@ -22,17 +22,17 @@ export async function create(req: Request, res: Response) {
 
 /** GET /:farm — the farm workspace context. */
 export async function show(_req: Request, res: Response) {
-  const { farm, member, orgRole } = getFarm(res);
-  res.json(await farms.contextOf(farm, member, orgRole));
+  const { farm, member, orgRole, developer } = getFarm(res);
+  res.json(await farms.contextOf(farm, member, orgRole, developer));
 }
 
 /** PATCH /:farm */
 export async function update(req: Request, res: Response) {
-  const { farm, member, orgRole } = getFarm(res);
+  const { farm, member, orgRole, developer } = getFarm(res);
   const patch = req.body as UpdateFarmData;
   const updated = await farms.updateFarm(farm, patch);
   await audit(req, { action: 'farm.updated', ...farmEvent(farm.id), metadata: { fields: Object.keys(patch) } });
-  res.json(await farms.contextOf(updated, member, orgRole));
+  res.json(await farms.contextOf(updated, member, orgRole, developer));
 }
 
 /** DELETE /:farm — the user retypes the farm name to confirm. */

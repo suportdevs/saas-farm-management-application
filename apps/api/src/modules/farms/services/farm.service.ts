@@ -1,9 +1,11 @@
 import { and, asc, count, eq, inArray, isNotNull, or, sql } from 'drizzle-orm';
 import {
+  CAPABILITIES,
   cleanOverrides,
   FARM_ROLES,
   gatePermissions,
   moduleStatuses,
+  PERMISSIONS,
   resolvePermissions,
   rolePermissions,
   TOGGLEABLE_MODULES,
@@ -20,7 +22,7 @@ import { config } from '../config';
 import { farmCustomRoles, farmInvitations, farmMembers, farmRolePermissions, farms, organizationMembers, organizations, type Farm, type FarmMemberRow } from '../models';
 import { farmExtensions } from './farm.extensions';
 import { inviteOwner, seatCount } from './invitation.service';
-import { addMember, effectiveMember } from './member.service';
+import { addMember, DEVELOPER_GATE, effectiveMember } from './member.service';
 import { createClientOrganization, findOrganization, organizationForNewFarm } from './organization.service';
 import { gateOf, roleOverridesOf } from './permission.service';
 import { customRoleRef, listCustomRoles } from './role.service';
@@ -86,12 +88,14 @@ export async function contextOf(
   farm: Farm,
   member: Pick<FarmMemberRow, 'role' | 'title' | 'permissionOverrides' | 'customRoleId'>,
   orgRole: OrgRole | null,
+  /** The developer account: every module, feature and permission on. */
+  developer = false,
 ): Promise<FarmContext> {
   const [usage, extra, roleOverrides, gate, customRoles, org] = await Promise.all([
     usageOf(farm.id),
     farmExtensions.context(farm),
     roleOverridesOf(farm.id),
-    gateOf(farm),
+    developer ? DEVELOPER_GATE : gateOf(farm),
     listCustomRoles(farm.id),
     findOrganization(farm.organizationId),
   ]);
@@ -103,9 +107,11 @@ export async function contextOf(
   });
   return {
     ...extra,
+    // The developer sees every plan feature (exports, reports…) as included.
+    ...(developer ? { capabilities: [...CAPABILITIES] } : {}),
     farm: serializeFarm(farm),
     organization: { id: farm.organizationId, name: org?.name ?? '', role: orgRole },
-    membership: { role: member.role, customRole: customRoleRef(customRole), title: member.title, permissions: gatePermissions(permissions, gate) },
+    membership: { role: member.role, customRole: customRoleRef(customRole), title: member.title, permissions: developer ? [...PERMISSIONS] : gatePermissions(permissions, gate) },
     // Role settings as configured (not plan-gated), so they survive plan changes.
     rolePermissions: Object.fromEntries(FARM_ROLES.map((r) => [r, rolePermissions(r, roleOverrides[r])])),
     customRoles,

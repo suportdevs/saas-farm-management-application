@@ -3,6 +3,7 @@ import {
   cleanOverrides,
   CUSTOM_ROLE_BASE,
   gatePermissions,
+  CAPABILITIES,
   ORG_FARM_ROLE,
   PERMISSIONS,
   resolvePermissions,
@@ -46,7 +47,15 @@ export function effectiveMember(farmId: string, userId: string, member: FarmMemb
 }
 
 /** Resolves a farm by id or slug together with the user's membership and effective permissions. */
-export async function findMembership(key: string, userId: string) {
+/** What the developer gets on any farm: every module and plan feature on. */
+export const DEVELOPER_GATE = { capabilities: [...CAPABILITIES], disabledModules: [] as string[] };
+
+/**
+ * The user's membership of a farm (by id or slug) with effective permissions.
+ * `developer`: the developer account is owner of every farm with every
+ * permission, whatever the plan, module switches or team say.
+ */
+export async function findMembership(key: string, userId: string, developer = false) {
   const [row] = await db
     .select({ farm: farms, member: farmMembers, orgRole: organizationMembers.role })
     .from(farms)
@@ -57,6 +66,11 @@ export async function findMembership(key: string, userId: string) {
     )
     .where(and(isUuid(key) ? eq(farms.id, key) : eq(farms.slug, key.toLowerCase()), notDeleted(farms)))
     .limit(1);
+  if (row && developer) {
+    const base = effectiveMember(row.farm.id, userId, row.member, 'owner')!;
+    const member = { ...base, role: 'owner' as FarmRole, customRoleId: null, permissionOverrides: {} };
+    return { farm: row.farm, member, orgRole: row.orgRole, granted: [...PERMISSIONS], gate: DEVELOPER_GATE, permissions: [...PERMISSIONS] };
+  }
   const member = row && effectiveMember(row.farm.id, userId, row.member, row.orgRole);
   if (!row || !member) return undefined;
   const [roleOverrides, customRole] = await Promise.all([

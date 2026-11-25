@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { MODULE_CAPABILITIES, PERMISSION_MODULES, permissionBlock, type FarmRole, type OrgRole, type Permission, type PermissionModule } from '@kit/shared';
-import { AppError, forbidden, notFound, unauthorized } from '../../../core';
+import { AppError, forbidden, isDeveloper, notFound, unauthorized } from '../../../core';
 import type { Farm, FarmMemberRow } from '../models';
 import { findMembership, touchAccess } from '../services/member.service';
 
@@ -14,6 +14,8 @@ export interface FarmAccess {
   permissions: Permission[];
   /** The same before the plan and module switches — what the member may configure for others. */
   granted: Permission[];
+  /** The developer account: owner everywhere, no plan gate. */
+  developer: boolean;
 }
 
 /** Farm context set by `requireFarm` — use it in farm-scoped routes. */
@@ -42,9 +44,10 @@ export function requireFarm(permissions?: Permission | Permission[], opts: { all
   const permission = anyOf[0];
   return async (req: Request, res: Response, next: NextFunction) => {
     if (!req.auth || req.auth.session.pending) throw unauthorized();
-    const row = await findMembership(String(req.params.farm), req.auth.user.id);
+    const developer = isDeveloper(req.auth.user);
+    const row = await findMembership(String(req.params.farm), req.auth.user.id, developer);
     if (!row) throw notFound('Farm not found');
-    if (row.farm.suspendedAt && !opts.allowSuspended) {
+    if (row.farm.suspendedAt && !opts.allowSuspended && !developer) {
       throw forbidden('This farm has been suspended. Contact support to restore access.', 'FARM_SUSPENDED');
     }
     if (permission) {
@@ -68,6 +71,7 @@ export function requireFarm(permissions?: Permission | Permission[], opts: { all
       orgRole: row.orgRole,
       permissions: row.permissions,
       granted: row.granted,
+      developer,
     } satisfies FarmAccess;
     // Fire and forget: remembering the last farm must never slow a request down.
     void touchAccess(row.member).catch(() => {});

@@ -140,3 +140,59 @@ describe('feed: finish receives', () => {
     expect((await owner.c.get(`${api}/feed/finish-receives`)).body.rows).toHaveLength(0);
   });
 });
+
+describe('feed: product picker, line list, bulk confirm / reset', () => {
+  it('searches products by category and name for the form', async () => {
+    const { owner, api, post } = await setup();
+    const other = await post('/products/categories', { name: 'Medicine', code: 'MED' });
+    const unit = await post('/products/units', { name: 'Bottle', shortName: 'btl' });
+    const vaccine = await post('/products', { name: 'FMD vaccine', code: 'FMD', categoryKey: other, unitKey: unit });
+    await post('/products/product-sizes', { productKey: vaccine, name: 'FMD vaccine 50 ml', code: 'FMD-50' });
+
+    const all = (await owner.c.get(`${api}/feed/finish-receives/product-search`)).body.products;
+    // Each product also has its default size (named after the product).
+    expect(all.map((p: { name: string }) => p.name)).toEqual(['Dairy concentrate', 'Dairy concentrate 25 kg', 'Dairy concentrate 50 kg', 'FMD vaccine', 'FMD vaccine 50 ml']);
+    // The size's unit, else the product's.
+    expect(all[4]).toMatchObject({ productName: 'FMD vaccine', categoryName: 'Medicine', unitName: 'Bottle' });
+    expect((await owner.c.get(`${api}/feed/finish-receives/product-search?category=${other}`)).body.products).toHaveLength(2);
+    expect((await owner.c.get(`${api}/feed/finish-receives/product-search?q=50`)).body.products).toHaveLength(2);
+    expect((await owner.c.get(`${api}/feed/finish-receives/product-search?q=concentrate`)).body.products).toHaveLength(3);
+  });
+
+  it('lists every line with its receive, and confirms / resets receives in bulk', async () => {
+    const { owner, farm, api, warehouse, bag25, bag50 } = await setup();
+    const make = async (orderNo: string, lines: [string, string, string][]) =>
+      (
+        await owner.c.post(`${api}/feed/finish-receives`, {
+          orderNo,
+          receiveDate: '2026-11-25',
+          warehouseKey: warehouse,
+          items: lines.map(([productSizeKey, quantity, rate]) => ({ productSizeKey, quantity, rate })),
+        })
+      ).body.key as string;
+    const a = await make('FR-A', [[bag25, '2', '100'], [bag50, '1', '300']]);
+    const b = await make('FR-B', [[bag25, '5', '110']]);
+
+    const lines = (await owner.c.get(`${api}/feed/finish-receive-items`)).body;
+    expect(lines.pagination.total).toBe(3);
+    expect(lines.rows[0]).toMatchObject({ orderNo: expect.stringMatching(/FR-/), warehouseName: 'Feed store', unitName: expect.any(String) });
+    expect((await owner.c.get(`${api}/feed/finish-receive-items?q=FR-A`)).body.rows).toHaveLength(2);
+    expect((await owner.c.get(`${api}/feed/finish-receive-items?q=50 kg`)).body.rows).toHaveLength(1);
+
+    // Confirm both; one already confirmed is skipped next time.
+    expect((await owner.c.post(`${api}/feed/finish-receives/bulk-confirm`, { keys: [a, b] })).body).toEqual({ changed: 2, skipped: 0 });
+    expect((await owner.c.post(`${api}/feed/finish-receives/bulk-confirm`, { keys: [a] })).body).toEqual({ changed: 0, skipped: 1 });
+    expect((await owner.c.get(`${api}/feed/finish-receive-items?status=1`)).body.rows).toHaveLength(3);
+    // Confirmed receives are locked until reset.
+    expect((await owner.c.delete(`${api}/feed/finish-receives/${a}`)).status).toBe(409);
+    expect((await owner.c.post(`${api}/feed/finish-receives/bulk-reset`, { keys: [a] })).body).toEqual({ changed: 1, skipped: 0 });
+    expect((await owner.c.get(`${api}/feed/finish-receives/${a}`)).body.lines.every((l: { status: number }) => l.status === 0)).toBe(true);
+    expect((await owner.c.delete(`${api}/feed/finish-receives/${a}`)).status).toBe(204);
+
+    // Workers can't confirm or reset.
+    const worker = await inviteAndJoin(app, owner, farm.slug, 'worker');
+    expect((await worker.c.post(`${api}/feed/finish-receives/bulk-confirm`, { keys: [b] })).status).toBe(403);
+    expect((await worker.c.post(`${api}/feed/finish-receives/bulk-reset`, { keys: [b] })).status).toBe(403);
+    expect((await worker.c.get(`${api}/feed/finish-receives/product-search`)).status).toBe(200);
+  });
+});

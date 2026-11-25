@@ -185,6 +185,15 @@ Staff roles have a list with modal create/edit, delete and CSV import / export /
 `super_admin` (everything, incl. `platform.staff.manage`), `support`, `billing`, `analyst`. Admins without a
 staff role are super admins. Guard operator routes with `requirePlatform('platform.tenants.suspend')`.
 
+**Developer account** (software owner): `users.is_developer = true`. That user is owner of every farm with every
+permission, plan gates and limits don't apply, suspended farms stay open, the platform console grants everything
+whatever the staff role, and other admins can't edit, suspend, impersonate or delete the account (`DEVELOPER_PROTECTED`).
+It can't be granted from the app — set it in the database:
+
+```sql
+update users set is_developer = true, role = 'admin' where email = 'owner@example.com';
+```
+
 **Billing events** from Stripe webhooks land in the farm's activity log (`farm.subscription_changed`,
 `farm.subscription_cancel_scheduled|resumed`, `farm.payment_succeeded|failed`); a failed payment also emails every owner.
 Subscribe the webhook to `invoice.paid` and `invoice.payment_failed` in addition to the `customer.subscription.*` events.

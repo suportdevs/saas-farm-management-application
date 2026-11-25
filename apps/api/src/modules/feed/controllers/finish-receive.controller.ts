@@ -1,9 +1,19 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import type { FinishReceiveInput, FinishReceiveListQuery } from '@kit/shared';
+import { FINISH_RECEIVE_STATUS, type FinishReceiveInput, type FinishReceiveItemListQuery, type FinishReceiveListQuery } from '@kit/shared';
 import { audit, notFound } from '../../../core';
 import { getFarm } from '../../farms';
-import { createFinishReceive, deleteFinishReceive, getFinishReceive, listFinishReceives, processFinishReceive, updateFinishReceive } from '../services/finish-receive.service';
+import {
+  createFinishReceive,
+  deleteFinishReceive,
+  getFinishReceive,
+  listFinishReceiveItems,
+  listFinishReceives,
+  processFinishReceive,
+  searchProducts,
+  setFinishReceiveStatus,
+  updateFinishReceive,
+} from '../services/finish-receive.service';
 
 const keyParam = (req: Request) => {
   const key = z.uuid().safeParse(req.params.key);
@@ -49,6 +59,34 @@ export const finishReceiveController = {
     const receive = await processFinishReceive(farmId, req.auth!.user.id, keyParam(req));
     await record(req, farmId, 'processed', { name: receive.orderNo, count: receive.lines.length });
     res.json(receive);
+  },
+
+  /** GET /product-search — the form's product picker (?category, q). */
+  async productSearch(req: Request, res: Response) {
+    res.json({ products: await searchProducts(getFarm(res).farm.id, req.query as { category?: string; q?: string }) });
+  },
+
+  /** GET /feed/finish-receive-items — every line with its receive (?q, status, warehouse, from, to, page, pageSize). */
+  async items(req: Request, res: Response) {
+    res.json(await listFinishReceiveItems(getFarm(res).farm.id, req.query as unknown as FinishReceiveItemListQuery));
+  },
+
+  /** POST /bulk-confirm { keys } — Pending → Processed. */
+  async bulkConfirm(req: Request, res: Response) {
+    const farmId = getFarm(res).farm.id;
+    const { keys } = req.body as { keys: string[] };
+    const result = await setFinishReceiveStatus(farmId, req.auth!.user.id, keys, FINISH_RECEIVE_STATUS.processed);
+    await record(req, farmId, 'processed', { name: `${result.changed} receives` });
+    res.json(result);
+  },
+
+  /** POST /bulk-reset { keys } — Processed → Pending. */
+  async bulkReset(req: Request, res: Response) {
+    const farmId = getFarm(res).farm.id;
+    const { keys } = req.body as { keys: string[] };
+    const result = await setFinishReceiveStatus(farmId, req.auth!.user.id, keys, FINISH_RECEIVE_STATUS.pending);
+    await record(req, farmId, 'reset', { name: `${result.changed} receives` });
+    res.json(result);
   },
 
   /** DELETE /:key — pending receives only. */

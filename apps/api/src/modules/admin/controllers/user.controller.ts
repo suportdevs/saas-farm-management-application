@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import type { AdminCreateUserInput, AdminUpdateUserInput, AdminUserListQuery, BanUserInput } from '@kit/shared';
 import { audit } from '../../../core/audit';
+import { isDeveloper } from '../../../core/staff';
 import { createSession, deleteUserSessions, listUserSessions, setImpersonatorCookie, setSessionCookie } from '../../../core/session';
 import { badRequest, forbidden } from '../../../lib/errors';
 import * as users from '../services/admin-user.service';
@@ -47,15 +48,22 @@ export async function show(req: Request, res: Response) {
 export async function update(req: Request, res: Response) {
   const user = await target(req);
   const input = req.body as AdminUpdateUserInput;
+  assertMayManage(req, user);
   const updated = await users.updateUser(req.auth!.user, user, input);
   await audit(req, { action: 'admin.user.updated', targetType: 'user', targetId: user.id, metadata: { ...input } });
   res.json({ user: await users.serializeAdminUser(updated) });
+}
+
+/** Only the developer may change the developer account. */
+function assertMayManage(req: Request, user: Parameters<typeof isDeveloper>[0]) {
+  if (isDeveloper(user) && !isDeveloper(req.auth!.user)) throw forbidden('The developer account can only be changed by the developer', 'DEVELOPER_PROTECTED');
 }
 
 /** POST /users/:id/ban */
 export async function ban(req: Request, res: Response) {
   const user = await target(req);
   users.assertNotSelf(req.auth!.user, user, "You can't suspend your own account");
+  assertMayManage(req, user);
   const { reason } = req.body as BanUserInput;
   const updated = await users.banUser(user, reason);
   await audit(req, { action: 'admin.user.banned', targetType: 'user', targetId: user.id, metadata: { reason } });
@@ -65,6 +73,7 @@ export async function ban(req: Request, res: Response) {
 /** POST /users/:id/unban */
 export async function unban(req: Request, res: Response) {
   const user = await target(req);
+  assertMayManage(req, user);
   const updated = await users.unbanUser(user);
   await audit(req, { action: 'admin.user.unbanned', targetType: 'user', targetId: user.id });
   res.json({ user: await users.serializeAdminUser(updated) });
@@ -74,6 +83,7 @@ export async function unban(req: Request, res: Response) {
 export async function revokeSessions(req: Request, res: Response) {
   const user = await target(req);
   users.assertNotSelf(req.auth!.user, user, 'Use Settings → Security to manage your own sessions');
+  assertMayManage(req, user);
   await deleteUserSessions(user.id);
   await audit(req, { action: 'admin.user.sessions_revoked', targetType: 'user', targetId: user.id });
   res.status(204).end();
@@ -83,6 +93,7 @@ export async function revokeSessions(req: Request, res: Response) {
 export async function impersonate(req: Request, res: Response) {
   const user = await target(req);
   users.assertNotSelf(req.auth!.user, user, "You can't impersonate yourself");
+  assertMayManage(req, user);
   if (user.role === 'admin') throw forbidden("Administrators can't be impersonated", 'CANNOT_IMPERSONATE_ADMIN');
   if (user.bannedAt) throw badRequest('Suspended users cannot be impersonated', 'USER_BANNED');
 
@@ -98,6 +109,7 @@ export async function impersonate(req: Request, res: Response) {
 export async function remove(req: Request, res: Response) {
   const user = await target(req);
   users.assertNotSelf(req.auth!.user, user, 'Delete your own account from Settings instead');
+  assertMayManage(req, user);
   await users.deleteUser(user);
   await audit(req, { action: 'admin.user.deleted', targetType: 'user', targetId: user.id, metadata: { email: user.email } });
   res.status(204).end();

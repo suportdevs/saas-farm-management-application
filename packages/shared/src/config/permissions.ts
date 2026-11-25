@@ -77,6 +77,7 @@ export const PERMISSION_CONFIG = {
       finish_receive_edit: 'Finish Receive Edit',
       finish_receive_delete: 'Finish Receive Delete',
       finish_receive_process: 'Finish Receive Process',
+      finish_receive_reset: 'Finish Receive Reset',
       finish_receive_export: 'Finish Receive Export',
     },
   },
@@ -160,6 +161,7 @@ export const CATALOG_OPTION_READERS: Partial<Record<CatalogResource, readonly st
   warehouses: ['feed.finish_receive_create', 'feed.finish_receive_edit'],
   employees: ['feed.finish_receive_create', 'feed.finish_receive_edit'],
   'product-sizes': ['feed.finish_receive_create', 'feed.finish_receive_edit'],
+  categories: ['feed.finish_receive_create', 'feed.finish_receive_edit'],
 };
 
 /** The catalog screens and the `<module>.<operation>` prefix of their permission keys. */

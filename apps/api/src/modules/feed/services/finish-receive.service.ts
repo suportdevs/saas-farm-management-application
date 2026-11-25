@@ -1,17 +1,22 @@
 import { and, count, desc, eq, gte, ilike, inArray, lte, or, sql, type SQL } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import {
   FINISH_RECEIVE_STATUS,
   linePrice,
+  type FinishReceiveBulkResult,
   type FinishReceiveDetail,
   type FinishReceiveInput,
+  type FinishReceiveItemListQuery,
+  type FinishReceiveItemListRow,
   type FinishReceiveListQuery,
+  type FinishReceiveProductOption,
   type FinishReceiveRow,
   type FinishReceiveStatus,
 } from '@kit/shared';
 import { conflict, db, escapeLike, notDeleted, notFound, validationError } from '../../../core';
 import { warehouses } from '../../herd';
 import { employees } from '../../hr';
-import { products, productSizes, units } from '../../products';
+import { categories, products, productSizes, units } from '../../products';
 import { finishReceiveItems, finishReceives } from '../models';
 
 /*
@@ -19,6 +24,9 @@ import { finishReceiveItems, finishReceives } from '../models';
  * line per product size. Pending receives can be changed or deleted; Process
  * marks the receive and its lines processed, after which they are locked.
  */
+
+/** A product's own unit (a size can have its own, joined as `units`). */
+const productUnit = alias(units, 'product_unit');
 
 /** Live totals of a receive's lines (not deleted). */
 const lines = (expr: SQL) => sql<number>`(select ${expr} from ${finishReceiveItems} i where i.finish_receive_id = ${finishReceives.id} and i.deleted_at is null)`;
@@ -88,7 +96,7 @@ export async function getFinishReceive(tenantId: string, key: string): Promise<F
       productSizeKey: productSizes.key,
       productSizeName: productSizes.name,
       productName: products.name,
-      unitName: units.name,
+      unitName: sql<string | null>`coalesce(${units.name}, ${productUnit.name})`,
       quantity: finishReceiveItems.quantity,
       rate: finishReceiveItems.rate,
       price: finishReceiveItems.price,
@@ -98,6 +106,7 @@ export async function getFinishReceive(tenantId: string, key: string): Promise<F
     .innerJoin(productSizes, eq(productSizes.id, finishReceiveItems.productSizeId))
     .leftJoin(products, eq(products.id, productSizes.productId))
     .leftJoin(units, eq(units.id, productSizes.unitId))
+    .leftJoin(productUnit, eq(productUnit.id, products.unitId))
     .where(and(eq(finishReceiveItems.finishReceiveId, row.id), notDeleted(finishReceiveItems)))
     .orderBy(finishReceiveItems.id);
   const { items: _count, ...header } = toRow(row);
@@ -240,4 +249,118 @@ export async function deleteFinishReceive(tenantId: string, userId: string, key:
     await tx.update(finishReceiveItems).set(deleted).where(and(eq(finishReceiveItems.finishReceiveId, id), notDeleted(finishReceiveItems)));
     await tx.update(finishReceives).set(deleted).where(eq(finishReceives.id, id));
   });
+}
+
+// ─── Product picker ──────────────────────────────────────────────
+
+/** Active product sizes for the form's picker: by category and/or a name / code match (max 200). */
+export async function searchProducts(tenantId: string, { category, q }: { category?: string; q?: string }): Promise<FinishReceiveProductOption[]> {
+  const like = q ? `%${escapeLike(q)}%` : undefined;
+  return db
+    .select({
+      key: productSizes.key,
+      name: productSizes.name,
+      code: productSizes.code,
+      productName: products.name,
+      categoryName: categories.name,
+      // The size's own unit, or the product's.
+      unitName: sql<string | null>`coalesce(${units.name}, ${productUnit.name})`,
+    })
+    .from(productSizes)
+    .innerJoin(products, eq(products.id, productSizes.productId))
+    .leftJoin(categories, eq(categories.id, products.categoryId))
+    .leftJoin(units, eq(units.id, productSizes.unitId))
+    .leftJoin(productUnit, eq(productUnit.id, products.unitId))
+    .where(
+      and(
+        eq(productSizes.tenantId, tenantId),
+        notDeleted(productSizes),
+        notDeleted(products),
+        eq(productSizes.status, 1),
+        category ? eq(categories.key, category) : undefined,
+        like ? or(ilike(productSizes.name, like), ilike(productSizes.code, like), ilike(products.name, like)) : undefined,
+      ),
+    )
+    .orderBy(products.name, productSizes.name)
+    .limit(200);
+}
+
+// ─── Lines across all receives ───────────────────────────────────
+
+export async function listFinishReceiveItems(tenantId: string, { q, status, warehouse, from, to, page, pageSize }: FinishReceiveItemListQuery) {
+  const like = q ? `%${escapeLike(q)}%` : undefined;
+  const where = and(
+    eq(finishReceiveItems.tenantId, tenantId),
+    notDeleted(finishReceiveItems),
+    notDeleted(finishReceives),
+    like ? or(ilike(productSizes.name, like), ilike(products.name, like), ilike(finishReceives.orderNo, like)) : undefined,
+    status !== undefined ? eq(finishReceiveItems.status, Number(status)) : undefined,
+    warehouse ? eq(warehouses.key, warehouse) : undefined,
+    from ? gte(finishReceives.receiveDate, from) : undefined,
+    to ? lte(finishReceives.receiveDate, to) : undefined,
+  );
+  const [rows, [total]] = await Promise.all([
+    db
+      .select({
+        key: finishReceiveItems.key,
+        receiveKey: finishReceives.key,
+        orderNo: finishReceives.orderNo,
+        receiveDate: finishReceives.receiveDate,
+        warehouseName: warehouses.name,
+        productSizeKey: productSizes.key,
+        productSizeName: productSizes.name,
+        productName: products.name,
+        unitName: sql<string | null>`coalesce(${units.name}, ${productUnit.name})`,
+        quantity: finishReceiveItems.quantity,
+        rate: finishReceiveItems.rate,
+        price: finishReceiveItems.price,
+        status: finishReceiveItems.status,
+      })
+      .from(finishReceiveItems)
+      .innerJoin(finishReceives, eq(finishReceives.id, finishReceiveItems.finishReceiveId))
+      .innerJoin(warehouses, eq(warehouses.id, finishReceives.warehouseId))
+      .innerJoin(productSizes, eq(productSizes.id, finishReceiveItems.productSizeId))
+      .leftJoin(products, eq(products.id, productSizes.productId))
+      .leftJoin(units, eq(units.id, productSizes.unitId))
+      .leftJoin(productUnit, eq(productUnit.id, products.unitId))
+      .where(where)
+      .orderBy(desc(finishReceives.receiveDate), desc(finishReceives.id), finishReceiveItems.id)
+      .limit(pageSize)
+      .offset((page - 1) * pageSize),
+    // Same joins, for the count (search and filters use them).
+    db
+      .select({ value: count() })
+      .from(finishReceiveItems)
+      .innerJoin(finishReceives, eq(finishReceives.id, finishReceiveItems.finishReceiveId))
+      .innerJoin(warehouses, eq(warehouses.id, finishReceives.warehouseId))
+      .innerJoin(productSizes, eq(productSizes.id, finishReceiveItems.productSizeId))
+      .leftJoin(products, eq(products.id, productSizes.productId))
+      .where(where),
+  ]);
+  return { rows: rows as FinishReceiveItemListRow[], pagination: { page, pageSize, total: total?.value ?? 0 } };
+}
+
+// ─── Bulk confirm / reset ────────────────────────────────────────
+
+/**
+ * Sets receives (and their lines) to `to`: confirm = Pending → Processed,
+ * reset = Processed → Pending. Receives already in that state are skipped.
+ */
+export async function setFinishReceiveStatus(tenantId: string, userId: string, keys: string[], to: FinishReceiveStatus): Promise<FinishReceiveBulkResult> {
+  const found = await db
+    .select({ id: finishReceives.id, status: finishReceives.status })
+    .from(finishReceives)
+    .where(ofTenant(tenantId, inArray(finishReceives.key, keys)));
+  if (!found.length) throw notFound('Finish receive not found');
+  const ids = found.filter((r) => r.status !== to).map((r) => r.id);
+  if (ids.length) {
+    await db.transaction(async (tx) => {
+      await tx.update(finishReceives).set({ status: to, updatedBy: userId }).where(inArray(finishReceives.id, ids));
+      await tx
+        .update(finishReceiveItems)
+        .set({ status: to, updatedBy: userId })
+        .where(and(inArray(finishReceiveItems.finishReceiveId, ids), notDeleted(finishReceiveItems)));
+    });
+  }
+  return { changed: ids.length, skipped: found.length - ids.length };
 }

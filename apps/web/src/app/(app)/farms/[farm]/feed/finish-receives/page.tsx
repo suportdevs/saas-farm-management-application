@@ -10,15 +10,14 @@ import { PageHeader } from '@/components/app/page-header';
 import { PageSizeSelect } from '@/components/app/page-size-select';
 import { Pagination } from '@/components/app/pagination';
 import { TableFrame } from '@/components/app/table-frame';
-import { Badge } from '@/components/ui/badge';
 import { Button, buttonClasses } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { resolvePageSize } from '@/lib/page-size';
 import { getFarmContext } from '@/modules/farms/server';
+import { FinishReceiveTable } from '@/modules/feed/components/finish-receive-table';
 import { FinishReceivesExport } from '@/modules/feed/components/finish-receives-export';
-import { money } from '@/modules/feed/money';
 import { getFinishReceives } from '@/modules/feed/server';
 
 export const metadata: Metadata = { title: 'Finish receives' };
@@ -93,42 +92,9 @@ export default async function FinishReceivesPage({ params, searchParams }: { par
         }
       >
         {rows.length === 0 ? (
-          <EmptyState className="m-4" icon={PackageCheck} title={qs.toString() ? 'No finish receives match' : 'No finish receives yet'} description="Record goods received into a warehouse, then process them when checked." />
+          <EmptyState className="m-4" icon={PackageCheck} title={qs.toString() ? 'No finish receives match' : 'No finish receives yet'} description="Record goods received into a warehouse, then confirm them when checked." />
         ) : (
-          <table className="w-full min-w-[860px] text-left text-sm">
-            <thead className="text-xs uppercase tracking-wide text-muted-foreground">
-              <tr>
-                <th className="px-4 py-3 font-medium">Order no.</th>
-                <th className="px-4 py-3 font-medium">Receive date</th>
-                <th className="px-4 py-3 font-medium">Warehouse</th>
-                <th className="px-4 py-3 font-medium">Received by</th>
-                <th className="px-4 py-3 text-right font-medium">Lines</th>
-                <th className="px-4 py-3 text-right font-medium">Quantity</th>
-                <th className="px-4 py-3 text-right font-medium">Total price</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {rows.map((r) => (
-                <tr key={r.key} className="hover:bg-muted/30">
-                  <td className="px-4 py-3 font-medium">
-                    <Link href={`${base}/${r.key}`} className="text-primary hover:underline">
-                      {r.orderNo}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 tabular-nums">{r.receiveDate}</td>
-                  <td className="px-4 py-3">{r.warehouseName}</td>
-                  <td className="px-4 py-3">{r.receivedByName ?? '—'}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">{r.items}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">{r.totalQuantity.toLocaleString()}</td>
-                  <td className="px-4 py-3 text-right font-medium tabular-nums">{money(ctx.farm, r.totalPrice)}</td>
-                  <td className="px-4 py-3">
-                    <Badge variant={r.status === FINISH_RECEIVE_STATUS.processed ? 'primary' : 'outline'}>{finishReceiveStatusLabel(r.status)}</Badge>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <FinishReceiveTable rows={rows} />
         )}
       </TableFrame>
       <Pagination pagination={pagination} basePath={base} params={{ q: query.q, status: query.status, from: query.from, to: query.to, pageSize: query.pageSize }} />

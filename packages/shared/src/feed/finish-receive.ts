@@ -93,3 +93,49 @@ export interface FinishReceiveItemRow {
 export interface FinishReceiveDetail extends Omit<FinishReceiveRow, 'items'> {
   lines: FinishReceiveItemRow[];
 }
+
+// ─── Product picker (the form's "Add product" search) ────────────
+
+/** GET /feed/finish-receives/product-search — active product sizes by category and/or name. */
+export const finishReceiveProductSearchSchema = z.object({
+  category: z.uuid().optional(),
+  q: z.string().trim().max(100).optional(),
+});
+
+/** A product size the picker lists. */
+export interface FinishReceiveProductOption {
+  key: string;
+  /** Product size name, e.g. "Dairy concentrate 25 kg bag". */
+  name: string;
+  code: string | null;
+  productName: string;
+  categoryName: string | null;
+  /** The size's unit, or the product's. */
+  unitName: string | null;
+}
+
+// ─── Lines across all receives ───────────────────────────────────
+
+/** GET /feed/finish-receive-items — every line, with its receive. */
+export const finishReceiveItemListSchema = finishReceiveListSchema;
+export type FinishReceiveItemListQuery = FinishReceiveListQuery;
+
+export interface FinishReceiveItemListRow extends FinishReceiveItemRow {
+  receiveKey: string;
+  orderNo: string;
+  /** YYYY-MM-DD */
+  receiveDate: string;
+  warehouseName: string;
+}
+
+// ─── Bulk confirm / reset ────────────────────────────────────────
+
+export const finishReceiveBulkSchema = z.object({
+  keys: z.array(z.uuid()).min(1, 'Select at least one receive').max(500),
+});
+
+/** How many receives changed, and how many were already in that state. */
+export interface FinishReceiveBulkResult {
+  changed: number;
+  skipped: number;
+}
