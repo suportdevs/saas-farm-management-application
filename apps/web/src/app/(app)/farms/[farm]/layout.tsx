@@ -1,17 +1,20 @@
 import Link from 'next/link';
-import { Ban, Clock, CreditCard } from 'lucide-react';
+import { Ban, Clock, CreditCard, Wrench } from 'lucide-react';
 import { buttonClasses } from '@/components/ui/button';
 import { getFarmContext } from '@/modules/farms/server';
 import { FarmProvider } from '@/modules/farms/context';
 import { formatFarmDate } from '@/lib/format';
+import { requireUser } from '@/lib/session';
 
 export default async function FarmLayout({ children, params }: { children: React.ReactNode; params: Promise<{ farm: string }> }) {
   const { farm: slug } = await params;
-  const ctx = await getFarmContext(slug);
+  const [ctx, user] = await Promise.all([getFarmContext(slug), requireUser()]);
   const { farm, subscription, membership } = ctx;
+  // The developer / software owner: everything unlocked, no payment prompts, suspended farms open.
+  const developer = Boolean(user.isDeveloper);
   const canBill = membership.permissions.includes('billing.view');
 
-  if (farm.suspendedAt) {
+  if (farm.suspendedAt && !developer) {
     return (
       <div className="mx-auto max-w-xl py-16 text-center">
         <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">
@@ -30,7 +33,15 @@ export default async function FarmLayout({ children, params }: { children: React
 
   return (
     <FarmProvider value={ctx}>
-      {subscription.state === 'past_due' && (
+      {developer && (
+        <Banner tone="primary" icon={<Wrench className="h-4 w-4" />}>
+          <span>
+            <strong className="font-semibold">Developer access</strong> — every module and feature is unlocked on this farm, whatever its plan.
+            {farm.suspendedAt && ' This farm is suspended for its users.'}
+          </span>
+        </Banner>
+      )}
+      {!developer && subscription.state === 'past_due' && (
         <Banner tone="warning" icon={<CreditCard className="h-4 w-4" />}>
           <span>Your last payment didn&apos;t go through. Update your payment method to keep {subscription.planName} features.</span>
           {canBill && (
@@ -40,7 +51,7 @@ export default async function FarmLayout({ children, params }: { children: React
           )}
         </Banner>
       )}
-      {subscription.state === 'trialing' && subscription.source === null && subscription.trialDaysLeft !== null && (
+      {!developer && subscription.state === 'trialing' && subscription.source === null && subscription.trialDaysLeft !== null && (
         <Banner tone="primary" icon={<Clock className="h-4 w-4" />}>
           <span>
             <strong className="font-semibold">

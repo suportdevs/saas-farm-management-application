@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import type { z } from 'zod';
 import type { CreateFarmData, deleteFarmSchema, UpdateFarmData } from '@kit/shared';
-import { audit, badRequest } from '../../../core';
+import { audit, badRequest, isDeveloper } from '../../../core';
 import { getFarm } from '../middleware/farm-access.middleware';
 import * as farms from '../services/farm.service';
 import { orgRoleOf } from '../services/organization.service';
@@ -9,7 +9,7 @@ import { farmEvent } from './helpers';
 
 /** GET / — farms the signed-in user belongs to. */
 export async function list(req: Request, res: Response) {
-  res.json({ farms: await farms.listUserFarms(req.auth!.user.id) });
+  res.json({ farms: await farms.listUserFarms(req.auth!.user.id, isDeveloper(req.auth!.user)) });
 }
 
 /** POST / */

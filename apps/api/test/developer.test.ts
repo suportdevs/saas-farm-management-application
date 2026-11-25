@@ -49,6 +49,15 @@ describe('developer account', () => {
     expect(ctx.body.capabilities).toEqual(expect.arrayContaining(['feed', 'data_export']));
     expect((await dev.c.get(`${api}/feed/finish-receives`)).status).toBe(200);
     expect((await dev.c.get(`${api}/herd/export`)).status).toBe(200);
+
+    // The farm switcher lists every farm for the developer, unlocked (no lock icons).
+    const list = (await dev.c.get('/api/farms')).body.farms;
+    const listed = list.find((f: { slug: string }) => api.endsWith(f.slug));
+    expect(listed).toMatchObject({ role: 'owner' });
+    expect(Object.values(listed.modules).every((s) => s === 'enabled')).toBe(true);
+    expect(listed.permissions).toHaveLength(PERMISSIONS.length);
+    // An ordinary user's switcher only shows their own farms.
+    expect((await owner.c.get('/api/farms')).body.farms).toHaveLength(1);
   });
 
   it('is not held to plan limits, and opens suspended farms', async () => {

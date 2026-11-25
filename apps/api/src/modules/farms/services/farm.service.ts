@@ -152,8 +152,11 @@ async function uniqueSlug(name: string): Promise<string> {
   return `${base}-${Date.now().toString(36)}`;
 }
 
-/** Farms the user can open: their farm teams, plus every farm of an organization they own or run. */
-export async function listUserFarms(userId: string): Promise<FarmSummary[]> {
+/**
+ * Farms the user can open: their farm teams, plus every farm of an organization they own or run.
+ * The developer account gets every farm, as owner, with every module unlocked.
+ */
+export async function listUserFarms(userId: string, developer = false): Promise<FarmSummary[]> {
   const memberCount = db
     .select({ farmId: farmMembers.farmId, total: count().as('total') })
     .from(farmMembers)
@@ -175,7 +178,7 @@ export async function listUserFarms(userId: string): Promise<FarmSummary[]> {
       ),
     )
     .leftJoin(memberCount, eq(memberCount.farmId, farms.id))
-    .where(and(notDeleted(farms), or(isNotNull(farmMembers.userId), isNotNull(organizationMembers.userId))))
+    .where(and(notDeleted(farms), developer ? undefined : or(isNotNull(farmMembers.userId), isNotNull(organizationMembers.userId))))
     .orderBy(sql`${farmMembers.lastAccessedAt} desc nulls last`, asc(farms.name));
 
   const ids = rows.map((r) => r.farm.id);
@@ -189,9 +192,9 @@ export async function listUserFarms(userId: string): Promise<FarmSummary[]> {
   const roleOverrides = (farmId: string, role: string) => roleRows.find((r) => r.farmId === farmId && r.role === role)?.overrides;
 
   return rows.map(({ farm, member: teamRow, orgRole, orgName, members }) => {
-    const member = effectiveMember(farm.id, userId, teamRow, orgRole)!;
+    const member = effectiveMember(farm.id, userId, teamRow, developer ? 'owner' : orgRole)!;
     const customRole = member.customRoleId ? customRoles.find((r) => r.id === member.customRoleId) : undefined;
-    const gate = { capabilities: capabilities(farm.id), disabledModules: farm.disabledModules };
+    const gate = developer ? DEVELOPER_GATE : { capabilities: capabilities(farm.id), disabledModules: farm.disabledModules };
     const permissions = resolvePermissions(member.role, {
       roleOverrides: cleanOverrides(roleOverrides(farm.id, member.role)),
       memberOverrides: cleanOverrides(member.permissionOverrides),
@@ -205,11 +208,11 @@ export async function listUserFarms(userId: string): Promise<FarmSummary[]> {
       type: farm.type,
       country: farm.country,
       organization: { id: farm.organizationId, name: orgName },
-      role: member.role,
-      customRole: customRoleRef(customRole),
+      role: developer ? 'owner' : member.role,
+      customRole: developer ? null : customRoleRef(customRole),
       memberCount: Number(members ?? 0),
       suspended: Boolean(farm.suspendedAt),
-      permissions: gatePermissions(permissions, gate),
+      permissions: developer ? [...PERMISSIONS] : gatePermissions(permissions, gate),
       modules: moduleStatuses(gate),
     };
   }) as FarmSummary[];
