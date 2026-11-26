@@ -4,7 +4,8 @@ import { useFarm } from '@/modules/farms/context';
 import { usePlans } from './use-plans';
 
 /** Why downloads are locked and where to upgrade (shown by a locked Download button). */
-export type ExportLock = { message: string; href?: string };
+/** `message` is an English phrase with `{plan}` (translated where it is shown). */
+export type ExportLock = { message: string; vars?: Record<string, string>; href?: string };
 
 /**
  * Downloads (Excel, PDF, CSV…) are a plan feature (`data_export`). On a plan
@@ -19,7 +20,10 @@ export function useExportLock(): ExportLock | null {
   const plan = plans.find((p) => p.capabilities.includes('data_export'));
   const canBill = membership.permissions.includes('billing.view');
   return {
-    message: `Downloading data (Excel, PDF, CSV and more) is included from the ${plan?.name ?? 'paid'} plan.${canBill ? '' : ' Ask the farm owner to upgrade.'}`,
+    message: canBill
+      ? 'Downloading data (Excel, PDF, CSV and more) is included from the {plan} plan.'
+      : 'Downloading data (Excel, PDF, CSV and more) is included from the {plan} plan. Ask the farm owner to upgrade.',
+    vars: { plan: plan?.name ?? 'paid' },
     href: canBill ? `/farms/${farm.slug}/billing` : undefined,
   };
 }

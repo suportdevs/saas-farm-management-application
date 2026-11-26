@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Check, Lock } from 'lucide-react';
 import type { FarmContext, PermissionModule } from '@kit/shared';
 import { buttonClasses } from '@/components/ui/button';
+import { getT } from '@/i18n/server';
 import { getPlans } from '@/modules/subscriptions/server';
 import { ALL_MODULES } from '@/modules/farms/navigation';
 
@@ -14,7 +15,8 @@ export async function ModuleLocked({ ctx, module }: { ctx: FarmContext; module: 
   const status = ctx.modules[module];
   if (status === 'enabled') return null;
   const mod = ALL_MODULES.find((m) => m.slug === module || m.permissionModule === module);
-  const label = mod?.label ?? module;
+  const t = await getT(ctx.farm.slug);
+  const label = t(mod?.label ?? module);
   const slug = ctx.farm.slug;
   const plans = status === 'plan' ? await getPlans() : [];
   const cheapest = mod?.capability ? plans.find((p) => p.capabilities.includes(mod.capability!)) : undefined;
@@ -32,12 +34,12 @@ export async function ModuleLocked({ ctx, module }: { ctx: FarmContext; module: 
           <h1 className="mt-6 flex items-center gap-2 text-3xl font-bold tracking-tight">
             {label} <Lock className="h-6 w-6 text-muted-foreground" />
           </h1>
-          {mod && <p className="mt-3 max-w-xl text-lg text-muted-foreground">{mod.summary}</p>}
+          {mod && <p className="mt-3 max-w-xl text-lg text-muted-foreground">{t(mod.summary)}</p>}
           {mod && (
             <ul className="mt-8 grid gap-3 sm:grid-cols-2">
               {mod.highlights.map((h) => (
                 <li key={h} className="flex items-start gap-3 rounded-xl border bg-background/60 px-4 py-3 text-sm">
-                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" /> {h}
+                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" /> {t(h)}
                 </li>
               ))}
             </ul>
@@ -45,24 +47,22 @@ export async function ModuleLocked({ ctx, module }: { ctx: FarmContext; module: 
           <div className="mt-8 flex flex-wrap items-center gap-3 border-t pt-6 text-sm">
             {status === 'disabled' ? (
               <>
-                <p className="text-muted-foreground">{label} is switched off for this farm.</p>
+                <p className="text-muted-foreground">{t('{module} is switched off for this farm.', { module: label })}</p>
                 {ctx.membership.permissions.includes('farm.update') && (
                   <Link href={`/farms/${slug}/settings#modules`} className={buttonClasses('outline', 'sm')}>
-                    Manage modules
+                    {t('Manage modules')}
                   </Link>
                 )}
               </>
             ) : (
               <>
                 <p className="text-muted-foreground">
-                  <span className="font-medium text-foreground">
-                    {label} isn&apos;t in your {ctx.subscription.planName} plan.
-                  </span>{' '}
-                  Available on {cheapest?.name ?? 'a higher plan'} and above.
+                  <span className="font-medium text-foreground">{t("{module} isn't in your {plan} plan.", { module: label, plan: ctx.subscription.planName })}</span>{' '}
+                  {cheapest ? t('Available on {plan} and above.', { plan: cheapest.name }) : t('Available on a higher plan.')}
                 </p>
                 {ctx.membership.permissions.includes('billing.view') && (
                   <Link href={`/farms/${slug}/billing`} className={buttonClasses('primary', 'sm')}>
-                    See plans
+                    {t('See plans')}
                   </Link>
                 )}
               </>

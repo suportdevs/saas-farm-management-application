@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, type ReactNode } from 'react';
+import { useT } from '@/i18n/provider';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -25,6 +26,7 @@ export function Dialog({
   footer?: ReactNode;
   className?: string;
 }) {
+  const t = useT();
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const el = ref.current;
@@ -48,8 +50,8 @@ export function Dialog({
         <div>
           <div className="flex items-start justify-between gap-4 p-6 pb-2">
             <div>
-              <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
-              {description && <div className="mt-1 text-sm text-muted-foreground">{description}</div>}
+              <h2 className="text-lg font-semibold tracking-tight">{t(title)}</h2>
+              {description && <div className="mt-1 text-sm text-muted-foreground">{typeof description === 'string' ? t(description) : description}</div>}
             </div>
             <button
               type="button"

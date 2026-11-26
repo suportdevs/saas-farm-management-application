@@ -46,6 +46,7 @@ export const serializeFarm = (farm: Farm): FarmProfile => ({
   timezone: farm.timezone,
   currency: farm.currency,
   locale: farm.locale,
+  language: farm.language,
   unitSystem: farm.unitSystem as UnitSystem,
   milkUnit: farm.milkUnit as FarmProfile['milkUnit'],
   weightUnit: farm.weightUnit as FarmProfile['weightUnit'],
@@ -212,6 +213,7 @@ export async function listUserFarms(userId: string, developer = false): Promise<
       customRole: developer ? null : customRoleRef(customRole),
       memberCount: Number(members ?? 0),
       suspended: Boolean(farm.suspendedAt),
+      language: farm.language,
       permissions: developer ? [...PERMISSIONS] : gatePermissions(permissions, gate),
       modules: moduleStatuses(gate),
     };

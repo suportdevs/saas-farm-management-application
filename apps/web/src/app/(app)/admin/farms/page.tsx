@@ -7,7 +7,8 @@ import { NewTenantButton } from '@/modules/platform/components/new-tenant-dialog
 import { Pagination } from '@/components/app/pagination';
 import { FilterToggle } from '@/components/app/filter-toggle';
 import { PageSizeSelect } from '@/components/app/page-size-select';
-import { CriteriaBar, exportCriteria, urlCriteria } from '@/components/app/criteria-bar';
+import { CriteriaBar } from '@/components/app/criteria-bar';
+import { exportCriteria, urlCriteria } from '@/components/app/criteria';
 import { TableFrame } from '@/components/app/table-frame';
 import { resolvePageSize } from '@/lib/page-size';
 import { SubscriptionBadge } from '@/modules/platform/components/subscription-badge';

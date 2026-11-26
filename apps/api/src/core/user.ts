@@ -18,6 +18,7 @@ export async function serializeUser(user: User): Promise<PublicUser> {
   const staff = await resolveStaff(user);
   if (staff) Object.assign(base, { staffRole: staff.key, staffRoleName: staff.name, platformPermissions: staff.permissions });
   if (user.isDeveloper) base.isDeveloper = true;
+  base.language = user.language;
   const extras = await Promise.all(hooks.userSerializers.map((fn) => fn(user)));
   return Object.assign(base, ...extras);
 }

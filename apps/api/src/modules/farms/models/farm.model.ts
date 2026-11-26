@@ -30,6 +30,8 @@ export const farms = pgTable(
     timezone: varchar('timezone', { length: 64 }).notNull().default('UTC'),
     currency: varchar('currency', { length: 3 }).notNull().default('USD'),
     locale: varchar('locale', { length: 35 }).notNull().default('en-US'),
+    /** Default interface language for the farm's members (en, bn, hi…); each member can pick their own. */
+    language: varchar('language', { length: 5 }).notNull().default('en'),
     unitSystem: varchar('unit_system', { length: 10 }).notNull().default('metric'),
     milkUnit: varchar('milk_unit', { length: 5 }).notNull().default('L'),
     weightUnit: varchar('weight_unit', { length: 5 }).notNull().default('kg'),

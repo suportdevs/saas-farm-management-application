@@ -1,9 +1,15 @@
 import { z } from 'zod';
+import { LANGUAGE_CODES } from '../../i18n/languages';
 import { emailSchema, passwordSchema } from './auth';
 
-export const updateProfileSchema = z.object({
-  name: z.string().trim().min(2, 'Name must be at least 2 characters').max(100),
-});
+export const updateProfileSchema = z
+  .object({
+    name: z.string().trim().min(2, 'Name must be at least 2 characters').max(100),
+    /** The person's interface language; null = use the farm's default. */
+    language: z.enum(LANGUAGE_CODES).nullable(),
+  })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, 'Nothing to update');
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 
 export const changePasswordSchema = z.object({

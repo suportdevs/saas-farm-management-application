@@ -9,8 +9,8 @@ import type { ActivityQuery } from '../validators/activity.validator';
 
 /** PATCH /me */
 export async function update(req: Request, res: Response) {
-  const { name } = req.body as UpdateProfileInput;
-  const user = await users.updateProfile(req.auth!.user.id, { name });
+  const { name, language } = req.body as UpdateProfileInput;
+  const user = await users.updateProfile(req.auth!.user.id, { name, language });
   await audit(req, { action: 'user.profile_updated', targetType: 'user', targetId: user.id });
   res.json({ user: await serializeUser(user) });
 }

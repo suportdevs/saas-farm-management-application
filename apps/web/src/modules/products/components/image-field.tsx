@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { ImagePlus, Trash2 } from 'lucide-react';
 import { IMAGE_MAX_BYTES, IMAGE_TYPES } from '@kit/shared';
 import { Button } from '@/components/ui/button';
+import { useT } from '@/i18n/provider';
 
 /** The image chosen in the form: unchanged, a new file, or removed. */
 export type ImageChange = { type: 'keep' } | { type: 'set'; file: File } | { type: 'remove' };
@@ -17,6 +18,7 @@ export function ImageField({
   onChange: (change: ImageChange) => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
+  const t = useT();
   const [preview, setPreview] = useState(currentUrl);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,9 +33,9 @@ export function ImageField({
     e.target.value = '';
     if (!file) return;
     if (!(IMAGE_TYPES as readonly string[]).includes(file.type))
-      return setError('Choose a JPEG, PNG, WebP or GIF image.');
+      return setError(t('Choose a JPEG, PNG, WebP or GIF image.'));
     if (file.size > IMAGE_MAX_BYTES)
-      return setError(`Images can be up to ${IMAGE_MAX_BYTES / 1024 / 1024} MB.`);
+      return setError(t('Images can be up to {size} MB.', { size: IMAGE_MAX_BYTES / 1024 / 1024 }));
     setError(null);
     setPreview(URL.createObjectURL(file));
     onChange({ type: 'set', file });
@@ -57,11 +59,11 @@ export function ImageField({
         </div>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" size="sm" onClick={() => input.current?.click()}>
-            {preview ? 'Change image' : 'Choose image'}
+            {preview ? t('Change image') : t('Choose image')}
           </Button>
           {preview && (
             <Button type="button" variant="ghost" size="sm" onClick={remove}>
-              <Trash2 className="h-3.5 w-3.5" /> Remove
+              <Trash2 className="h-3.5 w-3.5" /> {t('Remove')}
             </Button>
           )}
         </div>
@@ -71,7 +73,7 @@ export function ImageField({
           accept={IMAGE_TYPES.join(',')}
           className="sr-only"
           onChange={pick}
-          aria-label="Image file"
+          aria-label={t('Image file')}
         />
       </div>
       {error ? (

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Maximize, Minimize, Monitor, Moon, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Settings2, Sun, ZoomIn, ZoomOut } from 'lucide-react';
+import { useT } from '@/i18n/provider';
 import { Logo } from '@/components/logo';
 import { Menu, menuItemClasses } from '@/components/ui/menu';
 import { ZOOM_LEVELS, type ThemeMode } from '@/lib/preferences';
@@ -15,6 +16,7 @@ const iconButton = 'flex h-9 w-9 items-center justify-center rounded-lg text-mut
 
 /** The sticky top bar of the app: menu toggles on the left, view controls and the account on the right. */
 export function AppBar({ user, farms }: ShellProps) {
+  const t = useT();
   const { prefs, setPref } = usePreferences();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const sideNav = prefs.nav === 'left' || prefs.nav === 'right';
@@ -38,8 +40,8 @@ export function AppBar({ user, farms }: ShellProps) {
           type="button"
           onClick={() => setPref('collapsed', !prefs.collapsed)}
           className={cn(iconButton, 'hidden lg:flex', prefs.nav === 'right' && 'order-last')}
-          aria-label={prefs.collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          title={prefs.collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={prefs.collapsed ? t('Expand sidebar') : t('Collapse sidebar')}
+          title={prefs.collapsed ? t('Expand sidebar') : t('Collapse sidebar')}
         >
           <CollapseIcon className="h-[18px] w-[18px]" />
         </button>
@@ -49,7 +51,7 @@ export function AppBar({ user, farms }: ShellProps) {
         <ZoomControls />
         <FullscreenButton />
         <ThemeMenu />
-        <button type="button" onClick={() => setSettingsOpen(true)} className={iconButton} aria-label="Site settings" title="Site settings">
+        <button type="button" onClick={() => setSettingsOpen(true)} className={iconButton} aria-label={t('Site settings')} title={t('Site settings')}>
           <Settings2 className="h-[18px] w-[18px]" />
         </button>
         <div className="ml-1.5 border-l pl-2.5">
@@ -64,6 +66,7 @@ export function AppBar({ user, farms }: ShellProps) {
 
 /** − 100% + : steps through the zoom levels; the percentage resets to 100%. */
 function ZoomControls() {
+  const t = useT();
   const { prefs, setPref } = usePreferences();
   const index = ZOOM_LEVELS.indexOf(prefs.zoom as (typeof ZOOM_LEVELS)[number]);
   const step = (by: number) => {
@@ -72,10 +75,10 @@ function ZoomControls() {
   };
   return (
     <div className="hidden items-center rounded-lg border sm:flex">
-      <button type="button" onClick={() => step(-1)} disabled={index <= 0} className={cn(iconButton, 'h-8 w-8 disabled:opacity-40')} aria-label="Zoom out" title="Zoom out">
+      <button type="button" onClick={() => step(-1)} disabled={index <= 0} className={cn(iconButton, 'h-8 w-8 disabled:opacity-40')} aria-label={t('Zoom out')} title={t('Zoom out')}>
         <ZoomOut className="h-4 w-4" />
       </button>
-      <button type="button" onClick={() => setPref('zoom', 100)} className="w-12 text-center text-xs font-medium tabular-nums text-muted-foreground hover:text-foreground" title="Reset zoom">
+      <button type="button" onClick={() => setPref('zoom', 100)} className="w-12 text-center text-xs font-medium tabular-nums text-muted-foreground hover:text-foreground" title={t('Reset zoom')}>
         {prefs.zoom}%
       </button>
       <button
@@ -83,8 +86,8 @@ function ZoomControls() {
         onClick={() => step(1)}
         disabled={index >= ZOOM_LEVELS.length - 1}
         className={cn(iconButton, 'h-8 w-8 disabled:opacity-40')}
-        aria-label="Zoom in"
-        title="Zoom in"
+        aria-label={t('Zoom in')}
+        title={t('Zoom in')}
       >
         <ZoomIn className="h-4 w-4" />
       </button>
@@ -93,6 +96,7 @@ function ZoomControls() {
 }
 
 function FullscreenButton() {
+  const t = useT();
   const [supported, setSupported] = useState(false);
   const [active, setActive] = useState(false);
   useEffect(() => {
@@ -105,7 +109,7 @@ function FullscreenButton() {
 
   const toggle = () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => {});
   return (
-    <button type="button" onClick={toggle} className={cn(iconButton, 'hidden sm:flex')} aria-label={active ? 'Exit full screen' : 'Full screen'} title={active ? 'Exit full screen' : 'Full screen'}>
+    <button type="button" onClick={toggle} className={cn(iconButton, 'hidden sm:flex')} aria-label={active ? t('Exit full screen') : t('Full screen')} title={active ? t('Exit full screen') : t('Full screen')}>
       {active ? <Minimize className="h-[18px] w-[18px]" /> : <Maximize className="h-[18px] w-[18px]" />}
     </button>
   );
@@ -118,10 +122,11 @@ const THEMES: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
 ];
 
 function ThemeMenu() {
+  const t = useT();
   const { theme, setTheme } = usePreferences();
   return (
     <Menu
-      label="Theme"
+      label={t('Theme')}
       align="end"
       className="min-w-40"
       triggerClassName={iconButton}
@@ -145,7 +150,7 @@ function ThemeMenu() {
             }}
             className={cn(menuItemClasses, theme === mode && 'bg-muted font-medium')}
           >
-            <Icon className="h-4 w-4 text-muted-foreground" /> {label}
+            <Icon className="h-4 w-4 text-muted-foreground" /> {t(label)}
           </button>
         ))
       }

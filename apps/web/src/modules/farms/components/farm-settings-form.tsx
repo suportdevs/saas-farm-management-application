@@ -17,6 +17,7 @@ import {
   type ToggleableModule,
   type FarmContext,
   type FarmProfile,
+  LANGUAGES,
 } from '@kit/shared';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -173,6 +174,15 @@ export function FarmSettingsForm() {
             <Field id="locale" label="Number & date format" error={errors.locale}>
               <Select id="locale" className="w-full" value={form.locale} onChange={(e) => set('locale', e.target.value)}>
                 <LocaleOptions current={form.locale} />
+              </Select>
+            </Field>
+            <Field id="language" label="Language" error={errors.language} hint="Default for the team. Each member can still pick their own in Site settings.">
+              <Select id="language" className="w-full" value={form.language} onChange={(e) => set('language', e.target.value)}>
+                {LANGUAGES.map((l) => (
+                  <option key={l.code} value={l.code}>
+                    {l.native === l.label ? l.label : `${l.native} — ${l.label}`}
+                  </option>
+                ))}
               </Select>
             </Field>
             <Field id="milkUnit" label="Milk unit">

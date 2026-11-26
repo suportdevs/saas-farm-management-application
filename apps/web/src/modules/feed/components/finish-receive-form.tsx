@@ -19,6 +19,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ApiError, api, errorMessage } from '@/lib/api';
 import { useCan, useFarm } from '@/modules/farms/context';
 import { CatalogSelect } from '@/modules/products/components/catalog-select';
+import { useT } from '@/i18n/provider';
 import { money } from '../money';
 
 /** Quantity, rate and amount as typed; amount ÷ quantity sets the rate, quantity × rate the amount. */
@@ -56,6 +57,7 @@ function withAmounts<T extends Amounts>(row: T, field: keyof Amounts, value: str
 export function FinishReceiveForm({ receive }: { receive?: FinishReceiveDetail }) {
   const router = useRouter();
   const { farm } = useFarm();
+  const t = useT();
   const processed = receive?.status === FINISH_RECEIVE_STATUS.processed;
   const canSave = useCan(receive ? 'feed.finish_receive_edit' : 'feed.finish_receive_create') && !processed;
   const canConfirm = useCan('feed.finish_receive_process') && !!receive && !processed;
@@ -120,9 +122,9 @@ export function FinishReceiveForm({ receive }: { receive?: FinishReceiveDetail }
   /** Ticked rows go to the items list (a product already there gets the new quantity and rate). */
   const addItems = () => {
     const picked = (results ?? []).filter((r) => r.checked);
-    if (!picked.length) return toast.error('Tick at least one product (type a quantity to tick it).');
+    if (!picked.length) return toast.error(t('Tick at least one product (type a quantity to tick it).'));
     const missing = picked.filter((r) => !(num(r.quantity) > 0) || r.rate.trim() === '');
-    if (missing.length) return toast.error(`Enter quantity and rate (or amount) for: ${missing.map((r) => r.name).join(', ')}`);
+    if (missing.length) return toast.error(t('Enter quantity and rate (or amount) for: {names}', { names: missing.map((r) => r.name).join(', ') }));
     let updated = 0;
     const next = [...lines];
     for (const r of picked) {
@@ -138,7 +140,11 @@ export function FinishReceiveForm({ receive }: { receive?: FinishReceiveDetail }
     setLines(next);
     setErrors((e) => ({ ...e, items: '' }));
     setResults((rs) => rs!.map((r) => ({ ...r, checked: false, quantity: '', rate: '', amount: '' })));
-    toast.success(`${picked.length} ${picked.length === 1 ? 'item' : 'items'} added${updated ? ` (${updated} already listed — updated)` : ''}. Save to keep them.`);
+    toast.success(
+      updated
+        ? t('{count} items added ({updated} already listed — updated). Save to keep them.', { count: picked.length, updated })
+        : t('{count} items added. Save to keep them.', { count: picked.length }),
+    );
   };
 
   const setLineAmount = (id: number, field: keyof Amounts, value: string) => setLines((ls) => ls.map((l) => (l.id === id ? withAmounts(l, field, value) : l)));
@@ -172,14 +178,14 @@ export function FinishReceiveForm({ receive }: { receive?: FinishReceiveDetail }
   const save = (e: FormEvent) => {
     e.preventDefault();
     if (!lines.length) {
-      setErrors({ items: 'Add at least one product' });
+      setErrors({ items: t('Add at least one product') });
       return;
     }
     const body = { ...header, items: lines.map(({ key, productSizeKey, quantity, rate }) => ({ key, productSizeKey, quantity, rate })) };
     void run(
       'save',
       () => (receive ? api.put(`${apiBase}/${receive.key}`, body) : api.post(apiBase, body)),
-      receive ? 'Finish receive updated' : 'Finish receive saved as pending',
+      receive ? t('Finish receive updated') : t('Finish receive saved as pending'),
     );
   };
 
@@ -189,16 +195,16 @@ export function FinishReceiveForm({ receive }: { receive?: FinishReceiveDetail }
     <form onSubmit={save} className="space-y-5 pb-20">
       <PageHeader
         compact
-        eyebrow="Feed"
-        title={receive ? `Finish receive ${receive.orderNo}` : 'New finish receive'}
-        description="Search products, add them as items, then save. Save keeps it pending; Confirm locks it."
+        eyebrow={t("Feed")}
+        title={receive ? t('Finish receive {number}', { number: receive.orderNo }) : t('New finish receive')}
+        description={t("Search products, add them as items, then save. Save keeps it pending; Confirm locks it.")}
         actions={
           receive && (
             <div className="flex items-center gap-2">
-              <Badge variant={processed ? 'primary' : 'outline'}>{processed ? 'Processed' : 'Pending'}</Badge>
+              <Badge variant={processed ? 'primary' : 'outline'}>{processed ? t('Processed') : t('Pending')}</Badge>
               {canDelete && (
                 <Button type="button" variant="outline" className="text-destructive" onClick={() => setConfirm('delete')}>
-                  <Trash2 className="h-4 w-4" /> Delete
+                  <Trash2 className="h-4 w-4" /> {t("Delete")}
                 </Button>
               )}
             </div>
@@ -206,27 +212,27 @@ export function FinishReceiveForm({ receive }: { receive?: FinishReceiveDetail }
         }
       />
 
-      {processed && <Alert>This receive is confirmed (processed). It can be viewed and downloaded; reset it to make changes.</Alert>}
+      {processed && <Alert>{t("This receive is confirmed (processed). It can be viewed and downloaded; reset it to make changes.")}</Alert>}
 
       <fieldset disabled={!canSave || !!busy} className="space-y-5">
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Receive details</CardTitle>
+            <CardTitle className="text-base">{t("Receive details")}</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Field id="fr-order" label="Order no." error={errors.orderNo}>
-              <Input id="fr-order" value={header.orderNo} onChange={(e) => set('orderNo', e.target.value)} placeholder="FR-2026-001" required />
+            <Field id="fr-order" label={t("Order no.")} error={errors.orderNo}>
+              <Input id="fr-order" value={header.orderNo} onChange={(e) => set('orderNo', e.target.value)} placeholder={t("FR-2026-001")} required />
             </Field>
-            <Field id="fr-date" label="Receive date" error={errors.receiveDate}>
+            <Field id="fr-date" label={t("Receive date")} error={errors.receiveDate}>
               <Input id="fr-date" type="date" value={header.receiveDate} onChange={(e) => set('receiveDate', e.target.value)} required />
             </Field>
-            <Field id="fr-warehouse" label="Warehouse" error={errors.warehouseKey}>
-              <CatalogSelect id="fr-warehouse" resource="warehouses" value={header.warehouseKey} initialLabel={receive?.warehouseName} onChange={(v) => set('warehouseKey', v)} placeholder="Choose a warehouse" />
+            <Field id="fr-warehouse" label={t("Warehouse")} error={errors.warehouseKey}>
+              <CatalogSelect id="fr-warehouse" resource="warehouses" value={header.warehouseKey} initialLabel={receive?.warehouseName} onChange={(v) => set('warehouseKey', v)} placeholder={t("Choose a warehouse")} />
             </Field>
-            <Field id="fr-by" label="Received by" error={errors.receivedByKey}>
-              <CatalogSelect id="fr-by" resource="employees" value={header.receivedByKey} initialLabel={receive?.receivedByName ?? undefined} onChange={(v) => set('receivedByKey', v)} placeholder="Choose an employee" clearable />
+            <Field id="fr-by" label={t("Received by")} error={errors.receivedByKey}>
+              <CatalogSelect id="fr-by" resource="employees" value={header.receivedByKey} initialLabel={receive?.receivedByName ?? undefined} onChange={(v) => set('receivedByKey', v)} placeholder={t("Choose an employee")} clearable />
             </Field>
-            <Field id="fr-note" label="Note" error={errors.note} className="sm:col-span-2 lg:col-span-4">
+            <Field id="fr-note" label={t("Note")} error={errors.note} className="sm:col-span-2 lg:col-span-4">
               <Textarea id="fr-note" rows={2} value={header.note} onChange={(e) => set('note', e.target.value)} />
             </Field>
           </CardContent>
@@ -235,15 +241,15 @@ export function FinishReceiveForm({ receive }: { receive?: FinishReceiveDetail }
         {canSave && (
           <Card className="overflow-hidden">
             <CardHeader className="border-b pb-3">
-              <CardTitle className="text-base">Add product</CardTitle>
-              <CardDescription>Search, type a quantity (the row is ticked) and a rate or amount, then Add items.</CardDescription>
+              <CardTitle className="text-base">{t("Add product")}</CardTitle>
+              <CardDescription>{t("Search, type a quantity (the row is ticked) and a rate or amount, then Add items.")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 pt-4">
               <div className="grid gap-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)_auto] sm:items-end">
-                <Field id="fr-pick-category" label="Category">
-                  <CatalogSelect id="fr-pick-category" resource="categories" value={pick.category} onChange={(v) => setPick((p) => ({ ...p, category: v }))} placeholder="Any category" clearable />
+                <Field id="fr-pick-category" label={t("Category")}>
+                  <CatalogSelect id="fr-pick-category" resource="categories" value={pick.category} onChange={(v) => setPick((p) => ({ ...p, category: v }))} placeholder={t("Any category")} clearable />
                 </Field>
-                <Field id="fr-pick-q" label="Product name">
+                <Field id="fr-pick-q" label={t("Product name")}>
                   <Input
                     id="fr-pick-q"
                     value={pick.q}
@@ -255,7 +261,7 @@ export function FinishReceiveForm({ receive }: { receive?: FinishReceiveDetail }
                         void search();
                       }
                     }}
-                    placeholder="Name or code"
+                    placeholder={t("Name or code")}
                   />
                 </Field>
                 <div className="flex gap-2">
@@ -263,7 +269,7 @@ export function FinishReceiveForm({ receive }: { receive?: FinishReceiveDetail }
                     {!searching && <Search className="h-4 w-4" />} Search
                   </Button>
                   <Button type="button" variant="outline" onClick={clearSearch}>
-                    <X className="h-4 w-4" /> Clear
+                    <X className="h-4 w-4" /> {t("Clear")}
                   </Button>
                 </div>
               </div>
@@ -275,28 +281,28 @@ export function FinishReceiveForm({ receive }: { receive?: FinishReceiveDetail }
                       <thead className="sticky top-0 z-10 bg-muted text-xs uppercase tracking-wide text-muted-foreground">
                         <tr>
                           <th className="w-10 px-3 py-2">
-                            <Checkbox aria-label="Tick all" checked={allChecked} disabled={!results.length} onChange={(e) => setResults((rs) => rs!.map((r) => ({ ...r, checked: e.target.checked })))} />
+                            <Checkbox aria-label={t("Tick all")} checked={allChecked} disabled={!results.length} onChange={(e) => setResults((rs) => rs!.map((r) => ({ ...r, checked: e.target.checked })))} />
                           </th>
                           <th className="w-10 px-2 py-2 font-medium">#</th>
-                          <th className="px-3 py-2 font-medium">Product</th>
-                          <th className="px-3 py-2 font-medium">Unit</th>
-                          <th className="w-32 px-2 py-2 font-medium">Quantity</th>
-                          <th className="w-32 px-2 py-2 font-medium">Rate</th>
-                          <th className="w-36 px-2 py-2 font-medium">Amount</th>
+                          <th className="px-3 py-2 font-medium">{t("Product")}</th>
+                          <th className="px-3 py-2 font-medium">{t("Unit")}</th>
+                          <th className="w-32 px-2 py-2 font-medium">{t("Quantity")}</th>
+                          <th className="w-32 px-2 py-2 font-medium">{t("Rate")}</th>
+                          <th className="w-36 px-2 py-2 font-medium">{t("Amount")}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
                         {results.length === 0 && (
                           <tr>
                             <td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">
-                              No products match. Check the category or name.
+                              {t("No products match. Check the category or name.")}
                             </td>
                           </tr>
                         )}
                         {results.map((r, i) => (
                           <tr key={r.key} className={r.checked ? 'bg-primary/5' : undefined}>
                             <td className="px-3 py-1.5">
-                              <Checkbox aria-label={`Tick ${r.name}`} checked={r.checked} onChange={(e) => setPickChecked(r.key, e.target.checked)} />
+                              <Checkbox aria-label={t('Tick {name}', { name: r.name })} checked={r.checked} onChange={(e) => setPickChecked(r.key, e.target.checked)} />
                             </td>
                             <td className="px-2 py-1.5 tabular-nums text-muted-foreground">{i + 1}</td>
                             <td className="px-3 py-1.5">
@@ -328,7 +334,7 @@ export function FinishReceiveForm({ receive }: { receive?: FinishReceiveDetail }
                       {results.filter((r) => r.checked).length} of {results.length} ticked
                     </span>
                     <Button type="button" size="sm" onClick={addItems}>
-                      <ListPlus className="h-4 w-4" /> Add items
+                      <ListPlus className="h-4 w-4" /> {t("Add items")}
                     </Button>
                   </div>
                 </div>
@@ -340,7 +346,7 @@ export function FinishReceiveForm({ receive }: { receive?: FinishReceiveDetail }
         <Card className="overflow-hidden">
           <CardHeader className="border-b pb-3">
             <CardTitle className="text-base">Items ({lines.length})</CardTitle>
-            {canSave && <CardDescription>Added items stay here until you save the receive.</CardDescription>}
+            {canSave && <CardDescription>{t("Added items stay here until you save the receive.")}</CardDescription>}
             {errors.items && <p className="text-sm text-destructive">{errors.items}</p>}
           </CardHeader>
           <div className="overflow-x-auto">
@@ -348,11 +354,11 @@ export function FinishReceiveForm({ receive }: { receive?: FinishReceiveDetail }
               <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th className="w-10 px-3 py-2 font-medium">#</th>
-                  <th className="px-3 py-2 font-medium">Product</th>
-                  <th className="px-3 py-2 font-medium">Unit</th>
-                  <th className="w-32 px-2 py-2 font-medium">Quantity</th>
-                  <th className="w-32 px-2 py-2 font-medium">Rate</th>
-                  <th className="w-36 px-2 py-2 font-medium">Amount</th>
+                  <th className="px-3 py-2 font-medium">{t("Product")}</th>
+                  <th className="px-3 py-2 font-medium">{t("Unit")}</th>
+                  <th className="w-32 px-2 py-2 font-medium">{t("Quantity")}</th>
+                  <th className="w-32 px-2 py-2 font-medium">{t("Rate")}</th>
+                  <th className="w-36 px-2 py-2 font-medium">{t("Amount")}</th>
                   <th className="w-10 px-2 py-2" />
                 </tr>
               </thead>
@@ -360,7 +366,7 @@ export function FinishReceiveForm({ receive }: { receive?: FinishReceiveDetail }
                 {lines.length === 0 && (
                   <tr>
                     <td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">
-                      No items yet — search products above and Add items.
+                      {t("No items yet — search products above and Add items.")}
                     </td>
                   </tr>
                 )}
@@ -391,7 +397,7 @@ export function FinishReceiveForm({ receive }: { receive?: FinishReceiveDetail }
                     <td className="px-2 py-1.5 align-middle">
                       <button
                         type="button"
-                        aria-label={`Remove item ${i + 1}`}
+                        aria-label={t('Remove item {number}', { number: i + 1 })}
                         onClick={() => setLines((ls) => ls.filter((x) => x.id !== l.id))}
                         className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-destructive"
                       >
@@ -404,7 +410,7 @@ export function FinishReceiveForm({ receive }: { receive?: FinishReceiveDetail }
               <tfoot className="border-t bg-muted/30 font-medium">
                 <tr>
                   <td className="px-3 py-2" colSpan={3}>
-                    Total
+                    {t("Total")}
                   </td>
                   <td className="px-3 py-2 tabular-nums">{totalQuantity.toLocaleString()}</td>
                   <td />
@@ -420,21 +426,21 @@ export function FinishReceiveForm({ receive }: { receive?: FinishReceiveDetail }
       {/* Actions stay in reach while scrolling through long receives. */}
       <div className="sticky bottom-0 z-10 -mx-1 flex items-center justify-end gap-2 border-t bg-background/95 px-1 py-3 backdrop-blur">
         <Link href={listHref} className={buttonClasses('outline')}>
-          {canSave ? 'Cancel' : 'Back'}
+          {canSave ? t('Cancel') : t('Back')}
         </Link>
         {canReset && (
           <Button type="button" variant="outline" onClick={() => setConfirm('reset')} disabled={!!busy}>
-            <RotateCcw className="h-4 w-4" /> Reset
+            <RotateCcw className="h-4 w-4" /> {t("Reset")}
           </Button>
         )}
         {canConfirm && (
           <Button type="button" variant="outline" onClick={() => setConfirm('confirm')} disabled={!!busy}>
-            <CheckCircle2 className="h-4 w-4" /> Confirm
+            <CheckCircle2 className="h-4 w-4" /> {t("Confirm")}
           </Button>
         )}
         {canSave && (
           <Button type="submit" loading={busy === 'save'}>
-            {receive ? 'Save changes' : 'Save'}
+            {receive ? t('Save changes') : t('Save')}
           </Button>
         )}
       </div>
@@ -445,10 +451,10 @@ export function FinishReceiveForm({ receive }: { receive?: FinishReceiveDetail }
           onClose={() => setConfirm(null)}
           title={
             confirm === 'delete'
-              ? `Delete finish receive ${receive.orderNo}?`
+              ? t('Delete finish receive {number}?', { number: receive.orderNo })
               : confirm === 'reset'
-                ? `Reset finish receive ${receive.orderNo}?`
-                : `Confirm finish receive ${receive.orderNo}?`
+                ? t('Reset finish receive {number}?', { number: receive.orderNo })
+                : t('Confirm finish receive {number}?', { number: receive.orderNo })
           }
           description={
             confirm === 'delete'
@@ -460,21 +466,21 @@ export function FinishReceiveForm({ receive }: { receive?: FinishReceiveDetail }
           footer={
             <>
               <Button type="button" variant="outline" onClick={() => setConfirm(null)}>
-                Cancel
+                {t("Cancel")}
               </Button>
               {confirm === 'delete' && (
-                <Button type="button" variant="destructive" loading={busy === 'delete'} onClick={() => run('delete', () => api.delete(`/farms/${farm.slug}/feed/finish-receives/${receive.key}`), 'Finish receive deleted')}>
-                  Delete
+                <Button type="button" variant="destructive" loading={busy === 'delete'} onClick={() => run('delete', () => api.delete(`/farms/${farm.slug}/feed/finish-receives/${receive.key}`), t('Finish receive deleted'))}>
+                  {t("Delete")}
                 </Button>
               )}
               {confirm === 'confirm' && (
-                <Button type="button" loading={busy === 'confirm'} onClick={() => run('confirm', () => api.post(`/farms/${farm.slug}/feed/finish-receives/${receive.key}/process`), 'Finish receive confirmed')}>
-                  Confirm
+                <Button type="button" loading={busy === 'confirm'} onClick={() => run('confirm', () => api.post(`/farms/${farm.slug}/feed/finish-receives/${receive.key}/process`), t('Finish receive confirmed'))}>
+                  {t("Confirm")}
                 </Button>
               )}
               {confirm === 'reset' && (
-                <Button type="button" loading={busy === 'reset'} onClick={() => run('reset', () => api.post(`/farms/${farm.slug}/feed/finish-receives/bulk-reset`, { keys: [receive.key] }), 'Finish receive reset to pending', true)}>
-                  Reset
+                <Button type="button" loading={busy === 'reset'} onClick={() => run('reset', () => api.post(`/farms/${farm.slug}/feed/finish-receives/bulk-reset`, { keys: [receive.key] }), t('Finish receive reset to pending'), true)}>
+                  {t("Reset")}
                 </Button>
               )}
             </>

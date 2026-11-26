@@ -1,8 +1,11 @@
+'use client';
+
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Pagination as PaginationInfo } from '@kit/shared';
 import { buttonClasses } from '@/components/ui/button';
+import { useT } from '@/i18n/provider';
 import { cn } from '@/lib/utils';
 
 /** Page numbers to show: first, last, and two around the current one ("…" = gap). */
@@ -35,6 +38,7 @@ export function Pagination({
   onPage?: (page: number) => void;
   className?: string;
 }) {
+  const t = useT();
   const { page, pageSize, total } = pagination;
   if (total === 0) return null;
   const pages = Math.max(1, Math.ceil(total / pageSize));
@@ -62,11 +66,15 @@ export function Pagination({
   return (
     <div className={cn('mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground', className)}>
       <span>
-        Showing {((page - 1) * pageSize + 1).toLocaleString()}–{Math.min(page * pageSize, total).toLocaleString()} of {total.toLocaleString()}
+        {t('Showing {from}–{to} of {total}', {
+          from: ((page - 1) * pageSize + 1).toLocaleString(),
+          to: Math.min(page * pageSize, total).toLocaleString(),
+          total: total.toLocaleString(),
+        })}
       </span>
       {pages > 1 && (
-        <nav aria-label="Pagination" className="flex flex-wrap items-center gap-1">
-          {page > 1 && item(page - 1, <ChevronLeft className="h-4 w-4" />, { ariaLabel: 'Previous page' })}
+        <nav aria-label={t('Pagination')} className="flex flex-wrap items-center gap-1">
+          {page > 1 && item(page - 1, <ChevronLeft className="h-4 w-4" />, { ariaLabel: t('Previous page') })}
           {pageWindow(page, pages).map((p, i) =>
             p === '…' ? (
               <span key={`gap${i}`} className="px-1">
@@ -76,7 +84,7 @@ export function Pagination({
               item(p, p, { active: p === page })
             ),
           )}
-          {page < pages && item(page + 1, <ChevronRight className="h-4 w-4" />, { ariaLabel: 'Next page' })}
+          {page < pages && item(page + 1, <ChevronRight className="h-4 w-4" />, { ariaLabel: t('Next page') })}
         </nav>
       )}
     </div>

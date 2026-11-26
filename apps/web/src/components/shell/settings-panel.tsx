@@ -7,11 +7,14 @@ import { Button } from '@/components/ui/button';
 import { Sheet } from '@/components/ui/sheet';
 import { COLORS, FONTS, NAV_POSITIONS, PAGE_SIZES, SIZES, ZOOM_LEVELS, type NavPosition } from '@/lib/preferences';
 import { cn } from '@/lib/utils';
+import { LanguagePicker } from '@/i18n/language-picker';
+import { useT } from '@/i18n/provider';
 import { usePreferences } from './preferences-provider';
 
 /** Off-canvas "Site settings": theme, colors, layout, font and zoom. Saved in this browser. */
 export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { prefs, setPref, reset, theme, setTheme } = usePreferences();
+  const t = useT();
   const sideNav = prefs.nav === 'left' || prefs.nav === 'right';
   const router = useRouter();
 
@@ -19,15 +22,19 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
     <Sheet
       open={open}
       onClose={onClose}
-      title="Site settings"
-      description="Customize how the app looks. Saved in this browser."
+      title={t('Site settings')}
+      description={t('Customize how the app looks. Saved in this browser.')}
       footer={
         <Button variant="outline" className="w-full" onClick={reset}>
-          <RotateCcw className="h-4 w-4" /> Reset to default
+          <RotateCcw className="h-4 w-4" /> {t('Reset to default')}
         </Button>
       }
     >
       <div className="space-y-7">
+        <Group title="Language" hint="Your own language, on every device. Farm default follows each farm's language.">
+          <LanguagePicker />
+        </Group>
+
         <Group title="Theme">
           <div className="grid grid-cols-3 gap-2">
             {(
@@ -39,7 +46,7 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
             ).map(([mode, label, Icon]) => (
               <Choice key={mode} selected={theme === mode} onClick={() => setTheme(mode)}>
                 <Icon className="h-4 w-4" />
-                {label}
+                {t(label)}
               </Choice>
             ))}
           </div>
@@ -67,10 +74,10 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
         <Group title="Sidebar style">
           <div className="grid grid-cols-2 gap-2">
             <Choice selected={prefs.sidebar === 'brand'} onClick={() => setPref('sidebar', 'brand')}>
-              <span className="h-4 w-4 rounded bg-sidebar ring-1 ring-border" /> Brand
+              <span className="h-4 w-4 rounded bg-sidebar ring-1 ring-border" /> {t('Brand')}
             </Choice>
             <Choice selected={prefs.sidebar === 'theme'} onClick={() => setPref('sidebar', 'theme')}>
-              <span className="h-4 w-4 rounded bg-card ring-1 ring-border" /> Match theme
+              <span className="h-4 w-4 rounded bg-card ring-1 ring-border" /> {t('Match theme')}
             </Choice>
           </div>
         </Group>
@@ -86,13 +93,13 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
                 className={cn('rounded-lg border p-1.5 text-center text-xs font-medium capitalize transition-colors', prefs.nav === pos ? 'border-primary bg-primary/5 text-foreground' : 'text-muted-foreground hover:bg-muted')}
               >
                 <LayoutPreview position={pos} />
-                <span className="mt-1 block">{pos}</span>
+                <span className="mt-1 block">{t(pos.charAt(0).toUpperCase() + pos.slice(1))}</span>
               </button>
             ))}
           </div>
           {sideNav && (
             <label className="mt-3 flex cursor-pointer items-center justify-between rounded-lg border px-3 py-2.5 text-sm">
-              Collapsed sidebar (icons only)
+              {t('Collapsed sidebar (icons only)')}
               <input type="checkbox" checked={prefs.collapsed} onChange={(e) => setPref('collapsed', e.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
             </label>
           )}
@@ -101,10 +108,10 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
         <Group title="Content width">
           <div className="grid grid-cols-2 gap-2">
             <Choice selected={prefs.width === 'boxed'} onClick={() => setPref('width', 'boxed')}>
-              Boxed
+              {t('Boxed')}
             </Choice>
             <Choice selected={prefs.width === 'full'} onClick={() => setPref('width', 'full')}>
-              Full width
+              {t('Full width')}
             </Choice>
           </div>
         </Group>
@@ -123,7 +130,7 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
           <div className="grid grid-cols-3 gap-2">
             {SIZES.map((s, i) => (
               <Choice key={s.key} selected={prefs.size === s.key} onClick={() => setPref('size', s.key)}>
-                <span className={['text-xs', 'text-sm', 'text-base'][i]}>Aa</span> {s.label}
+                <span className={['text-xs', 'text-sm', 'text-base'][i]}>Aa</span> {t(s.label)}
               </Choice>
             ))}
           </div>
@@ -163,10 +170,11 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
 }
 
 function Group({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+  const t = useT();
   return (
     <section>
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</h3>
-      {hint && <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>}
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t(title)}</h3>
+      {hint && <p className="mt-0.5 text-xs text-muted-foreground">{t(hint)}</p>}
       <div className="mt-2.5">{children}</div>
     </section>
   );

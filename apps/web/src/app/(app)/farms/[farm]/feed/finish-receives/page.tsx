@@ -3,7 +3,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { PackageCheck, Plus, Search } from 'lucide-react';
 import { FINISH_RECEIVE_STATUS, finishReceiveStatusLabel } from '@kit/shared';
-import { CriteriaBar, exportCriteria, urlCriteria } from '@/components/app/criteria-bar';
+import { CriteriaBar } from '@/components/app/criteria-bar';
+import { exportCriteria, urlCriteria } from '@/components/app/criteria';
 import { FilterToggle } from '@/components/app/filter-toggle';
 import { ModuleLocked } from '@/components/app/module-locked';
 import { PageHeader } from '@/components/app/page-header';
@@ -15,6 +16,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { resolvePageSize } from '@/lib/page-size';
+import { getT } from '@/i18n/server';
 import { getFarmContext } from '@/modules/farms/server';
 import { FinishReceiveTable } from '@/modules/feed/components/finish-receive-table';
 import { FinishReceivesExport } from '@/modules/feed/components/finish-receives-export';
@@ -28,6 +30,7 @@ type Search = { q?: string; status?: string; from?: string; to?: string; page?: 
 export default async function FinishReceivesPage({ params, searchParams }: { params: Promise<{ farm: string }>; searchParams: Promise<Search> }) {
   const [{ farm: slug }, query] = await Promise.all([params, searchParams]);
   const ctx = await getFarmContext(slug);
+  const t = await getT(slug);
   // Not in the plan or switched off: explain instead of a 404.
   if (ctx.modules.feed !== 'enabled') return <ModuleLocked ctx={ctx} module="feed" />;
   const can = (p: string) => ctx.membership.permissions.includes(p as never);
@@ -49,13 +52,13 @@ export default async function FinishReceivesPage({ params, searchParams }: { par
     <>
       <PageHeader
         compact
-        eyebrow="Feed"
-        title="Finish receives"
-        description="Finished feed and goods received into a warehouse against an order. Pending until processed."
+        eyebrow={t("Feed")}
+        title={t("Finish receives")}
+        description={t("Finished feed and goods received into a warehouse against an order. Pending until processed.")}
         actions={
           can('feed.finish_receive_create') && (
             <Link href={`${base}/new`} className={buttonClasses('primary')}>
-              <Plus className="h-4 w-4" /> New finish receive
+              <Plus className="h-4 w-4" /> {t("New finish receive")}
             </Link>
           )
         }
@@ -68,20 +71,20 @@ export default async function FinishReceivesPage({ params, searchParams }: { par
               {query.pageSize && <input type="hidden" name="pageSize" value={query.pageSize} />}
               <div className="relative min-w-60 flex-1">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input name="q" defaultValue={query.q} placeholder="Search order no. or note…" className="h-8 pl-9 text-xs" />
+                <Input name="q" defaultValue={query.q} placeholder={t("Search order no. or note…")} className="h-8 pl-9 text-xs" />
               </div>
               <FilterToggle active={[query.status, query.from || query.to].filter(Boolean).length}>
-                <Select className="h-8 text-xs" name="status" defaultValue={query.status ?? ''} aria-label="Status">
-                  <option value="">Any status</option>
-                  <option value={String(FINISH_RECEIVE_STATUS.pending)}>Pending</option>
-                  <option value={String(FINISH_RECEIVE_STATUS.processed)}>Processed</option>
+                <Select className="h-8 text-xs" name="status" defaultValue={query.status ?? ''} aria-label={t("Status")}>
+                  <option value="">{t("Any status")}</option>
+                  <option value={String(FINISH_RECEIVE_STATUS.pending)}>{t("Pending")}</option>
+                  <option value={String(FINISH_RECEIVE_STATUS.processed)}>{t("Processed")}</option>
                 </Select>
-                <Input type="date" name="from" defaultValue={query.from} aria-label="From date" className="h-8 w-36 text-xs" />
+                <Input type="date" name="from" defaultValue={query.from} aria-label={t("From date")} className="h-8 w-36 text-xs" />
                 <span className="text-muted-foreground">–</span>
-                <Input type="date" name="to" defaultValue={query.to} aria-label="To date" className="h-8 w-36 text-xs" />
+                <Input type="date" name="to" defaultValue={query.to} aria-label={t("To date")} className="h-8 w-36 text-xs" />
               </FilterToggle>
               <Button type="submit" variant="outline" size="sm">
-                Filter
+                {t("Filter")}
               </Button>
             </form>
             <div className="flex items-center gap-2">
@@ -92,7 +95,7 @@ export default async function FinishReceivesPage({ params, searchParams }: { par
         }
       >
         {rows.length === 0 ? (
-          <EmptyState className="m-4" icon={PackageCheck} title={qs.toString() ? 'No finish receives match' : 'No finish receives yet'} description="Record goods received into a warehouse, then confirm them when checked." />
+          <EmptyState className="m-4" icon={PackageCheck} title={qs.toString() ? t('No finish receives match') : t('No finish receives yet')} description={t("Record goods received into a warehouse, then confirm them when checked.")} />
         ) : (
           <FinishReceiveTable rows={rows} />
         )}

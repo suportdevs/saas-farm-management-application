@@ -4,6 +4,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { usePreferences } from '@/components/shell/preferences-provider';
 import { PAGE_SIZES } from '@/lib/preferences';
+import { useT } from '@/i18n/provider';
 
 /**
  * "Rows [25 ▾]" — used on every list.
@@ -19,6 +20,7 @@ export function PageSizeSelect({ value, onChange }: { value?: number; onChange?:
   const pathname = usePathname();
   const params = useSearchParams();
   const { prefs } = usePreferences();
+  const t = useT();
   const [, startTransition] = useTransition();
   const current = value ?? (Number(params.get('pageSize')) || prefs.pageSize);
 
@@ -32,12 +34,12 @@ export function PageSizeSelect({ value, onChange }: { value?: number; onChange?:
 
   return (
     <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-      Rows
+      {t('Rows')}
       <select
         value={current}
         onChange={(e) => change(Number(e.target.value))}
         className="h-8 rounded-lg border border-input bg-card px-2 text-xs text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring"
-        aria-label="Rows per page"
+        aria-label={t('Rows per page')}
       >
         {PAGE_SIZES.map((n) => (
           <option key={n} value={n}>

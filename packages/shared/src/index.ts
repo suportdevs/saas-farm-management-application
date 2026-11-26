@@ -15,3 +15,4 @@ export * from './distribution';
 export * from './purchases';
 export * from './hr';
 export * from './feed';
+export * from './i18n';

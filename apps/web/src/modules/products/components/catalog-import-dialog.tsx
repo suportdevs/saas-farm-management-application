@@ -15,18 +15,20 @@ import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { ApiError, api, errorMessage } from '@/lib/api';
 import { parseCsvObjects } from '@/lib/csv';
+import { useT } from '@/i18n/provider';
+import type { T } from '@/i18n/translate';
 import { useFarm } from '@/modules/farms/context';
 import { downloadImportTemplate } from '../files';
 
 type Rows = Record<string, string>[];
 
 /** "rows.3.short_name" → "Line 5 · short_name: …" (line 1 is the header). */
-function describeErrors(details: Record<string, string[]>): string[] {
+function describeErrors(details: Record<string, string[]>, t: T): string[] {
   return Object.entries(details).map(([path, messages]) => {
     const [, index, column] = path.match(/^rows\.(\d+)\.?(.*)$/) ?? [];
     const where =
-      index !== undefined ? `Line ${Number(index) + 2}${column ? ` · ${column}` : ''}` : path;
-    return `${where}: ${messages.join(', ')}`;
+      index !== undefined ? `${t('Line {line}', { line: Number(index) + 2 })}${column ? ` · ${column}` : ''}` : path;
+    return `${where}: ${messages.map((m) => t(m)).join(', ')}`;
   });
 }
 
@@ -40,7 +42,8 @@ export function CatalogImportDialog({
   onImported: () => void;
 }) {
   const { farm } = useFarm();
-  const { plural } = CATALOG[resource];
+  const t = useT();
+  const plural = t(CATALOG[resource].plural);
   const columns = importColumns(resource);
   const [file, setFile] = useState<{ name: string; rows: Rows } | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
@@ -57,11 +60,11 @@ export function CatalogImportDialog({
     const missing = columns.filter((c) => c.required && !headers.includes(c.csv)).map((c) => c.csv);
     if (missing.length)
       return setErrors([
-        `Missing column${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}. Download the template to see the format.`,
+        t(missing.length > 1 ? 'Missing columns: {columns}. Download the template to see the format.' : 'Missing column: {columns}. Download the template to see the format.', { columns: missing.join(', ') }),
       ]);
-    if (!rows.length) return setErrors(['The file has no rows.']);
+    if (!rows.length) return setErrors([t('The file has no rows.')]);
     if (rows.length > CATALOG_IMPORT_LIMIT)
-      return setErrors([`Import at most ${CATALOG_IMPORT_LIMIT.toLocaleString()} rows at a time.`]);
+      return setErrors([t('Import at most {count} rows at a time.', { count: CATALOG_IMPORT_LIMIT.toLocaleString() })]);
     // Send only the known columns.
     setFile({
       name: picked.name,
@@ -78,11 +81,11 @@ export function CatalogImportDialog({
         `/farms/${farm.slug}/${catalogPath(resource)}/import`,
         { rows: file.rows },
       );
-      toast.success(`Imported ${imported} ${imported === 1 ? 'row' : 'rows'}`);
+      toast.success(t(imported === 1 ? 'Imported {count} row' : 'Imported {count} rows', { count: imported }));
       onImported();
     } catch (err) {
       setErrors(
-        err instanceof ApiError && err.details ? describeErrors(err.details) : [errorMessage(err)],
+        err instanceof ApiError && err.details ? describeErrors(err.details, t) : [errorMessage(err)],
       );
     } finally {
       setBusy(false);
@@ -93,13 +96,13 @@ export function CatalogImportDialog({
     <Dialog
       open
       onClose={onClose}
-      title={`Import ${plural.toLowerCase()}`}
-      description="Upload a CSV file (Excel: File → Save as → CSV UTF-8). All rows are imported, or none if any row has a problem."
+      title={t('Import {items}', { items: plural.toLowerCase() })}
+      description={t('Upload a CSV file (Excel: File → Save as → CSV UTF-8). All rows are imported, or none if any row has a problem.')}
       className="max-w-2xl"
       footer={
         <>
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            {t('Cancel')}
           </Button>
           <Button onClick={submit} disabled={!file} loading={busy}>
             Import {file ? `${file.rows.length} ${file.rows.length === 1 ? 'row' : 'rows'}` : ''}
@@ -120,17 +123,17 @@ export function CatalogImportDialog({
             ))}
           </p>
           <Button variant="outline" size="sm" onClick={() => downloadImportTemplate(resource)}>
-            <Download className="h-4 w-4" /> Download template
+            <Download className="h-4 w-4" /> {t('Download template')}
           </Button>
         </div>
 
         <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed px-6 py-8 text-center transition-colors hover:border-primary/50 hover:bg-primary/5">
           <FileUp className="h-6 w-6 text-primary" />
-          <span className="text-sm font-medium">{file ? file.name : 'Choose a CSV file'}</span>
+          <span className="text-sm font-medium">{file ? file.name : t('Choose a CSV file')}</span>
           <span className="text-xs text-muted-foreground">
             {file
-              ? `${file.rows.length} rows ready to import`
-              : `Up to ${CATALOG_IMPORT_LIMIT.toLocaleString()} rows`}
+              ? t('{count} rows ready to import', { count: file.rows.length })
+              : t('Up to {count} rows', { count: CATALOG_IMPORT_LIMIT.toLocaleString() })}
           </span>
           <input type="file" accept=".csv,text/csv" className="sr-only" onChange={onFile} />
         </label>

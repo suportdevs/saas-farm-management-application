@@ -2,13 +2,15 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { catalogPath, filterColumns, STATUS_OPTIONS, type CatalogOption, type CatalogResource } from '@kit/shared';
-import { CriteriaBar, type Criterion } from '@/components/app/criteria-bar';
+import { CriteriaBar } from '@/components/app/criteria-bar';
+import { type Criterion } from '@/components/app/criteria';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { SearchSelect } from '@/components/ui/search-select';
 import { api } from '@/lib/api';
 import type { ExportCriterion } from '@/lib/table-export';
+import { useT } from '@/i18n/provider';
 import { cn } from '@/lib/utils';
 import { useFarm } from '@/modules/farms/context';
 import { CatalogSelect } from './catalog-select';
@@ -42,6 +44,7 @@ export function CatalogFilters({
   values: FilterValues;
   onApply: (values: FilterValues) => void;
 }) {
+  const t = useT();
   const [draft, setDraft] = useState<FilterValues>(values);
   // Changing a filter clears the ones that depend on it (category → product).
   const set = (key: string, value: string) =>
@@ -68,14 +71,14 @@ export function CatalogFilters({
           const id = `filter-${c.csv}`;
           if (c.ref) {
             return (
-              <Field key={c.csv} id={id} label={c.label} className={fieldClass(c.input)}>
+              <Field key={c.csv} id={id} label={t(c.label)} className={fieldClass(c.input)}>
                 <CatalogSelect
                   id={id}
                   resource={c.ref}
                   value={text(c.csv)}
                   onChange={(v) => set(c.csv, v)}
                   filters={c.dependsOn ? { [c.dependsOn]: draft[c.dependsOn] } : undefined}
-                  placeholder={`Any ${c.label.toLowerCase()}`}
+                  placeholder={t('Any {field}', { field: t(c.label).toLowerCase() })}
                   clearable
                   size="sm"
                 />
@@ -84,7 +87,7 @@ export function CatalogFilters({
           }
           if (c.input === 'date') {
             return (
-              <Field key={c.csv} id={id} label={c.label} className={fieldClass(c.input)}>
+              <Field key={c.csv} id={id} label={t(c.label)} className={fieldClass(c.input)}>
                 <div className="flex items-center gap-2">
                   <Input
                     className={SMALL}
@@ -98,7 +101,7 @@ export function CatalogFilters({
                   <Input
                     className={SMALL}
                     type="date"
-                    aria-label={`${c.label} until`}
+                    aria-label={t('{field} until', { field: t(c.label) })}
                     value={text(`${c.csv}To`)}
                     min={text(`${c.csv}From`) || undefined}
                     onChange={(e) => set(`${c.csv}To`, e.target.value)}
@@ -109,13 +112,13 @@ export function CatalogFilters({
           }
           if (c.input === 'select') {
             return (
-              <Field key={c.csv} id={id} label={c.label} className={fieldClass(c.input)}>
+              <Field key={c.csv} id={id} label={t(c.label)} className={fieldClass(c.input)}>
                 <SearchSelect
                   id={id}
-                  options={c.options!}
+                  options={c.options!.map((o) => ({ ...o, label: t(o.label) }))}
                   value={text(c.csv)}
                   onChange={(v) => set(c.csv, v)}
-                  placeholder={`Any ${c.label.toLowerCase()}`}
+                  placeholder={t('Any {field}', { field: t(c.label).toLowerCase() })}
                   clearable
                   size="sm"
                 />
@@ -124,13 +127,13 @@ export function CatalogFilters({
           }
           if (c.input === 'status') {
             return (
-              <Field key={c.csv} id={id} label={c.label} className={fieldClass(c.input)}>
+              <Field key={c.csv} id={id} label={t(c.label)} className={fieldClass(c.input)}>
                 <SearchSelect
                   id={id}
-                  options={STATUS_OPTIONS}
+                  options={STATUS_OPTIONS.map((o) => ({ ...o, label: t(o.label) }))}
                   value={text(c.csv)}
                   onChange={(v) => set(c.csv, v)}
-                  placeholder="Any status"
+                  placeholder={t('Any status')}
                   clearable
                   size="sm"
                 />
@@ -138,7 +141,7 @@ export function CatalogFilters({
             );
           }
           return (
-            <Field key={c.csv} id={id} label={c.label} className={fieldClass(c.input)}>
+            <Field key={c.csv} id={id} label={t(c.label)} className={fieldClass(c.input)}>
               <div className="flex items-center gap-2">
                 <Input
                     className={SMALL}
@@ -146,7 +149,7 @@ export function CatalogFilters({
                   type="number"
                   min={0}
                   step="any"
-                  placeholder="Min"
+                  placeholder={t('Min')}
                   value={text(`${c.csv}Min`)}
                   onChange={(e) => set(`${c.csv}Min`, e.target.value)}
                 />
@@ -156,8 +159,8 @@ export function CatalogFilters({
                   type="number"
                   min={0}
                   step="any"
-                  placeholder="Max"
-                  aria-label={`${c.label} max`}
+                  placeholder={t('Max')}
+                  aria-label={t('{field} max', { field: t(c.label) })}
                   value={text(`${c.csv}Max`)}
                   onChange={(e) => set(`${c.csv}Max`, e.target.value)}
                 />
@@ -165,7 +168,7 @@ export function CatalogFilters({
             </Field>
           );
         })}
-        <Field id="filter-from" label="Created" className={fieldClass('date')}>
+        <Field id="filter-from" label={t('Created')} className={fieldClass('date')}>
           <div className="flex items-center gap-2">
             <Input
                     className={SMALL}
@@ -179,7 +182,7 @@ export function CatalogFilters({
             <Input
                     className={SMALL}
               type="date"
-              aria-label="Created until"
+              aria-label={t('Created until')}
               value={text('to')}
               min={text('from') || undefined}
               onChange={(e) => set('to', e.target.value)}
@@ -189,10 +192,10 @@ export function CatalogFilters({
         {/* Buttons sit in the grid, after the last field, to save a row. */}
         <div className="flex items-end justify-end gap-2 sm:col-span-2">
           <Button type="button" variant="ghost" size="sm" onClick={reset}>
-            Reset
+            {t('Reset')}
           </Button>
           <Button type="submit" size="sm" className="whitespace-nowrap">
-            Apply filters
+            {t('Apply filters')}
           </Button>
         </div>
       </div>

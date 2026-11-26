@@ -5,7 +5,8 @@ import type { Pagination as PaginationInfo, PlatformOrganization } from '@kit/sh
 import { OrganizationsExport } from '@/components/admin/list-exports';
 import { Pagination } from '@/components/app/pagination';
 import { PageSizeSelect } from '@/components/app/page-size-select';
-import { CriteriaBar, exportCriteria, urlCriteria } from '@/components/app/criteria-bar';
+import { CriteriaBar } from '@/components/app/criteria-bar';
+import { exportCriteria, urlCriteria } from '@/components/app/criteria';
 import { TableFrame } from '@/components/app/table-frame';
 import { resolvePageSize } from '@/lib/page-size';
 import { Button } from '@/components/ui/button';

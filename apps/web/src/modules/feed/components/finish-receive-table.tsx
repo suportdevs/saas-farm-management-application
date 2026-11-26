@@ -12,6 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog } from '@/components/ui/dialog';
 import { api, errorMessage } from '@/lib/api';
 import { useCan, useFarm } from '@/modules/farms/context';
+import { useT } from '@/i18n/provider';
 import { money } from '../money';
 
 type Action = 'confirm' | 'reset';
@@ -23,6 +24,7 @@ type Action = 'confirm' | 'reset';
 export function FinishReceiveTable({ rows }: { rows: FinishReceiveRow[] }) {
   const router = useRouter();
   const { farm } = useFarm();
+  const t = useT();
   const canConfirm = useCan('feed.finish_receive_process');
   const canReset = useCan('feed.finish_receive_reset');
   const canSelect = canConfirm || canReset;
@@ -48,8 +50,9 @@ export function FinishReceiveTable({ rows }: { rows: FinishReceiveRow[] }) {
     setBusy(true);
     try {
       const result = await api.post<FinishReceiveBulkResult>(`/farms/${farm.slug}/feed/finish-receives/bulk-${action}`, { keys: [...selected] });
-      const verb = action === 'confirm' ? 'confirmed' : 'reset to pending';
-      toast.success(`${result.changed} ${result.changed === 1 ? 'receive' : 'receives'} ${verb}${result.skipped ? ` · ${result.skipped} already ${action === 'confirm' ? 'processed' : 'pending'}` : ''}`);
+      const done = action === 'confirm' ? t('{count} confirmed', { count: result.changed }) : t('{count} reset to pending', { count: result.changed });
+      const skipped = result.skipped ? ` · ${action === 'confirm' ? t('{count} already processed', { count: result.skipped }) : t('{count} already pending', { count: result.skipped })}` : '';
+      toast.success(done + skipped);
       setSelected(new Set());
       router.refresh();
     } catch (err) {
@@ -64,19 +67,19 @@ export function FinishReceiveTable({ rows }: { rows: FinishReceiveRow[] }) {
     <>
       {selected.size > 0 && (
         <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 border-b bg-primary/5 px-4 py-2 text-sm">
-          <span className="font-medium">{selected.size} selected</span>
+          <span className="font-medium">{t('{count} selected', { count: selected.size })}</span>
           {canConfirm && (
             <Button size="sm" onClick={() => setAsk('confirm')} disabled={!pending}>
-              <CheckCircle2 className="h-3.5 w-3.5" /> Confirm
+              <CheckCircle2 className="h-3.5 w-3.5" /> {t("Confirm")}
             </Button>
           )}
           {canReset && (
             <Button size="sm" variant="outline" onClick={() => setAsk('reset')} disabled={!processed}>
-              <RotateCcw className="h-3.5 w-3.5" /> Reset
+              <RotateCcw className="h-3.5 w-3.5" /> {t("Reset")}
             </Button>
           )}
           <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
-            <X className="h-3.5 w-3.5" /> Clear
+            <X className="h-3.5 w-3.5" /> {t("Clear")}
           </Button>
         </div>
       )}
@@ -85,17 +88,17 @@ export function FinishReceiveTable({ rows }: { rows: FinishReceiveRow[] }) {
           <tr>
             {canSelect && (
               <th className="w-10 px-4 py-3">
-                <Checkbox aria-label="Select all" checked={allSelected} onChange={(e) => setSelected(e.target.checked ? new Set(rows.map((r) => r.key)) : new Set())} />
+                <Checkbox aria-label={t("Select all")} checked={allSelected} onChange={(e) => setSelected(e.target.checked ? new Set(rows.map((r) => r.key)) : new Set())} />
               </th>
             )}
-            <th className="px-4 py-3 font-medium">Order no.</th>
-            <th className="px-4 py-3 font-medium">Receive date</th>
-            <th className="px-4 py-3 font-medium">Warehouse</th>
-            <th className="px-4 py-3 font-medium">Received by</th>
-            <th className="px-4 py-3 text-right font-medium">Items</th>
-            <th className="px-4 py-3 text-right font-medium">Quantity</th>
-            <th className="px-4 py-3 text-right font-medium">Total amount</th>
-            <th className="px-4 py-3 font-medium">Status</th>
+            <th className="px-4 py-3 font-medium">{t("Order no.")}</th>
+            <th className="px-4 py-3 font-medium">{t("Receive date")}</th>
+            <th className="px-4 py-3 font-medium">{t("Warehouse")}</th>
+            <th className="px-4 py-3 font-medium">{t("Received by")}</th>
+            <th className="px-4 py-3 text-right font-medium">{t("Items")}</th>
+            <th className="px-4 py-3 text-right font-medium">{t("Quantity")}</th>
+            <th className="px-4 py-3 text-right font-medium">{t("Total amount")}</th>
+            <th className="px-4 py-3 font-medium">{t("Status")}</th>
           </tr>
         </thead>
         <tbody className="divide-y">
@@ -103,7 +106,7 @@ export function FinishReceiveTable({ rows }: { rows: FinishReceiveRow[] }) {
             <tr key={r.key} className={selected.has(r.key) ? 'bg-primary/5' : 'hover:bg-muted/30'}>
               {canSelect && (
                 <td className="px-4 py-3">
-                  <Checkbox aria-label={`Select ${r.orderNo}`} checked={selected.has(r.key)} onChange={(e) => toggle(r.key, e.target.checked)} />
+                  <Checkbox aria-label={t('Select {name}', { name: r.orderNo })} checked={selected.has(r.key)} onChange={(e) => toggle(r.key, e.target.checked)} />
                 </td>
               )}
               <td className="px-4 py-3 font-medium">
@@ -118,7 +121,7 @@ export function FinishReceiveTable({ rows }: { rows: FinishReceiveRow[] }) {
               <td className="px-4 py-3 text-right tabular-nums">{r.totalQuantity.toLocaleString()}</td>
               <td className="px-4 py-3 text-right font-medium tabular-nums">{money(farm, r.totalPrice)}</td>
               <td className="px-4 py-3">
-                <Badge variant={r.status === FINISH_RECEIVE_STATUS.processed ? 'primary' : 'outline'}>{finishReceiveStatusLabel(r.status)}</Badge>
+                <Badge variant={r.status === FINISH_RECEIVE_STATUS.processed ? 'primary' : 'outline'}>{t(finishReceiveStatusLabel(r.status))}</Badge>
               </td>
             </tr>
           ))}
@@ -128,7 +131,7 @@ export function FinishReceiveTable({ rows }: { rows: FinishReceiveRow[] }) {
       <Dialog
         open={ask !== null}
         onClose={() => setAsk(null)}
-        title={ask === 'confirm' ? `Confirm ${pending} ${pending === 1 ? 'receive' : 'receives'}?` : `Reset ${processed} ${processed === 1 ? 'receive' : 'receives'}?`}
+        title={ask === 'confirm' ? t('Confirm {count} receives?', { count: pending }) : t('Reset {count} receives?', { count: processed })}
         description={
           ask === 'confirm'
             ? 'Pending receives and their items become Processed and are locked. Selected receives that are already processed are left as they are.'
@@ -137,10 +140,10 @@ export function FinishReceiveTable({ rows }: { rows: FinishReceiveRow[] }) {
         footer={
           <>
             <Button variant="outline" onClick={() => setAsk(null)}>
-              Cancel
+              {t("Cancel")}
             </Button>
             <Button loading={busy} onClick={() => ask && run(ask)}>
-              {ask === 'confirm' ? 'Confirm' : 'Reset'}
+              {ask === 'confirm' ? t('Confirm') : t('Reset')}
             </Button>
           </>
         }

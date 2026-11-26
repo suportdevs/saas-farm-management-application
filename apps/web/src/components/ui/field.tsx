@@ -1,5 +1,8 @@
+'use client';
+
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+import { useT } from '@/i18n/provider';
 import { Label } from './label';
 
 export function Field({
@@ -19,19 +22,21 @@ export function Field({
   children: ReactNode;
   className?: string;
 }) {
+  // Labels, hints and messages are English phrases: shown in the interface language when translated.
+  const t = useT();
   return (
     <div className={cn('space-y-2', className)}>
       <div className="flex items-center justify-between">
-        <Label htmlFor={id}>{label}</Label>
+        <Label htmlFor={id}>{t(label)}</Label>
         {action}
       </div>
       {children}
       {error ? (
         <p className="text-xs text-destructive" role="alert">
-          {error}
+          {t(error)}
         </p>
       ) : hint ? (
-        <p className="text-xs text-muted-foreground">{hint}</p>
+        <p className="text-xs text-muted-foreground">{t(hint)}</p>
       ) : null}
     </div>
   );

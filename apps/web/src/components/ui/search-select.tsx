@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { Check, ChevronDown, Loader2, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useT } from '@/i18n/provider';
 
 export interface SelectOption {
   value: string;
@@ -49,6 +50,7 @@ export function SearchSelect({
   size = 'md',
   'aria-label': ariaLabel,
 }: SearchSelectProps) {
+  const t = useT();
   const listId = useId();
   const root = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -147,14 +149,14 @@ export function SearchSelect({
             clearable && value && 'pr-6',
           )}
         >
-          {value ? (label ?? '…') : placeholder}
+          {value ? (label ?? '…') : t(placeholder)}
         </span>
         <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
       </button>
       {clearable && value && !disabled && (
         <button
           type="button"
-          aria-label="Clear"
+          aria-label={t('Clear')}
           onClick={() => onChange('', null)}
           className="absolute right-8 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
         >
@@ -171,8 +173,8 @@ export function SearchSelect({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={onKeyDown}
-              placeholder="Search…"
-              aria-label="Search options"
+              placeholder={t('Search…')}
+              aria-label={t('Search options')}
               aria-controls={listId}
               aria-activedescendant={choices[active] ? `${listId}-${active}` : undefined}
               className="h-8 w-full rounded-md border border-input bg-background pl-8 pr-2 text-sm focus-visible:outline-none focus-visible:border-primary"
@@ -181,10 +183,10 @@ export function SearchSelect({
           <ul id={listId} role="listbox" className="max-h-60 overflow-y-auto">
             {loading && !choices.length ? (
               <li className="flex items-center gap-2 px-2.5 py-2 text-sm text-muted-foreground">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Searching…
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> {t('Searching…')}
               </li>
             ) : !choices.length ? (
-              <li className="px-2.5 py-2 text-sm text-muted-foreground">No results</li>
+              <li className="px-2.5 py-2 text-sm text-muted-foreground">{t('No results')}</li>
             ) : (
               choices.map((o, i) => (
                 <li

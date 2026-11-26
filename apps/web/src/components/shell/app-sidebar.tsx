@@ -14,6 +14,7 @@ import { appName, cn } from '@/lib/utils';
 import { moduleNavItems } from '@/modules/registry';
 import { FarmSwitcher, FarmTile } from '@/modules/farms/components/farm-switcher';
 import { platformNav } from '@/modules/platform/navigation';
+import { useT } from '@/i18n/provider';
 import { usePreferences } from './preferences-provider';
 
 export interface ShellProps {
@@ -52,6 +53,7 @@ function farmSections(current: FarmSummary | undefined): NavSection[] {
  * the farm (or platform admin) sections, then the "You" section.
  */
 export function useNavSections({ user, farms }: ShellProps) {
+  const t = useT();
   const pathname = usePathname();
   const current = useCurrentFarm(farms);
   // Platform staff inside /admin see the platform menus instead of the farm ones.
@@ -69,12 +71,20 @@ export function useNavSections({ user, farms }: ShellProps) {
     ],
   };
 
+  // Menu texts in the interface language (English when a phrase has no translation).
+  const translated = [...main, you].map((sec) => ({
+    ...sec,
+    title: sec.title && t(sec.title),
+    links: sec.links.map((l) => ({ ...l, label: t(l.label), children: l.children?.map((c) => ({ ...c, label: t(c.label) })) })),
+  }));
+
   const isActive = (link: Pick<NavLink, 'href' | 'exact'>) => (link.exact ? pathname === link.href : pathname === link.href || pathname.startsWith(`${link.href}/`));
-  return { pathname, current, inPlatform, sections: [...main, you].filter((s) => s.links.length), isActive };
+  return { pathname, current, inPlatform, sections: translated.filter((s) => s.links.length), isActive, t };
 }
 
 /** The vertical sidebar (desktop left/right, and the phone drawer). `collapsed` shows icons only. */
 export function SidebarContent({ user, farms, onNavigate, collapsed = false }: ShellProps & { onNavigate?: () => void; collapsed?: boolean }) {
+  const t = useT();
   const { pathname, current, inPlatform, sections, isActive } = useNavSections({ user, farms });
   const backHref = current ? `/farms/${current.slug}` : '/dashboard';
 
@@ -99,7 +109,7 @@ export function SidebarContent({ user, farms, onNavigate, collapsed = false }: S
           <Link
             href={inPlatform ? backHref : current ? `/farms/${current.slug}` : '/onboarding'}
             onClick={onNavigate}
-            title={inPlatform ? 'Platform admin — back to farm' : (current?.name ?? 'Create your farm')}
+            title={inPlatform ? t('Platform admin — back to farm') : (current?.name ?? t('Create your farm'))}
           >
             {inPlatform || !current ? (
               <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary/20 text-sidebar-primary">
@@ -151,6 +161,7 @@ export function SidebarContent({ user, farms, onNavigate, collapsed = false }: S
 
 /** Shown instead of the farm switcher inside /admin: where you are, and the way back. */
 export function PlatformHeader({ roleName, backHref, onNavigate }: { roleName?: string | null; backHref: string; onNavigate?: () => void }) {
+  const t = useT();
   return (
     <div className="rounded-xl bg-sidebar-accent/70 px-2.5 py-2 ring-1 ring-sidebar-border">
       <div className="flex items-center gap-3">
@@ -158,18 +169,19 @@ export function PlatformHeader({ roleName, backHref, onNavigate }: { roleName?: 
           <Shield className="h-4 w-4" />
         </span>
         <span className="min-w-0 leading-tight">
-          <span className="block truncate text-sm font-semibold">Platform admin</span>
-          <span className="block truncate text-xs text-sidebar-muted">{roleName ?? 'Super admin'}</span>
+          <span className="block truncate text-sm font-semibold">{t('Platform admin')}</span>
+          <span className="block truncate text-xs text-sidebar-muted">{roleName ?? t('Super admin')}</span>
         </span>
       </div>
       <Link href={backHref} onClick={onNavigate} className="mt-2 flex items-center gap-1.5 rounded-md px-1 py-1 text-xs font-medium text-sidebar-muted transition-colors hover:text-sidebar-foreground">
-        <ArrowLeft className="h-3.5 w-3.5" /> {backHref === '/dashboard' ? 'Back to dashboard' : 'Back to farm'}
+        <ArrowLeft className="h-3.5 w-3.5" /> {backHref === '/dashboard' ? t('Back to dashboard') : t('Back to farm')}
       </Link>
     </div>
   );
 }
 
 function SidebarLink({ link, active, onNavigate, collapsed }: { link: NavLink; active: boolean; onNavigate?: () => void; collapsed?: boolean }) {
+  const t = useT();
   const Icon = link.icon;
   return (
     <Link
@@ -188,14 +200,14 @@ function SidebarLink({ link, active, onNavigate, collapsed }: { link: NavLink; a
       {active && <span className="absolute inset-y-1.5 left-0 w-1 rounded-r-full bg-sidebar-primary shadow-[0_0_12px_var(--sidebar-primary)]" />}
       <Icon className={cn('h-[18px] w-[18px] shrink-0', active ? 'text-sidebar-primary' : 'opacity-80 group-hover:opacity-100')} />
       {collapsed ? (
-        link.locked && <Lock className="absolute right-1 top-1 h-2.5 w-2.5 text-sidebar-muted" aria-label="Upgrade to unlock" />
+        link.locked && <Lock className="absolute right-1 top-1 h-2.5 w-2.5 text-sidebar-muted" aria-label={t('Upgrade to unlock')} />
       ) : (
         <>
           <span className="flex-1 truncate">{link.label}</span>
           {link.locked ? (
             <Lock className="h-3.5 w-3.5 text-sidebar-muted" aria-label="Upgrade to unlock" />
           ) : (
-            link.soon && <span className="rounded-full bg-sidebar-accent px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-sidebar-muted">Soon</span>
+            link.soon && <span className="rounded-full bg-sidebar-accent px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-sidebar-muted">{t('Soon')}</span>
           )}
         </>
       )}
@@ -258,6 +270,7 @@ function SidebarGroup({ link, pathname, onNavigate }: { link: NavLink; pathname:
  * `compact`: avatar only (collapsed sidebar); `appbar`: avatar only in the top bar (opens downward).
  */
 export function AccountMenu({ user, variant = 'sidebar' }: { user: PublicUser; variant?: 'sidebar' | 'compact' | 'appbar' }) {
+  const t = useT();
   const router = useRouter();
   const { theme, setTheme, prefs } = usePreferences();
   const [signingOut, setSigningOut] = useState(false);
@@ -315,12 +328,12 @@ export function AccountMenu({ user, variant = 'sidebar' }: { user: PublicUser; v
           <button type="button" onClick={() => setTheme(isDark ? 'light' : 'dark')} className={menuItemClasses} role="menuitem">
             <Sun className="h-4 w-4 text-muted-foreground dark:hidden" />
             <Moon className="hidden h-4 w-4 text-muted-foreground dark:block" />
-            <span className="dark:hidden">Dark mode</span>
-            <span className="hidden dark:inline">Light mode</span>
+            <span className="dark:hidden">{t('Dark mode')}</span>
+            <span className="hidden dark:inline">{t('Light mode')}</span>
           </button>
           <MenuSeparator />
           <button type="button" onClick={logout} disabled={signingOut} className={cn(menuItemClasses, 'text-destructive')} role="menuitem">
-            <LogOut className="h-4 w-4" /> {signingOut ? 'Signing out…' : 'Sign out'}
+            <LogOut className="h-4 w-4" /> {signingOut ? t('Signing out…') : t('Sign out')}
           </button>
         </>
       )}

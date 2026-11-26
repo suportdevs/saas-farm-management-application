@@ -3,7 +3,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { PackageCheck, Search } from 'lucide-react';
 import { FINISH_RECEIVE_STATUS, finishReceiveStatusLabel, type FinishReceiveItemListRow, type Pagination as PaginationInfo } from '@kit/shared';
-import { CriteriaBar, exportCriteria, urlCriteria } from '@/components/app/criteria-bar';
+import { CriteriaBar } from '@/components/app/criteria-bar';
+import { exportCriteria, urlCriteria } from '@/components/app/criteria';
 import { FilterToggle } from '@/components/app/filter-toggle';
 import { ModuleLocked } from '@/components/app/module-locked';
 import { PageHeader } from '@/components/app/page-header';
@@ -17,6 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { resolvePageSize } from '@/lib/page-size';
 import { serverFetch } from '@/lib/session';
+import { getT } from '@/i18n/server';
 import { getFarmContext } from '@/modules/farms/server';
 import { FinishReceiveItemsExport } from '@/modules/feed/components/finish-receive-items-export';
 import { money } from '@/modules/feed/money';
@@ -29,6 +31,7 @@ type Search = { q?: string; status?: string; from?: string; to?: string; page?: 
 export default async function FinishReceiveItemsPage({ params, searchParams }: { params: Promise<{ farm: string }>; searchParams: Promise<Search> }) {
   const [{ farm: slug }, query] = await Promise.all([params, searchParams]);
   const ctx = await getFarmContext(slug);
+  const t = await getT(slug);
   if (ctx.modules.feed !== 'enabled') return <ModuleLocked ctx={ctx} module="feed" />;
   if (!ctx.membership.permissions.includes('feed.finish_receive_list')) notFound();
 
@@ -49,7 +52,7 @@ export default async function FinishReceiveItemsPage({ params, searchParams }: {
 
   return (
     <>
-      <PageHeader compact eyebrow="Feed" title="Finish receive items" description="Every product line of every finish receive, with its order, warehouse and status." />
+      <PageHeader compact eyebrow={t("Feed")} title={t("Finish receive items")} description={t("Every product line of every finish receive, with its order, warehouse and status.")} />
       <TableFrame
         criteria={<CriteriaBar total={data.pagination.total} {...criteria} />}
         toolbar={
@@ -58,20 +61,20 @@ export default async function FinishReceiveItemsPage({ params, searchParams }: {
               {query.pageSize && <input type="hidden" name="pageSize" value={query.pageSize} />}
               <div className="relative min-w-60 flex-1">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input name="q" defaultValue={query.q} placeholder="Search product or order no.…" className="h-8 pl-9 text-xs" />
+                <Input name="q" defaultValue={query.q} placeholder={t("Search product or order no.…")} className="h-8 pl-9 text-xs" />
               </div>
               <FilterToggle active={[query.status, query.from || query.to].filter(Boolean).length}>
-                <Select className="h-8 text-xs" name="status" defaultValue={query.status ?? ''} aria-label="Status">
-                  <option value="">Any status</option>
-                  <option value={String(FINISH_RECEIVE_STATUS.pending)}>Pending</option>
-                  <option value={String(FINISH_RECEIVE_STATUS.processed)}>Processed</option>
+                <Select className="h-8 text-xs" name="status" defaultValue={query.status ?? ''} aria-label={t("Status")}>
+                  <option value="">{t("Any status")}</option>
+                  <option value={String(FINISH_RECEIVE_STATUS.pending)}>{t("Pending")}</option>
+                  <option value={String(FINISH_RECEIVE_STATUS.processed)}>{t("Processed")}</option>
                 </Select>
-                <Input type="date" name="from" defaultValue={query.from} aria-label="From date" className="h-8 w-36 text-xs" />
+                <Input type="date" name="from" defaultValue={query.from} aria-label={t("From date")} className="h-8 w-36 text-xs" />
                 <span className="text-muted-foreground">–</span>
-                <Input type="date" name="to" defaultValue={query.to} aria-label="To date" className="h-8 w-36 text-xs" />
+                <Input type="date" name="to" defaultValue={query.to} aria-label={t("To date")} className="h-8 w-36 text-xs" />
               </FilterToggle>
               <Button type="submit" variant="outline" size="sm">
-                Filter
+                {t("Filter")}
               </Button>
             </form>
             <div className="flex items-center gap-2">
@@ -82,20 +85,20 @@ export default async function FinishReceiveItemsPage({ params, searchParams }: {
         }
       >
         {data.rows.length === 0 ? (
-          <EmptyState className="m-4" icon={PackageCheck} title={qs.toString() ? 'No items match' : 'No finish receive items yet'} description="Items appear here when a finish receive is saved." />
+          <EmptyState className="m-4" icon={PackageCheck} title={qs.toString() ? t('No items match') : t('No finish receive items yet')} description={t("Items appear here when a finish receive is saved.")} />
         ) : (
           <table className="w-full min-w-[900px] text-left text-sm">
             <thead className="text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-4 py-3 font-medium">Order no.</th>
-                <th className="px-4 py-3 font-medium">Receive date</th>
-                <th className="px-4 py-3 font-medium">Warehouse</th>
-                <th className="px-4 py-3 font-medium">Product</th>
-                <th className="px-4 py-3 font-medium">Unit</th>
-                <th className="px-4 py-3 text-right font-medium">Quantity</th>
-                <th className="px-4 py-3 text-right font-medium">Rate</th>
-                <th className="px-4 py-3 text-right font-medium">Amount</th>
-                <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">{t("Order no.")}</th>
+                <th className="px-4 py-3 font-medium">{t("Receive date")}</th>
+                <th className="px-4 py-3 font-medium">{t("Warehouse")}</th>
+                <th className="px-4 py-3 font-medium">{t("Product")}</th>
+                <th className="px-4 py-3 font-medium">{t("Unit")}</th>
+                <th className="px-4 py-3 text-right font-medium">{t("Quantity")}</th>
+                <th className="px-4 py-3 text-right font-medium">{t("Rate")}</th>
+                <th className="px-4 py-3 text-right font-medium">{t("Amount")}</th>
+                <th className="px-4 py-3 font-medium">{t("Status")}</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -114,7 +117,7 @@ export default async function FinishReceiveItemsPage({ params, searchParams }: {
                   <td className="px-4 py-3 text-right tabular-nums">{money(ctx.farm, r.rate)}</td>
                   <td className="px-4 py-3 text-right font-medium tabular-nums">{money(ctx.farm, r.price)}</td>
                   <td className="px-4 py-3">
-                    <Badge variant={r.status === FINISH_RECEIVE_STATUS.processed ? 'primary' : 'outline'}>{finishReceiveStatusLabel(r.status)}</Badge>
+                    <Badge variant={r.status === FINISH_RECEIVE_STATUS.processed ? 'primary' : 'outline'}>{t(finishReceiveStatusLabel(r.status))}</Badge>
                   </td>
                 </tr>
               ))}

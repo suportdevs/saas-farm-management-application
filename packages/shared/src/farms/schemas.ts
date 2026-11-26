@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { FARM_ROLES, PERMISSIONS, TOGGLEABLE_MODULES, type Permission } from './access';
+import { LANGUAGE_CODES } from '../i18n/languages';
 import { AREA_UNITS, COUNTRY_CODES, isValidCurrency, isValidLocale, isValidTimeZone, MILK_UNITS, UNIT_SYSTEMS, WEIGHT_UNITS } from './geo';
 
 export const FARM_TYPES = ['dairy', 'beef', 'mixed', 'breeding', 'calf_rearing'] as const;
@@ -87,6 +88,8 @@ export const updateFarmSchema = z
     type: z.enum(FARM_TYPES),
     description: text(1000),
     ...localisation,
+    /** The farm's default interface language (members can pick their own). */
+    language: z.enum(LANGUAGE_CODES),
     region: text(100),
     city: text(100),
     address: text(255),

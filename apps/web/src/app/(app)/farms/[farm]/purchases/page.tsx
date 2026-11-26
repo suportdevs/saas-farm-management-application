@@ -3,7 +3,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Plus, Search, ShoppingCart } from 'lucide-react';
 import { PURCHASE_SOURCE_TYPES } from '@kit/shared';
-import { CriteriaBar, exportCriteria, urlCriteria } from '@/components/app/criteria-bar';
+import { CriteriaBar } from '@/components/app/criteria-bar';
+import { exportCriteria, urlCriteria } from '@/components/app/criteria';
 import { FilterToggle } from '@/components/app/filter-toggle';
 import { PageHeader } from '@/components/app/page-header';
 import { PageSizeSelect } from '@/components/app/page-size-select';
@@ -14,6 +15,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { resolvePageSize } from '@/lib/page-size';
+import { getT } from '@/i18n/server';
 import { getFarmContext } from '@/modules/farms/server';
 import { PurchasesExport } from '@/modules/purchases/components/purchases-export';
 import { money, sourceLabel } from '@/modules/purchases/money';
@@ -27,6 +29,7 @@ type Search = { q?: string; source_type?: string; from?: string; to?: string; pa
 export default async function PurchasesPage({ params, searchParams }: { params: Promise<{ farm: string }>; searchParams: Promise<Search> }) {
   const [{ farm: slug }, query] = await Promise.all([params, searchParams]);
   const ctx = await getFarmContext(slug);
+  const t = await getT(slug);
   const can = (p: string) => ctx.membership.permissions.includes(p as never);
   if (!can('purchase.purchase_list')) notFound();
 
@@ -46,13 +49,13 @@ export default async function PurchasesPage({ params, searchParams }: { params: 
     <>
       <PageHeader
         compact
-        eyebrow="Business"
-        title="Purchases"
-        description="Animals bought — at a haat, from farmers or suppliers, or imported — with shared costs split per animal."
+        eyebrow={t("Business")}
+        title={t("Purchases")}
+        description={t("Animals bought — at a haat, from farmers or suppliers, or imported — with shared costs split per animal.")}
         actions={
           can('purchase.purchase_create') && (
             <Link href={`${base}/new`} className={buttonClasses('primary')}>
-              <Plus className="h-4 w-4" /> New purchase
+              <Plus className="h-4 w-4" /> {t("New purchase")}
             </Link>
           )
         }
@@ -65,23 +68,23 @@ export default async function PurchasesPage({ params, searchParams }: { params: 
               {query.pageSize && <input type="hidden" name="pageSize" value={query.pageSize} />}
               <div className="relative min-w-60 flex-1">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input name="q" defaultValue={query.q} placeholder="Search purchase no. or haat…" className="h-8 pl-9 text-xs" />
+                <Input name="q" defaultValue={query.q} placeholder={t("Search purchase no. or haat…")} className="h-8 pl-9 text-xs" />
               </div>
               <FilterToggle active={[query.source_type, query.from || query.to].filter(Boolean).length}>
-                <Select className="h-8 text-xs" name="source_type" defaultValue={query.source_type ?? ''} aria-label="Source">
-                  <option value="">Any source</option>
+                <Select className="h-8 text-xs" name="source_type" defaultValue={query.source_type ?? ''} aria-label={t("Source")}>
+                  <option value="">{t("Any source")}</option>
                   {PURCHASE_SOURCE_TYPES.map((s) => (
                     <option key={s.value} value={s.value}>
-                      {s.label}
+                      {t(s.label)}
                     </option>
                   ))}
                 </Select>
-                <Input type="date" name="from" defaultValue={query.from} aria-label="From date" className="h-8 w-36 text-xs" />
+                <Input type="date" name="from" defaultValue={query.from} aria-label={t("From date")} className="h-8 w-36 text-xs" />
                 <span className="text-muted-foreground">–</span>
-                <Input type="date" name="to" defaultValue={query.to} aria-label="To date" className="h-8 w-36 text-xs" />
+                <Input type="date" name="to" defaultValue={query.to} aria-label={t("To date")} className="h-8 w-36 text-xs" />
               </FilterToggle>
               <Button type="submit" variant="outline" size="sm">
-                Filter
+                {t("Filter")}
               </Button>
             </form>
             <div className="flex items-center gap-2">
@@ -92,20 +95,20 @@ export default async function PurchasesPage({ params, searchParams }: { params: 
         }
       >
         {rows.length === 0 ? (
-          <EmptyState className="m-4" icon={ShoppingCart} title={qs.toString() ? 'No purchases match' : 'No purchases yet'} description="Record a purchase to add the animals to the herd with their landed cost." />
+          <EmptyState className="m-4" icon={ShoppingCart} title={qs.toString() ? t('No purchases match') : t('No purchases yet')} description={t("Record a purchase to add the animals to the herd with their landed cost.")} />
         ) : (
           <table className="w-full min-w-[960px] text-left text-sm">
             <thead className="text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-4 py-3 font-medium">Purchase no.</th>
-                <th className="px-4 py-3 font-medium">Date</th>
-                <th className="px-4 py-3 font-medium">Source</th>
-                <th className="px-4 py-3 font-medium">Supplier</th>
-                <th className="px-4 py-3 font-medium">Batch</th>
-                <th className="px-4 py-3 text-right font-medium">Animals</th>
-                <th className="px-4 py-3 text-right font-medium">Total price</th>
-                <th className="px-4 py-3 text-right font-medium">Shared cost</th>
-                <th className="px-4 py-3 text-right font-medium">Landed total</th>
+                <th className="px-4 py-3 font-medium">{t("Purchase no.")}</th>
+                <th className="px-4 py-3 font-medium">{t("Date")}</th>
+                <th className="px-4 py-3 font-medium">{t("Source")}</th>
+                <th className="px-4 py-3 font-medium">{t("Supplier")}</th>
+                <th className="px-4 py-3 font-medium">{t("Batch")}</th>
+                <th className="px-4 py-3 text-right font-medium">{t("Animals")}</th>
+                <th className="px-4 py-3 text-right font-medium">{t("Total price")}</th>
+                <th className="px-4 py-3 text-right font-medium">{t("Shared cost")}</th>
+                <th className="px-4 py-3 text-right font-medium">{t("Landed total")}</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -118,12 +121,12 @@ export default async function PurchasesPage({ params, searchParams }: { params: 
                   </td>
                   <td className="px-4 py-3 tabular-nums">{p.purchaseDate}</td>
                   <td className="px-4 py-3">
-                    {sourceLabel(p.sourceType)}
+                    {t(sourceLabel(p.sourceType))}
                     {p.haatName && <span className="block text-xs text-muted-foreground">{p.haatName}</span>}
                   </td>
                   <td className="px-4 py-3">
                     {p.supplierName ?? '—'}
-                    {p.brokerName && <span className="block text-xs text-muted-foreground">Broker: {p.brokerName}</span>}
+                    {p.brokerName && <span className="block text-xs text-muted-foreground">{t('Broker: {name}', { name: p.brokerName })}</span>}
                   </td>
                   <td className="px-4 py-3">{p.batchName ?? '—'}</td>
                   <td className="px-4 py-3 text-right tabular-nums">{p.animals}</td>

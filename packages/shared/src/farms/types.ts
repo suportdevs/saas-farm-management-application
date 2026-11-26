@@ -19,6 +19,8 @@ export interface FarmSummary {
   organization: OrganizationRef;
   memberCount: number;
   suspended: boolean;
+  /** The farm's default interface language. */
+  language: string;
   /** The user's effective permissions on this farm. */
   permissions: Permission[];
   /** Per module: on, not in the plan, or switched off by the farm. */
@@ -39,6 +41,8 @@ export interface FarmProfile {
   timezone: string;
   currency: string;
   locale: string;
+  /** Default interface language for the farm's members (en, bn, hi…). */
+  language: string;
   unitSystem: UnitSystem;
   milkUnit: MilkUnit;
   weightUnit: WeightUnit;

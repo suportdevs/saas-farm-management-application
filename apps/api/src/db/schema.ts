@@ -78,6 +78,8 @@ export const users = pgTable(
      * Set only in the database (see README → Developer account), never from the app.
      */
     isDeveloper: boolean('is_developer').notNull().default(false),
+    /** Interface language chosen by the person (en, bn, hi…); null = the farm's default. */
+    language: varchar('language', { length: 5 }),
     bannedReason: varchar('banned_reason', { length: 500 }),
     lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
     ...auditColumns(),

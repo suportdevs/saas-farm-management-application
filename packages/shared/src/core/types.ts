@@ -19,6 +19,8 @@ export interface PublicUser {
   platformPermissions?: PlatformPermission[];
   /** The developer / software-owner account: full access everywhere. */
   isDeveloper?: boolean;
+  /** The person's interface language (en, bn, hi…); null = the farm's default. */
+  language?: string | null;
   emailVerified: boolean;
   hasPassword: boolean;
   createdAt: string;

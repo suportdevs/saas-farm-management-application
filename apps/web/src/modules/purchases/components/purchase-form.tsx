@@ -17,6 +17,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ApiError, api, errorMessage } from '@/lib/api';
 import { useCan, useFarm } from '@/modules/farms/context';
 import { CatalogSelect } from '@/modules/products/components/catalog-select';
+import { useT } from '@/i18n/provider';
 import { money } from '../money';
 
 /** One animal line as typed (numbers stay text until saved). */
@@ -33,6 +34,7 @@ const emptyLine = (): Line => ({ id: nextId++, key: '', tag: '', name: '', sex: 
  * stores the same split). Saving adds or updates the animals in the herd.
  */
 export function PurchaseForm({ purchase }: { purchase?: PurchaseDetail }) {
+  const t = useT();
   const router = useRouter();
   const { farm } = useFarm();
   const canSave = useCan(purchase ? 'purchase.purchase_edit' : 'purchase.purchase_create');
@@ -83,7 +85,7 @@ export function PurchaseForm({ purchase }: { purchase?: PurchaseDetail }) {
       const saved = purchase
         ? await api.put<PurchaseDetail>(`/farms/${farm.slug}/purchases/${purchase.key}`, body)
         : await api.post<PurchaseDetail>(`/farms/${farm.slug}/purchases`, body);
-      toast.success(purchase ? 'Purchase updated' : `Purchase saved — ${saved.animals} ${saved.animals === 1 ? 'animal' : 'animals'} added to the herd`);
+      toast.success(purchase ? t('Purchase updated') : t(saved.animals === 1 ? 'Purchase saved — {count} animal added to the herd' : 'Purchase saved — {count} animals added to the herd', { count: saved.animals }));
       router.push(listHref);
       router.refresh();
     } catch (err) {
@@ -97,7 +99,7 @@ export function PurchaseForm({ purchase }: { purchase?: PurchaseDetail }) {
     setSaving(true);
     try {
       await api.delete(`/farms/${farm.slug}/purchases/${purchase!.key}`);
-      toast.success('Purchase deleted');
+      toast.success(t('Purchase deleted'));
       router.push(listHref);
       router.refresh();
     } catch (err) {
@@ -113,13 +115,13 @@ export function PurchaseForm({ purchase }: { purchase?: PurchaseDetail }) {
     <form onSubmit={save} className="space-y-5 pb-20">
       <PageHeader
         compact
-        eyebrow="Purchases"
-        title={purchase ? `Purchase ${purchase.number}` : 'New purchase'}
-        description="One trip or invoice. Each animal line is added to the herd; shared costs are split by price."
+        eyebrow={t('Purchases')}
+        title={purchase ? t('Purchase {number}', { number: purchase.number }) : t('New purchase')}
+        description={t('One trip or invoice. Each animal line is added to the herd; shared costs are split by price.')}
         actions={
           purchase && canDelete ? (
             <Button type="button" variant="outline" className="text-destructive" onClick={() => setConfirmDelete(true)}>
-              <Trash2 className="h-4 w-4" /> Delete
+              <Trash2 className="h-4 w-4" /> {t('Delete')}
             </Button>
           ) : undefined
         }
@@ -128,7 +130,7 @@ export function PurchaseForm({ purchase }: { purchase?: PurchaseDetail }) {
       <fieldset disabled={!canSave || saving} className="space-y-5">
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Purchase details</CardTitle>
+            <CardTitle className="text-base">{t('Purchase details')}</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Field id="p-number" label="Purchase no." error={errors.number}>
@@ -141,7 +143,7 @@ export function PurchaseForm({ purchase }: { purchase?: PurchaseDetail }) {
               <Select id="p-source" className="w-full" value={header.sourceType} onChange={(e) => set('sourceType', e.target.value)}>
                 {PURCHASE_SOURCE_TYPES.map((s) => (
                   <option key={s.value} value={s.value}>
-                    {s.label}
+                    {t(s.label)}
                   </option>
                 ))}
               </Select>
@@ -168,8 +170,8 @@ export function PurchaseForm({ purchase }: { purchase?: PurchaseDetail }) {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Shared costs</CardTitle>
-            <CardDescription>Split over the animals by price share. Total: {money(farm, shared)}</CardDescription>
+            <CardTitle className="text-base">{t('Shared costs')}</CardTitle>
+            <CardDescription>{t('Split over the animals by price share. Total: {total}', { total: money(farm, shared) })}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {(
@@ -190,26 +192,26 @@ export function PurchaseForm({ purchase }: { purchase?: PurchaseDetail }) {
         <Card className="overflow-hidden">
           <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0 border-b pb-3">
             <div className="space-y-1">
-              <CardTitle className="text-base">Animals ({lines.length})</CardTitle>
-              {errors.items && <p className="text-sm text-destructive">{errors.items}</p>}
+              <CardTitle className="text-base">{t('Animals')} ({lines.length})</CardTitle>
+              {errors.items && <p className="text-sm text-destructive">{t(errors.items)}</p>}
             </div>
             <Button type="button" size="sm" variant="outline" onClick={() => setLines((ls) => [...ls, emptyLine()])}>
-              <Plus className="h-4 w-4" /> Add animal
+              <Plus className="h-4 w-4" /> {t('Add animal')}
             </Button>
           </CardHeader>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1080px] text-left text-sm">
               <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
-                  <th className="px-3 py-2 font-medium">Ear tag *</th>
-                  <th className="px-3 py-2 font-medium">Name</th>
-                  <th className="px-3 py-2 font-medium">Sex *</th>
-                  <th className="px-3 py-2 font-medium">Type</th>
-                  <th className="px-3 py-2 font-medium">Breed</th>
-                  <th className="px-3 py-2 font-medium">Price *</th>
-                  <th className="px-3 py-2 font-medium">Entry weight (kg)</th>
-                  <th className="px-3 py-2 text-right font-medium">Shared cost</th>
-                  <th className="px-3 py-2 text-right font-medium">Landed cost</th>
+                  <th className="px-3 py-2 font-medium">{t('Ear tag')} *</th>
+                  <th className="px-3 py-2 font-medium">{t('Name')}</th>
+                  <th className="px-3 py-2 font-medium">{t('Sex')} *</th>
+                  <th className="px-3 py-2 font-medium">{t('Type')}</th>
+                  <th className="px-3 py-2 font-medium">{t('Breed')}</th>
+                  <th className="px-3 py-2 font-medium">{t('Price')} *</th>
+                  <th className="px-3 py-2 font-medium">{t('Entry weight (kg)')}</th>
+                  <th className="px-3 py-2 text-right font-medium">{t('Shared cost')}</th>
+                  <th className="px-3 py-2 text-right font-medium">{t('Landed cost')}</th>
                   <th className="w-10 px-2 py-2" />
                 </tr>
               </thead>
@@ -225,7 +227,7 @@ export function PurchaseForm({ purchase }: { purchase?: PurchaseDetail }) {
                         aria-invalid={!!lineError(i, field) || undefined}
                         {...props}
                       />
-                      {lineError(i, field) && <p className="mt-1 text-xs text-destructive">{lineError(i, field)}</p>}
+                      {lineError(i, field) && <p className="mt-1 text-xs text-destructive">{t(lineError(i, field)!)}</p>}
                     </td>
                   );
                   return (
@@ -236,18 +238,18 @@ export function PurchaseForm({ purchase }: { purchase?: PurchaseDetail }) {
                         <Select aria-label={`Sex of line ${i + 1}`} className="h-9 w-full min-w-[6.5rem]" value={l.sex} onChange={(e) => setLine(l.id, 'sex', e.target.value)}>
                           {ANIMAL_SEXES.map((s) => (
                             <option key={s.value} value={s.value}>
-                              {s.label}
+                              {t(s.label)}
                             </option>
                           ))}
                         </Select>
-                        {lineError(i, 'sex') && <p className="mt-1 text-xs text-destructive">{lineError(i, 'sex')}</p>}
+                        {lineError(i, 'sex') && <p className="mt-1 text-xs text-destructive">{t(lineError(i, 'sex')!)}</p>}
                       </td>
                       <td className="px-2 py-1.5 align-top">
                         <Select aria-label={`Type of line ${i + 1}`} className="h-9 w-full min-w-[6.5rem]" value={l.type} onChange={(e) => setLine(l.id, 'type', e.target.value)}>
                           <option value="">—</option>
-                          {ANIMAL_TYPES.map((t) => (
-                            <option key={t.value} value={t.value}>
-                              {t.label}
+                          {ANIMAL_TYPES.map((tp) => (
+                            <option key={tp.value} value={tp.value}>
+                              {t(tp.label)}
                             </option>
                           ))}
                         </Select>
@@ -275,7 +277,7 @@ export function PurchaseForm({ purchase }: { purchase?: PurchaseDetail }) {
               <tfoot className="border-t bg-muted/30 font-medium">
                 <tr>
                   <td className="px-3 py-2" colSpan={5}>
-                    Total
+                    {t('Total')}
                   </td>
                   <td className="px-3 py-2 tabular-nums">{money(farm, totalPrice)}</td>
                   <td />
@@ -292,11 +294,11 @@ export function PurchaseForm({ purchase }: { purchase?: PurchaseDetail }) {
       {/* Actions stay in reach while scrolling through long purchases. */}
       <div className="sticky bottom-0 z-10 -mx-1 flex items-center justify-end gap-2 border-t bg-background/95 px-1 py-3 backdrop-blur">
         <Link href={listHref} className={buttonClasses('outline')}>
-          {canSave ? 'Cancel' : 'Back'}
+          {canSave ? t('Cancel') : t('Back')}
         </Link>
         {canSave && (
           <Button type="submit" loading={saving}>
-            {purchase ? 'Save changes' : 'Save purchase'}
+            {purchase ? t('Save changes') : t('Save purchase')}
           </Button>
         )}
       </div>
@@ -305,15 +307,15 @@ export function PurchaseForm({ purchase }: { purchase?: PurchaseDetail }) {
         <Dialog
           open={confirmDelete}
           onClose={() => setConfirmDelete(false)}
-          title={`Delete purchase ${purchase.number}?`}
-          description={`This also removes the ${purchase.animals} ${purchase.animals === 1 ? 'animal' : 'animals'} it added to the herd, with their weighings and history.`}
+          title={t('Delete purchase {number}?', { number: purchase.number })}
+          description={t(purchase.animals === 1 ? 'This also removes the {count} animal it added to the herd, with its weighings and history.' : 'This also removes the {count} animals it added to the herd, with their weighings and history.', { count: purchase.animals })}
           footer={
             <>
               <Button type="button" variant="outline" onClick={() => setConfirmDelete(false)}>
-                Cancel
+                {t('Cancel')}
               </Button>
               <Button type="button" variant="destructive" loading={saving} onClick={remove}>
-                Delete
+                {t('Delete')}
               </Button>
             </>
           }

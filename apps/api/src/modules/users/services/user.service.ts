@@ -17,8 +17,10 @@ export async function assertPassword(user: User, password: string | undefined, m
   }
 }
 
-export async function updateProfile(userId: string, patch: { name: string }) {
-  const [user] = await db.update(users).set(patch).where(eq(users.id, userId)).returning();
+/** Name and / or interface language (undefined fields are left as they are). */
+export async function updateProfile(userId: string, patch: { name?: string; language?: string | null }) {
+  const values = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
+  const [user] = await db.update(users).set(values).where(eq(users.id, userId)).returning();
   return user!;
 }
 

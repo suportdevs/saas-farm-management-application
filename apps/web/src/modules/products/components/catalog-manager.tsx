@@ -45,6 +45,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { api, errorMessage } from '@/lib/api';
+import { useT } from '@/i18n/provider';
 import { cn } from '@/lib/utils';
 import { usePreferences } from '@/components/shell/preferences-provider';
 import { useCan, useFarm } from '@/modules/farms/context';
@@ -89,7 +90,14 @@ export function CatalogManager({
   const router = useRouter();
   const pathname = usePathname();
   const { farm } = useFarm();
-  const { label, plural, description, columns, eyebrow, module } = CATALOG[resource];
+  const t = useT();
+  const def = CATALOG[resource];
+  // Names from the shared catalog definition, in the interface language.
+  const { columns, module } = def;
+  const label = t(def.label);
+  const plural = t(def.plural);
+  const description = t(def.description);
+  const eyebrow = def.eyebrow && t(def.eyebrow);
   /** Table columns: details marked `list: false` stay in the modal and CSV only. */
   const listColumns = columns.filter((c) => c.list !== false);
   /** What names a row: its name, or e.g. an animal's ear tag. */
@@ -185,7 +193,7 @@ export function CatalogManager({
         if (keys.length === 1) await api.delete(`${apiPath}/${keys[0]}`);
         else await api.post(`${apiPath}/bulk-delete`, { keys });
         toast.success(
-          keys.length === 1 ? `${label} deleted` : `${keys.length} ${plural.toLowerCase()} deleted`,
+          keys.length === 1 ? t('{item} deleted', { item: label }) : t('{count} {items} deleted', { count: keys.length, items: plural.toLowerCase() }),
         );
         refresh();
       } finally {
@@ -198,7 +206,7 @@ export function CatalogManager({
     run('status', async () => {
       const { updated } = await api.post<{ updated: number }>(`${apiPath}/toggle-status`, { keys });
       toast.success(
-        `Status changed for ${updated} ${updated === 1 ? label.toLowerCase() : plural.toLowerCase()}`,
+        t('Status changed for {count} {items}', { count: updated, items: updated === 1 ? label.toLowerCase() : plural.toLowerCase() }),
       );
       router.refresh();
     });
@@ -229,12 +237,12 @@ export function CatalogManager({
             <ModuleExport module={module} />
             {canImport && (
               <Button variant="outline" onClick={() => setModal({ type: 'import' })}>
-                <Upload className="h-4 w-4" /> Import
+                <Upload className="h-4 w-4" /> {t('Import')}
               </Button>
             )}
             {canCreate && (
               <Button onClick={() => setModal({ type: 'form', row: null })}>
-                <Plus className="h-4 w-4" /> Add {label.toLowerCase()}
+                <Plus className="h-4 w-4" /> {t('Add {item}', { item: label.toLowerCase() })}
               </Button>
             )}
           </>
@@ -255,9 +263,9 @@ export function CatalogManager({
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder={`Search ${plural.toLowerCase()}…`}
+                placeholder={t('Search {items}…', { items: plural.toLowerCase() })}
                 className="h-8 pl-9 text-xs"
-                aria-label="Search"
+                aria-label={t('Search')}
               />
               {navigating && (
                 <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
@@ -269,21 +277,21 @@ export function CatalogManager({
               onClick={() => setShowFilters((s) => !s)}
               aria-expanded={showFilters}
             >
-              <ListFilter className="h-4 w-4" /> Filters
+              <ListFilter className="h-4 w-4" /> {t('Filters')}
               {activeFilters > 0 && <Badge variant="primary">{activeFilters}</Badge>}
             </Button>
             {selected.size > 0 && (
               <div className="flex flex-wrap items-center gap-2 text-sm">
-                <span className="font-medium">{selected.size} selected</span>
+                <span className="font-medium">{t('{count} selected', { count: selected.size })}</span>
                 {withStatus && canUpdate && (
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => toggleStatus([...selected])}
                     loading={busy === 'status'}
-                    title="Active rows become inactive, inactive rows active"
+                    title={t('Active rows become inactive, inactive rows active')}
                   >
-                    {busy !== 'status' && <RefreshCw className="h-3.5 w-3.5" />} Status
+                    {busy !== 'status' && <RefreshCw className="h-3.5 w-3.5" />} {t('Status')}
                   </Button>
                 )}
                 {canDelete && (
@@ -292,11 +300,11 @@ export function CatalogManager({
                     variant="destructive"
                     onClick={() => setModal({ type: 'delete', keys: [...selected] })}
                   >
-                    <Trash2 className="h-3.5 w-3.5" /> Delete
+                    <Trash2 className="h-3.5 w-3.5" /> {t('Delete')}
                   </Button>
                 )}
                 <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
-                  <X className="h-3.5 w-3.5" /> Clear
+                  <X className="h-3.5 w-3.5" /> {t('Clear')}
                 </Button>
               </div>
             )}
@@ -327,23 +335,23 @@ export function CatalogManager({
             <EmptyState
               className="m-4"
               icon={MODULE_ICONS[module]}
-              title={`No ${plural.toLowerCase()} yet`}
+              title={t('No {items} yet', { items: plural.toLowerCase() })}
               description={
                 canCreate || canImport
-                  ? 'Add them one by one, or import a spreadsheet.'
-                  : `Nobody has added any ${plural.toLowerCase()} yet.`
+                  ? t('Add them one by one, or import a spreadsheet.')
+                  : t('Nobody has added any {items} yet.', { items: plural.toLowerCase() })
               }
               action={
                 (canCreate || canImport) && (
                   <>
                     {canImport && (
                       <Button variant="outline" onClick={() => setModal({ type: 'import' })}>
-                        <Upload className="h-4 w-4" /> Import
+                        <Upload className="h-4 w-4" /> {t('Import')}
                       </Button>
                     )}
                     {canCreate && (
                       <Button onClick={() => setModal({ type: 'form', row: null })}>
-                        <Plus className="h-4 w-4" /> Add {label.toLowerCase()}
+                        <Plus className="h-4 w-4" /> {t('Add {item}', { item: label.toLowerCase() })}
                       </Button>
                     )}
                   </>
@@ -360,7 +368,7 @@ export function CatalogManager({
                       <Checkbox
                         checked={allSelected}
                         onChange={toggleAll}
-                        aria-label="Select all on this page"
+                        aria-label={t('Select all on this page')}
                         disabled={!rows.length}
                       />
                     </th>
@@ -372,7 +380,7 @@ export function CatalogManager({
                   )}
                   {listColumns.map((c) => (
                     <th key={c.key} className="whitespace-nowrap px-4 py-3 font-medium">
-                      {c.label}
+                      {t(c.label)}
                     </th>
                   ))}
                   {(canUpdate || canDelete) && <th className="w-24 px-4 py-3" />}
@@ -390,7 +398,7 @@ export function CatalogManager({
                           <Checkbox
                             checked={selected.has(row.key)}
                             onChange={() => toggle(row.key)}
-                            aria-label={`Select ${titleOf(row)}`}
+                            aria-label={t('Select {name}', { name: titleOf(row) })}
                           />
                         )}
                       </td>
@@ -419,8 +427,8 @@ export function CatalogManager({
                     {(canUpdate || canDelete) && (
                       <td className="px-4 py-2 text-right">
                         {isBuiltIn(row) ? (
-                          <Badge variant="outline" title="Built in and shared by every farm — read-only">
-                            <Lock className="h-3 w-3" /> Built-in
+                          <Badge variant="outline" title={t('Built in and shared by every farm — read-only')}>
+                            <Lock className="h-3 w-3" /> {t('Built-in')}
                           </Badge>
                         ) : (
                         <div className="flex justify-end gap-1">
@@ -429,7 +437,7 @@ export function CatalogManager({
                               size="icon"
                               variant="ghost"
                               onClick={() => setModal({ type: 'form', row })}
-                              aria-label={`Edit ${titleOf(row)}`}
+                              aria-label={t('Edit {name}', { name: titleOf(row) })}
                             >
                               <Pencil className="h-4 w-4" />
                             </Button>
@@ -439,7 +447,7 @@ export function CatalogManager({
                               size="icon"
                               variant="ghost"
                               onClick={() => setModal({ type: 'delete', keys: [row.key] })}
-                              aria-label={`Delete ${titleOf(row)}`}
+                              aria-label={t('Delete {name}', { name: titleOf(row) })}
                             >
                               <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>
@@ -456,7 +464,7 @@ export function CatalogManager({
                       colSpan={listColumns.length + 3}
                       className="px-4 py-10 text-center text-muted-foreground"
                     >
-                      Nothing matches your search and filters.
+                      {t('Nothing matches your search and filters.')}
                     </td>
                   </tr>
                 )}
@@ -489,21 +497,21 @@ export function CatalogManager({
           onClose={() => setModal(null)}
           title={
             modal.keys.length === 1
-              ? `Delete this ${label.toLowerCase()}?`
-              : `Delete ${modal.keys.length} ${plural.toLowerCase()}?`
+              ? t('Delete this {item}?', { item: label.toLowerCase() })
+              : t('Delete {count} {items}?', { count: modal.keys.length, items: plural.toLowerCase() })
           }
-          description="Deleted rows disappear from lists and selects. Their history is kept."
+          description={t('Deleted rows disappear from lists and selects. Their history is kept.')}
           footer={
             <>
               <Button variant="outline" onClick={() => setModal(null)}>
-                Cancel
+                {t('Cancel')}
               </Button>
               <Button
                 variant="destructive"
                 onClick={() => remove(modal.keys)}
                 loading={busy === 'delete'}
               >
-                Delete
+                {t('Delete')}
               </Button>
             </>
           }
@@ -523,10 +531,11 @@ function Cell({
   /** Makes the status badge a button that flips it. */
   onToggleStatus?: () => void;
 }) {
+  const t = useT();
   if (column.input === 'status') {
     const badge = (
       <Badge variant={Number(value) === STATUS.active ? 'success' : 'default'}>
-        {statusLabel(value)}
+        {t(statusLabel(value))}
       </Badge>
     );
     if (!onToggleStatus) return badge;
@@ -534,7 +543,7 @@ function Cell({
       <button
         type="button"
         onClick={onToggleStatus}
-        title={`Click to make ${Number(value) === STATUS.active ? 'inactive' : 'active'}`}
+        title={Number(value) === STATUS.active ? t('Click to make inactive') : t('Click to make active')}
         className="rounded-full transition-opacity hover:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {badge}
@@ -550,7 +559,8 @@ function Cell({
       </span>
     );
   }
-  return <>{value}</>;
+  // Choice labels (Female, Active…) translate; typed values stay as typed.
+  return <>{column.input === 'select' ? t(value) : value}</>;
 }
 
 function Thumbnail({ src }: { src: string | null }) {

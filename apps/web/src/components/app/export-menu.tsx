@@ -11,6 +11,7 @@ import { farmLetterhead, PLATFORM_LETTERHEAD } from '@/lib/letterhead';
 import { EXPORT_FORMATS, exportTable, rowCount, type ExportDoc, type ExportFormat, type ExportTable } from '@/lib/table-export';
 import { useOptionalFarm } from '@/modules/farms/context';
 import { cn } from '@/lib/utils';
+import { useT } from '@/i18n/provider';
 
 const ICONS = { excel: FileSpreadsheet, csv: Sheet, pdf: FileText, tsv: TableProperties, json: Braces, print: Printer, copy: Copy };
 
@@ -34,10 +35,11 @@ export function ExportMenu({
   load: (format: ExportFormat) => Promise<ExportTable | ExportDoc>;
   formats?: ExportFormat[];
   disabled?: boolean;
-  locked?: { message: string; href?: string } | null;
+  locked?: { message: string; vars?: Record<string, string>; href?: string } | null;
   label?: string;
 }) {
   const [busy, setBusy] = useState<ExportFormat | null>(null);
+  const t = useT();
   const farm = useOptionalFarm();
   const shown = EXPORT_FORMATS.filter((f) => !formats || formats.includes(f.value));
 
@@ -48,8 +50,8 @@ export function ExportMenu({
       const letterhead = table.letterhead ?? (farm ? farmLetterhead(farm) : PLATFORM_LETTERHEAD);
       await exportTable(format, { ...table, letterhead });
       const n = rowCount(table);
-      if (format === 'copy') toast.success(`Copied ${n} ${n === 1 ? 'row' : 'rows'}`);
-      else if (format !== 'print') toast.success(`Downloaded ${n} ${n === 1 ? 'row' : 'rows'}`);
+      if (format === 'copy') toast.success(t(n === 1 ? 'Copied {count} row' : 'Copied {count} rows', { count: n }));
+      else if (format !== 'print') toast.success(t(n === 1 ? 'Downloaded {count} row' : 'Downloaded {count} rows', { count: n }));
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {
@@ -60,13 +62,13 @@ export function ExportMenu({
   if (locked) {
     return (
       <Menu
-        label={`${label} (locked)`}
+        label={`${t(label)} (${t('locked')})`}
         align="end"
         className="w-72 p-3"
         triggerClassName={cn(buttonClasses('outline', 'sm'), 'text-muted-foreground')}
         trigger={
           <>
-            <Lock className="h-3.5 w-3.5" /> {label}
+            <Lock className="h-3.5 w-3.5" /> {t(label)}
             <ChevronDown className="h-3.5 w-3.5 opacity-60" />
           </>
         }
@@ -74,12 +76,12 @@ export function ExportMenu({
         {(close) => (
           <div className="space-y-3 text-sm">
             <p className="flex items-center gap-2 font-medium">
-              <Sparkles className="h-4 w-4 text-primary" /> Upgrade to download
+              <Sparkles className="h-4 w-4 text-primary" /> {t('Upgrade to download')}
             </p>
-            <p className="text-muted-foreground">{locked.message}</p>
+            <p className="text-muted-foreground">{t(locked.message, locked.vars)}</p>
             {locked.href && (
               <Link href={locked.href} onClick={close} className={cn(buttonClasses('primary', 'sm'), 'w-full')}>
-                Choose a plan
+                {t('Choose a plan')}
               </Link>
             )}
           </div>
@@ -91,20 +93,20 @@ export function ExportMenu({
   if (disabled) {
     return (
       <button type="button" disabled className={buttonClasses('outline', 'sm')}>
-        <Download className="h-4 w-4" /> {label}
+        <Download className="h-4 w-4" /> {t(label)}
       </button>
     );
   }
 
   return (
     <Menu
-      label={label}
+      label={t(label)}
       align="end"
       className="min-w-72"
       triggerClassName={cn(buttonClasses('outline', 'sm'))}
       trigger={
         <>
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} {label}
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} {t(label)}
           <ChevronDown className="h-3.5 w-3.5 opacity-60" />
         </>
       }
@@ -125,8 +127,8 @@ export function ExportMenu({
               }}
             >
               <Icon className="h-4 w-4 text-muted-foreground" />
-              <span className="flex-1">{f.label}</span>
-              <span className="text-xs text-muted-foreground">{f.hint}</span>
+              <span className="flex-1">{t(f.label)}</span>
+              <span className="text-xs text-muted-foreground">{t(f.hint)}</span>
             </button>
           );
         })

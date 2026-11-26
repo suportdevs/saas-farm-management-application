@@ -27,6 +27,7 @@ import { useFarm } from '@/modules/farms/context';
 import { imageUrl, rowValue } from '../files';
 import { CatalogSelect } from './catalog-select';
 import { ImageField, type ImageChange } from './image-field';
+import { useT } from '@/i18n/provider';
 
 type Values = Record<string, string>;
 
@@ -54,7 +55,9 @@ export function CatalogFormDialog({
   onSaved: () => void;
 }) {
   const { farm } = useFarm();
-  const { label, image: hasImage } = CATALOG[resource];
+  const t = useT();
+  const { image: hasImage } = CATALOG[resource];
+  const label = t(CATALOG[resource].label);
   // Read-only columns (e.g. a batch's animal counts) are worked out by the API.
   const columns = formColumns(resource);
   const path = `/farms/${farm.slug}/${catalogPath(resource)}`;
@@ -85,9 +88,9 @@ export function CatalogFormDialog({
     try {
       if (image.type === 'set') await api.upload(`${path}/${key}/image`, image.file);
       if (image.type === 'remove') await api.delete(`${path}/${key}/image`);
-      toast.success(row ? `${label} updated` : `${label} added`);
+      toast.success(row ? t('{item} updated', { item: label }) : t('{item} added', { item: label }));
     } catch (err) {
-      toast.error(`${label} saved, but the image wasn't: ${errorMessage(err)}`);
+      toast.error(t("{item} saved, but the image wasn't: {error}", { item: label, error: errorMessage(err) }));
     }
     onSaved();
   });
@@ -134,7 +137,7 @@ export function CatalogFormDialog({
           render={({ field }) => (
             <SearchSelect
               id={id}
-              options={c.input === 'select' ? c.options! : STATUS_OPTIONS}
+              options={(c.input === 'select' ? c.options! : STATUS_OPTIONS).map((o) => ({ ...o, label: t(o.label) }))}
               clearable={c.input === 'select' && !c.required}
               value={field.value ?? ''}
               onChange={field.onChange}
@@ -167,7 +170,7 @@ export function CatalogFormDialog({
           <Input id={id} placeholder="#DC2626" aria-invalid={invalid} {...register(name)} />
           <input
             type="color"
-            aria-label="Pick a color"
+            aria-label={t('Pick a color')}
             value={HEX.test(value) ? value : '#000000'}
             onChange={(e) => setValue(name, e.target.value.toUpperCase(), { shouldDirty: true })}
             className="h-10 w-12 shrink-0 cursor-pointer rounded-lg border border-input bg-card p-1"
@@ -182,21 +185,21 @@ export function CatalogFormDialog({
   const wide = columns.length > 8;
 
   const fieldLabel = (c: CatalogColumn) =>
-    c.required || c.input === 'status' || c.virtual || c.defaultValue ? c.label : `${c.label} (optional)`;
+    c.required || c.input === 'status' || c.virtual || c.defaultValue ? t(c.label) : t('{field} (optional)', { field: t(c.label) });
 
   return (
     <Dialog
       open
       onClose={onClose}
       className={wide ? 'max-w-3xl' : undefined}
-      title={row ? `Edit ${label.toLowerCase()}` : `Add ${label.toLowerCase()}`}
+      title={row ? t('Edit {item}', { item: label.toLowerCase() }) : t('Add {item}', { item: label.toLowerCase() })}
       footer={
         <>
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            {t('Cancel')}
           </Button>
           <Button type="submit" form="catalog-form" loading={isSubmitting}>
-            {row ? 'Save changes' : `Add ${label.toLowerCase()}`}
+            {row ? t('Save changes') : t('Add {item}', { item: label.toLowerCase() })}
           </Button>
         </>
       }
@@ -218,9 +221,9 @@ export function CatalogFormDialog({
             id={`catalog-${fieldOf(c)}`}
             label={fieldLabel(c)}
             hint={
-              c.hint ?? (c.virtual ? `Narrows the ${dependents(c)[0]?.label.toLowerCase()} list` : undefined)
+              c.hint ? t(c.hint) : c.virtual ? t('Narrows the {items} list', { items: t(dependents(c)[0]?.label ?? '').toLowerCase() }) : undefined
             }
-            error={errors[fieldOf(c)]?.message}
+            error={errors[fieldOf(c)]?.message && t(errors[fieldOf(c)]!.message!)}
             className={wide && c.input === 'textarea' ? 'sm:col-span-2' : undefined}
           >
             {input(c)}

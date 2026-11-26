@@ -4,6 +4,7 @@ import { VerifyEmailBanner } from '@/components/app/verify-email-banner';
 import { VerifyEmailRequired } from '@/components/app/verify-email-required';
 import { AppShell } from '@/components/shell/app-shell';
 import { PreferencesProvider } from '@/components/shell/preferences-provider';
+import { I18nProvider } from '@/i18n/provider';
 import { getFarms } from '@/modules/farms/server';
 import { getFeatures, getSession, requireUser } from '@/lib/session';
 import { parsePrefs, PREFS_COOKIE } from '@/lib/preferences';
@@ -18,6 +19,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <PreferencesProvider initial={prefs}>
+      {/* Interface language: the user's own, else the current farm's default, else English. */}
+      <I18nProvider userLanguage={user.language} farms={farms}>
       <AppShell
         user={user}
         farms={farms}
@@ -26,6 +29,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       >
         {children}
       </AppShell>
+      </I18nProvider>
     </PreferencesProvider>
   );
 }
