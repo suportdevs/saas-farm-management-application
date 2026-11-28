@@ -5,6 +5,7 @@ import { UsersExport } from '@/components/admin/list-exports';
 import { Pagination } from '@/components/app/pagination';
 import { FilterToggle } from '@/components/app/filter-toggle';
 import { PageSizeSelect } from '@/components/app/page-size-select';
+import { ColumnToggle } from '@/components/app/column-toggle';
 import { CriteriaBar } from '@/components/app/criteria-bar';
 import { exportCriteria, urlCriteria } from '@/components/app/criteria';
 import { TableFrame } from '@/components/app/table-frame';
@@ -51,7 +52,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
 
   return (
     <>
-      <TableFrame
+      <TableFrame columns="admin-users"
         criteria={
           <CriteriaBar
             total={pagination.total}
@@ -80,6 +81,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
           Filter
         </Button>
         <PageSizeSelect />
+        <ColumnToggle />
         <UsersExport query={qs.toString()} criteria={exportCriteria(criteria.items)} />
         {me.platformPermissions?.includes('platform.tenants.create') && (
           <div className="ml-auto">

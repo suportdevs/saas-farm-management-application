@@ -553,4 +553,12 @@ export const hi: Record<string, string> = {
   "{module} is switched off for this farm.": "इस फ़ार्म के लिए {module} बंद है।",
   "{module} isn't in your {plan} plan.": "{module} आपके {plan} प्लान में नहीं है।",
   "{total} matching": "{total} मेल खाते हैं",
+  "Animals appear here when a purchase is saved.": "खरीद सेव होने पर पशु यहाँ दिखेंगे।",
+  "Columns": "कॉलम",
+  "Every animal bought, with its purchase, price, shared cost and landed cost.": "खरीदा गया हर पशु, खरीद, कीमत, साझा खर्च और पहुँच लागत के साथ।",
+  "Hidden columns are left out of downloads too.": "छिपे कॉलम डाउनलोड में भी नहीं आएँगे।",
+  "No purchase items yet": "अभी कोई खरीद आइटम नहीं",
+  "Purchase items": "खरीद आइटम",
+  "Search purchase no., ear tag or haat…": "खरीद नं., कान टैग या हाट खोजें…",
+  "Show all columns": "सभी कॉलम दिखाएँ",
 };

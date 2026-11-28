@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { PurchaseInput, PurchaseListQuery } from '@kit/shared';
 import { audit, notFound } from '../../../core';
 import { getFarm } from '../../farms';
-import { createPurchase, deletePurchase, getPurchase, listPurchases, updatePurchase } from '../services/purchase.service';
+import { createPurchase, deletePurchase, getPurchase, listPurchaseItems, listPurchases, updatePurchase } from '../services/purchase.service';
 
 const keyParam = (req: Request) => {
   const key = z.uuid().safeParse(req.params.key);
@@ -20,6 +20,11 @@ export const purchaseController = {
   /** GET / — paginated list (?q, source_type, from, to, page, pageSize). */
   async list(req: Request, res: Response) {
     res.json(await listPurchases(getFarm(res).farm.id, req.query as unknown as PurchaseListQuery));
+  },
+
+  /** GET /purchase-items — every animal line with its purchase (same filters as the list). */
+  async items(req: Request, res: Response) {
+    res.json(await listPurchaseItems(getFarm(res).farm.id, req.query as unknown as PurchaseListQuery));
   },
 
   /** GET /:key — the purchase with its animal lines. */

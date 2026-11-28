@@ -149,6 +149,10 @@ export const BUSINESS_MODULES: FarmModule[] = [
     icon: ShoppingCart,
     status: 'live',
     permissionModule: 'purchase',
+    children: [
+      { slug: 'purchases', label: 'Purchases', permission: 'purchase.purchase_list' },
+      { slug: 'purchases/items', label: 'Purchase items', permission: 'purchase.purchase_list' },
+    ],
     summary: 'Animals bought at a haat, from farmers or suppliers, or imported — with transport, broker and toll costs split per animal.',
     highlights: ['One purchase per trip or invoice', 'Each animal added to the herd', 'Shared costs split by price', 'Landed cost per animal', 'Download and print'],
   },

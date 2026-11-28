@@ -7,6 +7,7 @@ import { NewTenantButton } from '@/modules/platform/components/new-tenant-dialog
 import { Pagination } from '@/components/app/pagination';
 import { FilterToggle } from '@/components/app/filter-toggle';
 import { PageSizeSelect } from '@/components/app/page-size-select';
+import { ColumnToggle } from '@/components/app/column-toggle';
 import { CriteriaBar } from '@/components/app/criteria-bar';
 import { exportCriteria, urlCriteria } from '@/components/app/criteria';
 import { TableFrame } from '@/components/app/table-frame';
@@ -49,7 +50,7 @@ export default async function AdminFarmsPage({ searchParams }: { searchParams: P
 
   return (
     <div className="space-y-4">
-      <TableFrame
+      <TableFrame columns="admin-farms"
         criteria={
           <CriteriaBar
             total={data?.pagination.total ?? 0}
@@ -91,6 +92,7 @@ export default async function AdminFarmsPage({ searchParams }: { searchParams: P
       </form>
         <div className="flex items-center gap-2">
           <PageSizeSelect />
+          <ColumnToggle />
           <TenantsExport query={qs.toString()} criteria={exportCriteria(criteria.items)} />
           {me.platformPermissions?.includes('platform.tenants.create') && <NewTenantButton plans={plans.filter((p) => !p.archived)} />}
         </div>

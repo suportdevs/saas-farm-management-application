@@ -50,3 +50,15 @@ export interface PurchaseItemRow {
 export interface PurchaseDetail extends PurchaseRow {
   items: PurchaseItemRow[];
 }
+
+/** One animal line in the purchase items list, with its purchase. */
+export interface PurchaseItemListRow extends PurchaseItemRow {
+  purchaseKey: string;
+  number: string;
+  /** YYYY-MM-DD */
+  purchaseDate: string;
+  sourceType: PurchaseSourceType;
+  haatName: string | null;
+  supplierName: string | null;
+  batchName: string | null;
+}

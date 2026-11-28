@@ -4,6 +4,7 @@ import type { AuditLogEntry, Pagination as PaginationInfo } from '@kit/shared';
 import { AuditLogExport } from '@/components/admin/list-exports';
 import { Pagination } from '@/components/app/pagination';
 import { PageSizeSelect } from '@/components/app/page-size-select';
+import { ColumnToggle } from '@/components/app/column-toggle';
 import { CriteriaBar } from '@/components/app/criteria-bar';
 import { exportCriteria, urlCriteria } from '@/components/app/criteria';
 import { TableFrame } from '@/components/app/table-frame';
@@ -35,7 +36,7 @@ export default async function AuditLogPage({ searchParams }: { searchParams: Pro
 
   return (
     <>
-      <TableFrame
+      <TableFrame columns="admin-audit-logs"
         criteria={
           <CriteriaBar
             total={data.pagination.total}
@@ -57,6 +58,7 @@ export default async function AuditLogPage({ searchParams }: { searchParams: Pro
         )}
         <div className="ml-auto flex items-center gap-2">
           <PageSizeSelect />
+          <ColumnToggle />
           <AuditLogExport query={qs.toString()} criteria={exportCriteria(criteria.items)} />
         </div>
       </form>

@@ -48,6 +48,7 @@ export function catalogExportTable(resource: CatalogResource, rows: CatalogRow[]
     title: plural,
     // Farm name, date and record count are on the document header.
     headers: shown.map((c) => (format === 'csv' ? c.csv : c.label)),
+    labels: shown.map((c) => c.label),
     rows: rows.map((row) => shown.map((c) => displayValue(row, c))),
   };
 }

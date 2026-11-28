@@ -9,6 +9,7 @@ import { FilterToggle } from '@/components/app/filter-toggle';
 import { ModuleLocked } from '@/components/app/module-locked';
 import { PageHeader } from '@/components/app/page-header';
 import { PageSizeSelect } from '@/components/app/page-size-select';
+import { ColumnToggle } from '@/components/app/column-toggle';
 import { Pagination } from '@/components/app/pagination';
 import { TableFrame } from '@/components/app/table-frame';
 import { Button, buttonClasses } from '@/components/ui/button';
@@ -63,7 +64,7 @@ export default async function FinishReceivesPage({ params, searchParams }: { par
           )
         }
       />
-      <TableFrame
+      <TableFrame columns="finish-receives"
         criteria={<CriteriaBar total={pagination.total} {...criteria} />}
         toolbar={
           <div className="flex flex-wrap items-center gap-2">
@@ -89,6 +90,7 @@ export default async function FinishReceivesPage({ params, searchParams }: { par
             </form>
             <div className="flex items-center gap-2">
               <PageSizeSelect />
+              <ColumnToggle />
               <FinishReceivesExport query={qs.toString()} criteria={exportCriteria(criteria.items)} />
             </div>
           </div>

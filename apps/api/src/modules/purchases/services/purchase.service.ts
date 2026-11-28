@@ -1,6 +1,6 @@
 import { and, count, desc, eq, gte, ilike, inArray, lte, notInArray, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
-import { sharedCostOf, splitSharedCost, type PurchaseDetail, type PurchaseInput, type PurchaseItemInput, type PurchaseListQuery, type PurchaseRow } from '@kit/shared';
+import { sharedCostOf, splitSharedCost, type PurchaseDetail, type PurchaseInput, type PurchaseItemInput, type PurchaseItemListRow, type PurchaseListQuery, type PurchaseRow } from '@kit/shared';
 import { db, escapeLike, notDeleted, notFound, validationError } from '../../../core';
 import { suppliers } from '../../distribution';
 import type { Tx } from '../../farms';
@@ -83,6 +83,60 @@ export async function listPurchases(tenantId: string, { q, source_type, from, to
     db.select({ value: count() }).from(purchases).where(where),
   ]);
   return { rows: rows.map(toRow), pagination: { page, pageSize, total: total?.value ?? 0 } };
+}
+
+/** Every animal line with its purchase, for the purchase items list (same filters as the purchase list). */
+export async function listPurchaseItems(tenantId: string, { q, source_type, from, to, page, pageSize }: PurchaseListQuery) {
+  const like = q ? `%${escapeLike(q)}%` : undefined;
+  const where = and(
+    eq(purchaseItems.tenantId, tenantId),
+    notDeleted(purchaseItems),
+    notDeleted(purchases),
+    like ? or(ilike(purchases.number, like), ilike(purchases.haatName, like), ilike(animals.tag, like), ilike(animals.name, like)) : undefined,
+    source_type ? eq(purchases.sourceType, source_type) : undefined,
+    from ? gte(purchases.purchaseDate, from) : undefined,
+    to ? lte(purchases.purchaseDate, to) : undefined,
+  );
+  const [rows, [total]] = await Promise.all([
+    db
+      .select({
+        key: purchaseItems.key,
+        purchaseKey: purchases.key,
+        number: purchases.number,
+        purchaseDate: purchases.purchaseDate,
+        sourceType: purchases.sourceType,
+        haatName: purchases.haatName,
+        supplierName: supplier.name,
+        batchName: batches.number,
+        animalKey: animals.key,
+        tag: animals.tag,
+        name: animals.name,
+        sex: animals.sex,
+        type: animals.type,
+        breed: animals.breed,
+        price: purchaseItems.price,
+        allocatedSharedCost: purchaseItems.allocatedSharedCost,
+        landedCost: purchaseItems.landedCost,
+        entryWeightKg: purchaseItems.entryWeightKg,
+      })
+      .from(purchaseItems)
+      .innerJoin(purchases, eq(purchases.id, purchaseItems.purchaseId))
+      .leftJoin(animals, eq(animals.id, purchaseItems.animalId))
+      .leftJoin(supplier, eq(supplier.id, purchases.supplierId))
+      .leftJoin(batches, eq(batches.id, purchases.batchId))
+      .where(where)
+      .orderBy(desc(purchases.purchaseDate), desc(purchases.id), purchaseItems.id)
+      .limit(pageSize)
+      .offset((page - 1) * pageSize),
+    // Same joins the search uses, for the count.
+    db
+      .select({ value: count() })
+      .from(purchaseItems)
+      .innerJoin(purchases, eq(purchases.id, purchaseItems.purchaseId))
+      .leftJoin(animals, eq(animals.id, purchaseItems.animalId))
+      .where(where),
+  ]);
+  return { rows: rows as PurchaseItemListRow[], pagination: { page, pageSize, total: total?.value ?? 0 } };
 }
 
 export async function getPurchase(tenantId: string, key: string): Promise<PurchaseDetail> {

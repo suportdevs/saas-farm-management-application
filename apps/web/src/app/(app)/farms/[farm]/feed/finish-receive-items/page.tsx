@@ -9,6 +9,7 @@ import { FilterToggle } from '@/components/app/filter-toggle';
 import { ModuleLocked } from '@/components/app/module-locked';
 import { PageHeader } from '@/components/app/page-header';
 import { PageSizeSelect } from '@/components/app/page-size-select';
+import { ColumnToggle } from '@/components/app/column-toggle';
 import { Pagination } from '@/components/app/pagination';
 import { TableFrame } from '@/components/app/table-frame';
 import { Badge } from '@/components/ui/badge';
@@ -53,7 +54,7 @@ export default async function FinishReceiveItemsPage({ params, searchParams }: {
   return (
     <>
       <PageHeader compact eyebrow={t("Feed")} title={t("Finish receive items")} description={t("Every product line of every finish receive, with its order, warehouse and status.")} />
-      <TableFrame
+      <TableFrame columns="finish-receive-items"
         criteria={<CriteriaBar total={data.pagination.total} {...criteria} />}
         toolbar={
           <div className="flex flex-wrap items-center gap-2">
@@ -79,6 +80,7 @@ export default async function FinishReceiveItemsPage({ params, searchParams }: {
             </form>
             <div className="flex items-center gap-2">
               <PageSizeSelect />
+              <ColumnToggle />
               <FinishReceiveItemsExport query={qs.toString()} criteria={exportCriteria(criteria.items)} />
             </div>
           </div>

@@ -36,6 +36,7 @@ import {
 import { ExportMenu } from '@/components/app/export-menu';
 import { PageHeader } from '@/components/app/page-header';
 import { PageSizeSelect } from '@/components/app/page-size-select';
+import { ColumnsProvider, ColumnToggle } from '@/components/app/column-toggle';
 import { Pagination } from '@/components/app/pagination';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -251,6 +252,7 @@ export function CatalogManager({
 
       {/* The card fits the screen: search, filters and the table header stay in
           place and only the rows scroll. Shown even before the first row. */}
+        <ColumnsProvider id={'catalog-' + resource}>
         <Card
           className={cn(
             'flex max-h-[calc(100dvh-6rem)] flex-col overflow-visible',
@@ -310,6 +312,7 @@ export function CatalogManager({
             )}
             <div className="ml-auto flex items-center gap-3">
               <PageSizeSelect />
+              <ColumnToggle />
               {canExport ? <ExportMenu load={download} disabled={empty} /> : exportLock && <ExportMenu load={download} locked={exportLock} />}
             <span className="text-sm text-muted-foreground">
               {pagination.total}{' '}
@@ -374,7 +377,7 @@ export function CatalogManager({
                     </th>
                   )}
                   {withImage && (
-                    <th className="w-16 px-4 py-3">
+                    <th className="w-16 px-4 py-3" data-col-fixed>
                       <span className="sr-only">Image</span>
                     </th>
                   )}
@@ -473,6 +476,7 @@ export function CatalogManager({
           </div>
           )}
         </Card>
+        </ColumnsProvider>
 
       <Pagination pagination={pagination} basePath={pathname} params={query} />
 

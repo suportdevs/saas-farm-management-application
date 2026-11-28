@@ -5,6 +5,7 @@ import type { Pagination as PaginationInfo, PlatformOrganization } from '@kit/sh
 import { OrganizationsExport } from '@/components/admin/list-exports';
 import { Pagination } from '@/components/app/pagination';
 import { PageSizeSelect } from '@/components/app/page-size-select';
+import { ColumnToggle } from '@/components/app/column-toggle';
 import { CriteriaBar } from '@/components/app/criteria-bar';
 import { exportCriteria, urlCriteria } from '@/components/app/criteria';
 import { TableFrame } from '@/components/app/table-frame';
@@ -31,7 +32,7 @@ export default async function AdminOrganizationsPage({ searchParams }: { searchP
 
   return (
     <div className="space-y-4">
-      <TableFrame
+      <TableFrame columns="admin-organizations"
         criteria={<CriteriaBar total={data?.pagination.total ?? 0} {...criteria} />}
         toolbar={
       <div className="flex flex-wrap items-center gap-2">
@@ -47,6 +48,7 @@ export default async function AdminOrganizationsPage({ searchParams }: { searchP
       </form>
       <div className="ml-auto flex items-center gap-2">
         <PageSizeSelect />
+        <ColumnToggle />
         <OrganizationsExport query={qs.toString()} criteria={exportCriteria(criteria.items)} />
       </div>
       </div>

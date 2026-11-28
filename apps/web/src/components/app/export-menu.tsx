@@ -12,6 +12,7 @@ import { EXPORT_FORMATS, exportTable, rowCount, type ExportDoc, type ExportForma
 import { useOptionalFarm } from '@/modules/farms/context';
 import { cn } from '@/lib/utils';
 import { useT } from '@/i18n/provider';
+import { useColumns, withoutHiddenColumns } from './column-toggle';
 
 const ICONS = { excel: FileSpreadsheet, csv: Sheet, pdf: FileText, tsv: TableProperties, json: Braces, print: Printer, copy: Copy };
 
@@ -41,12 +42,14 @@ export function ExportMenu({
   const [busy, setBusy] = useState<ExportFormat | null>(null);
   const t = useT();
   const farm = useOptionalFarm();
+  // Columns hidden with the Columns button are left out of the file.
+  const columns = useColumns();
   const shown = EXPORT_FORMATS.filter((f) => !formats || formats.includes(f.value));
 
   const run = async (format: ExportFormat) => {
     setBusy(format);
     try {
-      const table = await load(format);
+      const table = withoutHiddenColumns(await load(format), columns?.hidden ?? new Set<string>(), t);
       const letterhead = table.letterhead ?? (farm ? farmLetterhead(farm) : PLATFORM_LETTERHEAD);
       await exportTable(format, { ...table, letterhead });
       const n = rowCount(table);

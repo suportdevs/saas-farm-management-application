@@ -8,6 +8,7 @@ import { exportCriteria, urlCriteria } from '@/components/app/criteria';
 import { FilterToggle } from '@/components/app/filter-toggle';
 import { PageHeader } from '@/components/app/page-header';
 import { PageSizeSelect } from '@/components/app/page-size-select';
+import { ColumnToggle } from '@/components/app/column-toggle';
 import { Pagination } from '@/components/app/pagination';
 import { TableFrame } from '@/components/app/table-frame';
 import { Button, buttonClasses } from '@/components/ui/button';
@@ -60,7 +61,7 @@ export default async function PurchasesPage({ params, searchParams }: { params: 
           )
         }
       />
-      <TableFrame
+      <TableFrame columns="purchases"
         criteria={<CriteriaBar total={pagination.total} {...criteria} />}
         toolbar={
           <div className="flex flex-wrap items-center gap-2">
@@ -89,6 +90,7 @@ export default async function PurchasesPage({ params, searchParams }: { params: 
             </form>
             <div className="flex items-center gap-2">
               <PageSizeSelect />
+              <ColumnToggle />
               <PurchasesExport query={qs.toString()} criteria={exportCriteria(criteria.items)} />
             </div>
           </div>

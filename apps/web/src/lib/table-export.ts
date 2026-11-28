@@ -32,6 +32,8 @@ export type ExportSection = {
   title: string;
   subtitle?: string;
   headers: string[];
+  /** Column names as the table shows them, when `headers` differ (e.g. CSV import keys). Used to leave out hidden columns. */
+  labels?: string[];
   rows: unknown[][];
   /** The search and filters behind these rows; [] = none (all records). Left out = not shown. */
   criteria?: ExportCriterion[];

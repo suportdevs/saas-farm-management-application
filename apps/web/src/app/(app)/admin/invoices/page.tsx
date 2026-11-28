@@ -6,6 +6,7 @@ import { InvoicesExport } from '@/components/admin/list-exports';
 import { Pagination } from '@/components/app/pagination';
 import { FilterToggle } from '@/components/app/filter-toggle';
 import { PageSizeSelect } from '@/components/app/page-size-select';
+import { ColumnToggle } from '@/components/app/column-toggle';
 import { CriteriaBar } from '@/components/app/criteria-bar';
 import { exportCriteria, urlCriteria } from '@/components/app/criteria';
 import { TableFrame } from '@/components/app/table-frame';
@@ -49,7 +50,7 @@ export default async function AdminInvoicesPage({ searchParams }: { searchParams
 
   return (
     <div className="space-y-4">
-      <TableFrame
+      <TableFrame columns="admin-invoices"
         criteria={
           <CriteriaBar
             total={data?.pagination.total ?? 0}
@@ -79,6 +80,7 @@ export default async function AdminInvoicesPage({ searchParams }: { searchParams
         </form>
         <div className="flex items-center gap-2">
           <PageSizeSelect />
+          <ColumnToggle />
           <InvoicesExport query={qs.toString()} criteria={exportCriteria(criteria.items)} plans={plans} />
           {canBill && <RecordPaymentButton plans={plans} />}
         </div>

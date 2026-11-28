@@ -86,6 +86,14 @@ describe('purchases', () => {
     expect((await owner.c.get(`${api}/purchases?source_type=farmer`)).body.rows).toHaveLength(0);
     expect((await owner.c.get(`${api}/purchases?from=2026-04-01`)).body.rows).toHaveLength(0);
 
+    // Purchase items: every animal line with its purchase, same search and filters.
+    const items = await owner.c.get(`${api}/purchase-items`);
+    expect(items.status).toBe(200);
+    expect(items.body.pagination.total).toBe(2);
+    expect(items.body.rows[0]).toMatchObject({ number: 'PO-001', purchaseDate: '2026-03-01', sourceType: 'haat', supplierName: 'Rahim Traders', batchName: 'B-2026-03', tag: 'PB-1', price: 60000, allocatedSharedCost: 1200, landedCost: 61200 });
+    expect((await owner.c.get(`${api}/purchase-items?q=PB-2`)).body.rows).toEqual([expect.objectContaining({ tag: 'PB-2', name: 'Lali' })]);
+    expect((await owner.c.get(`${api}/purchase-items?source_type=farmer`)).body.rows).toHaveLength(0);
+
     // A supplier, broker or batch used by a purchase can't be deleted.
     expect((await owner.c.delete(`${api}/distribution/suppliers/${broker}`)).status).toBe(409);
     expect((await owner.c.delete(`${api}/herd/batches/${batch}`)).status).toBe(409);
@@ -170,6 +178,8 @@ describe('purchases', () => {
     // The purchase form's supplier and batch selects load for an accountant.
     expect((await accountant.c.get(`${api}/herd/batches/options`)).status).toBe(200);
     expect((await worker.c.get(`${api}/purchases`)).status).toBe(403);
+    expect((await worker.c.get(`${api}/purchase-items`)).status).toBe(403);
+    expect((await accountant.c.get(`${api}/purchase-items`)).status).toBe(200);
     expect((await worker.c.post(`${api}/purchases`, { ...baseBody, items: [{ tag: 'W-1', sex: 'male', price: '5' }] })).status).toBe(403);
   });
 });

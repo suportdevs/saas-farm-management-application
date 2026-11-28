@@ -553,4 +553,12 @@ export const bn: Record<string, string> = {
   "{module} is switched off for this farm.": "এই খামারে {module} বন্ধ আছে।",
   "{module} isn't in your {plan} plan.": "{module} আপনার {plan} প্ল্যানে নেই।",
   "{total} matching": "{total}টি মিলেছে",
+  "Animals appear here when a purchase is saved.": "ক্রয় সেভ হলে পশু এখানে দেখা যাবে।",
+  "Columns": "কলাম",
+  "Every animal bought, with its purchase, price, shared cost and landed cost.": "কেনা প্রতিটি পশু, ক্রয়, দাম, যৌথ খরচ ও পড়তা খরচসহ।",
+  "Hidden columns are left out of downloads too.": "লুকানো কলাম ডাউনলোডেও থাকবে না।",
+  "No purchase items yet": "এখনো কোনো ক্রয় আইটেম নেই",
+  "Purchase items": "ক্রয় আইটেম",
+  "Search purchase no., ear tag or haat…": "ক্রয় নং, কানের ট্যাগ বা হাট খুঁজুন…",
+  "Show all columns": "সব কলাম দেখান",
 };
