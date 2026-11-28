@@ -94,6 +94,16 @@ describe('purchases', () => {
     expect((await owner.c.get(`${api}/purchase-items?q=PB-2`)).body.rows).toEqual([expect.objectContaining({ tag: 'PB-2', name: 'Lali' })]);
     expect((await owner.c.get(`${api}/purchase-items?source_type=farmer`)).body.rows).toHaveLength(0);
 
+    // Batch, supplier and broker filters on both lists; animal type and animal on the items.
+    expect((await owner.c.get(`${api}/purchases?batch=${batch}&supplier=${supplier}&broker=${broker}`)).body.rows).toHaveLength(1);
+    expect((await owner.c.get(`${api}/purchases?broker=${supplier}`)).body.rows).toHaveLength(0);
+    expect((await owner.c.get(`${api}/purchase-items?supplier=${supplier}&batch=${batch}`)).body.pagination.total).toBe(2);
+    expect((await owner.c.get(`${api}/purchase-items?broker=${supplier}`)).body.rows).toHaveLength(0);
+    expect((await owner.c.get(`${api}/purchase-items?type=steer`)).body.rows).toEqual([expect.objectContaining({ tag: 'PB-1' })]);
+    const lali = items.body.rows.find((r: { tag: string }) => r.tag === 'PB-2').animalKey;
+    expect((await owner.c.get(`${api}/purchase-items?animal=${lali}`)).body.rows).toEqual([expect.objectContaining({ tag: 'PB-2' })]);
+    expect((await owner.c.get(`${api}/purchase-items?type=nope`)).status).toBe(422);
+
     // A supplier, broker or batch used by a purchase can't be deleted.
     expect((await owner.c.delete(`${api}/distribution/suppliers/${broker}`)).status).toBe(409);
     expect((await owner.c.delete(`${api}/herd/batches/${batch}`)).status).toBe(409);
@@ -180,6 +190,8 @@ describe('purchases', () => {
     expect((await worker.c.get(`${api}/purchases`)).status).toBe(403);
     expect((await worker.c.get(`${api}/purchase-items`)).status).toBe(403);
     expect((await accountant.c.get(`${api}/purchase-items`)).status).toBe(200);
+    // The list filters' animal select loads for anyone who can list purchases.
+    expect((await accountant.c.get(`${api}/herd/options`)).status).toBe(200);
     expect((await worker.c.post(`${api}/purchases`, { ...baseBody, items: [{ tag: 'W-1', sex: 'male', price: '5' }] })).status).toBe(403);
   });
 });

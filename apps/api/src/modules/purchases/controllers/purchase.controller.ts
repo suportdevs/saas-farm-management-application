@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import type { PurchaseInput, PurchaseListQuery } from '@kit/shared';
+import type { PurchaseInput, PurchaseItemListQuery, PurchaseListQuery } from '@kit/shared';
 import { audit, notFound } from '../../../core';
 import { getFarm } from '../../farms';
 import { createPurchase, deletePurchase, getPurchase, listPurchaseItems, listPurchases, updatePurchase } from '../services/purchase.service';
@@ -17,14 +17,14 @@ const record = (req: Request, farmId: string, action: string, metadata: Record<s
 
 /** Request → service → activity log → response. */
 export const purchaseController = {
-  /** GET / — paginated list (?q, source_type, from, to, page, pageSize). */
+  /** GET / — paginated list (?q, source_type, from, to, batch, supplier, broker, page, pageSize). */
   async list(req: Request, res: Response) {
     res.json(await listPurchases(getFarm(res).farm.id, req.query as unknown as PurchaseListQuery));
   },
 
-  /** GET /purchase-items — every animal line with its purchase (same filters as the list). */
+  /** GET /purchase-items — every animal line with its purchase (list filters + type, animal). */
   async items(req: Request, res: Response) {
-    res.json(await listPurchaseItems(getFarm(res).farm.id, req.query as unknown as PurchaseListQuery));
+    res.json(await listPurchaseItems(getFarm(res).farm.id, req.query as unknown as PurchaseItemListQuery));
   },
 
   /** GET /:key — the purchase with its animal lines. */

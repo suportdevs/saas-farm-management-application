@@ -1,5 +1,5 @@
 import 'server-only';
-import type { Pagination, PurchaseDetail, PurchaseItemListRow, PurchaseRow } from '@kit/shared';
+import { catalogPath, type CatalogOption, type CatalogResource, type Pagination, type PurchaseDetail, type PurchaseItemListRow, type PurchaseRow } from '@kit/shared';
 import { serverFetch } from '@/lib/session';
 
 /** One page of the farm's purchases for the URL query (search, filters, page, pageSize). */
@@ -19,4 +19,11 @@ export async function getPurchaseItems(farm: string, query: Record<string, strin
   const qs = new URLSearchParams(Object.entries(query).filter((e): e is [string, string] => !!e[1]));
   const res = await serverFetch<{ rows: PurchaseItemListRow[]; pagination: Pagination }>(`/farms/${encodeURIComponent(farm)}/purchase-items?${qs}`);
   return res ?? { rows: [], pagination: { page: 1, pageSize: 25, total: 0 } };
+}
+
+/** Name of a catalog row by key (for filter chips and the preselected filter), or undefined. */
+export async function optionName(farm: string, resource: CatalogResource, key: string | undefined) {
+  if (!key) return undefined;
+  const res = await serverFetch<{ options: CatalogOption[] }>(`/farms/${encodeURIComponent(farm)}/${catalogPath(resource)}/options?keys=${encodeURIComponent(key)}`);
+  return res?.options[0]?.name;
 }

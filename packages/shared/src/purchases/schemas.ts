@@ -47,9 +47,21 @@ export const purchaseListSchema = z.object({
   source_type: z.enum(PURCHASE_SOURCE_TYPES.map((s) => s.value) as [string, ...string[]]).optional(),
   from: optionalDate.optional(),
   to: optionalDate.optional(),
+  /** Batch, supplier and broker keys. */
+  batch: z.uuid().optional(),
+  supplier: z.uuid().optional(),
+  broker: z.uuid().optional(),
   page: z.coerce.number().int().min(1).default(1),
   // Up to 1,000 so Download gets every matching purchase.
   pageSize: z.coerce.number().int().min(1).max(1000).default(25),
 });
 
 export type PurchaseListQuery = z.infer<typeof purchaseListSchema>;
+
+/** Purchase items list: the purchase filters plus the animal's type and the animal (key). */
+export const purchaseItemListSchema = purchaseListSchema.extend({
+  type: z.enum(ANIMAL_TYPES.map((t) => t.value) as [string, ...string[]]).optional(),
+  animal: z.uuid().optional(),
+});
+
+export type PurchaseItemListQuery = z.infer<typeof purchaseItemListSchema>;

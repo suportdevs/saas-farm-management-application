@@ -153,11 +153,13 @@ export const PERMISSION_CONFIG = {
 
 /**
  * Screens outside the catalog engine that pick from a catalog: these keys may
- * also load its select choices (a purchase's supplier, broker and batch).
+ * also load its select choices (a purchase's supplier, broker and batch; the
+ * purchase lists' filters).
  */
 export const CATALOG_OPTION_READERS: Partial<Record<CatalogResource, readonly string[]>> = {
-  suppliers: ['purchase.purchase_create', 'purchase.purchase_edit'],
-  batches: ['purchase.purchase_create', 'purchase.purchase_edit'],
+  suppliers: ['purchase.purchase_list', 'purchase.purchase_create', 'purchase.purchase_edit'],
+  batches: ['purchase.purchase_list', 'purchase.purchase_create', 'purchase.purchase_edit'],
+  animals: ['purchase.purchase_list'],
   warehouses: ['feed.finish_receive_create', 'feed.finish_receive_edit'],
   employees: ['feed.finish_receive_create', 'feed.finish_receive_edit'],
   'product-sizes': ['feed.finish_receive_create', 'feed.finish_receive_edit'],

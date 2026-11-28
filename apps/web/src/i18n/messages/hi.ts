@@ -561,4 +561,11 @@ export const hi: Record<string, string> = {
   "Purchase items": "खरीद आइटम",
   "Search purchase no., ear tag or haat…": "खरीद नं., कान टैग या हाट खोजें…",
   "Show all columns": "सभी कॉलम दिखाएँ",
+  "Animal type": "पशु का प्रकार",
+  "Any animal type": "कोई भी पशु प्रकार",
+  "Any batch": "कोई भी बैच",
+  "Any supplier": "कोई भी आपूर्तिकर्ता",
+  "Any broker": "कोई भी दलाल",
+  "Any animal": "कोई भी पशु",
+  "Broker": "दलाल",
 };

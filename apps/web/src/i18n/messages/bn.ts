@@ -561,4 +561,11 @@ export const bn: Record<string, string> = {
   "Purchase items": "ক্রয় আইটেম",
   "Search purchase no., ear tag or haat…": "ক্রয় নং, কানের ট্যাগ বা হাট খুঁজুন…",
   "Show all columns": "সব কলাম দেখান",
+  "Animal type": "পশুর ধরন",
+  "Any animal type": "যেকোনো পশুর ধরন",
+  "Any batch": "যেকোনো ব্যাচ",
+  "Any supplier": "যেকোনো সরবরাহকারী",
+  "Any broker": "যেকোনো দালাল",
+  "Any animal": "যেকোনো পশু",
+  "Broker": "দালাল",
 };

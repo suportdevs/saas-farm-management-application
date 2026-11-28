@@ -1,6 +1,6 @@
 import { and, count, desc, eq, gte, ilike, inArray, lte, notInArray, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
-import { sharedCostOf, splitSharedCost, type PurchaseDetail, type PurchaseInput, type PurchaseItemInput, type PurchaseItemListRow, type PurchaseListQuery, type PurchaseRow } from '@kit/shared';
+import { sharedCostOf, splitSharedCost, type PurchaseDetail, type PurchaseInput, type PurchaseItemInput, type PurchaseItemListQuery, type PurchaseItemListRow, type PurchaseListQuery, type PurchaseRow } from '@kit/shared';
 import { db, escapeLike, notDeleted, notFound, validationError } from '../../../core';
 import { suppliers } from '../../distribution';
 import type { Tx } from '../../farms';
@@ -59,21 +59,28 @@ function toRow({ id: _id, ...row }: SelectedRow): PurchaseRow {
   return { ...row, sharedCost, totalLanded: Math.round((row.totalPrice + sharedCost) * 100) / 100 } as PurchaseRow;
 }
 
+/** Internal ids of the rows with this key (a filter by batch / supplier / broker / animal key). */
+const idsOf = (table: typeof suppliers | typeof batches | typeof animals, key: string) => db.select({ id: table.id }).from(table).where(eq(table.key, key));
+
+/** Filters both purchase lists share: search aside, the header's source, date, batch, supplier and broker. */
+const headerFilters = ({ source_type, from, to, batch, supplier: supplierKey, broker: brokerKey }: PurchaseListQuery) =>
+  and(
+    source_type ? eq(purchases.sourceType, source_type) : undefined,
+    from ? gte(purchases.purchaseDate, from) : undefined,
+    to ? lte(purchases.purchaseDate, to) : undefined,
+    batch ? inArray(purchases.batchId, idsOf(batches, batch)) : undefined,
+    supplierKey ? inArray(purchases.supplierId, idsOf(suppliers, supplierKey)) : undefined,
+    brokerKey ? inArray(purchases.brokerId, idsOf(suppliers, brokerKey)) : undefined,
+  );
+
 const ofTenant = (tenantId: string, extra?: SQL) => and(eq(purchases.tenantId, tenantId), notDeleted(purchases), extra);
 
 // ─── Reads ───────────────────────────────────────────────────────
 
-export async function listPurchases(tenantId: string, { q, source_type, from, to, page, pageSize }: PurchaseListQuery) {
+export async function listPurchases(tenantId: string, query: PurchaseListQuery) {
+  const { q, page, pageSize } = query;
   const like = q ? `%${escapeLike(q)}%` : undefined;
-  const where = ofTenant(
-    tenantId,
-    and(
-      like ? or(ilike(purchases.number, like), ilike(purchases.haatName, like)) : undefined,
-      source_type ? eq(purchases.sourceType, source_type) : undefined,
-      from ? gte(purchases.purchaseDate, from) : undefined,
-      to ? lte(purchases.purchaseDate, to) : undefined,
-    ),
-  );
+  const where = ofTenant(tenantId, and(like ? or(ilike(purchases.number, like), ilike(purchases.haatName, like)) : undefined, headerFilters(query)));
   const [rows, [total]] = await Promise.all([
     selectRows()
       .where(where)
@@ -86,16 +93,17 @@ export async function listPurchases(tenantId: string, { q, source_type, from, to
 }
 
 /** Every animal line with its purchase, for the purchase items list (same filters as the purchase list). */
-export async function listPurchaseItems(tenantId: string, { q, source_type, from, to, page, pageSize }: PurchaseListQuery) {
+export async function listPurchaseItems(tenantId: string, query: PurchaseItemListQuery) {
+  const { q, type, animal, page, pageSize } = query;
   const like = q ? `%${escapeLike(q)}%` : undefined;
   const where = and(
     eq(purchaseItems.tenantId, tenantId),
     notDeleted(purchaseItems),
     notDeleted(purchases),
     like ? or(ilike(purchases.number, like), ilike(purchases.haatName, like), ilike(animals.tag, like), ilike(animals.name, like)) : undefined,
-    source_type ? eq(purchases.sourceType, source_type) : undefined,
-    from ? gte(purchases.purchaseDate, from) : undefined,
-    to ? lte(purchases.purchaseDate, to) : undefined,
+    headerFilters(query),
+    type ? eq(animals.type, type as never) : undefined,
+    animal ? inArray(purchaseItems.animalId, idsOf(animals, animal)) : undefined,
   );
   const [rows, [total]] = await Promise.all([
     db
